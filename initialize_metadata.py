@@ -46,13 +46,17 @@ def get_resolution_from_path(path, depth=2):
 if __name__=='__main__':
     rootdir ='/groups/hess/hess_collaborators/Annotations/ParentFiles_whole-cell_images/' 
     metadata_fname = '/groups/hess/hess_collaborators/scripts/params.yaml'
+    overwrite = False
     data = prepare_experiment_dicts(rootdir)
     print(f'Found {len(data)} datasets.')
     for d in data:
         print(d)
     
     if exists(metadata_fname):
-        print(f'File {metadata_fname} exists. Overwriting.')
+        if overwrite == True:
+            print(f'File {metadata_fname} exists. Overwriting.')
+        else:
+            print(f'File {metadata_fname} exists. Set `overwrite=True` to overwrite it.')
 
     # Write YAML file
     with io.open(metadata_fname, 'w', encoding='utf8') as outfile:
