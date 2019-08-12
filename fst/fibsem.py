@@ -8,6 +8,7 @@ Copyright (c) 2017, David Hoffman, Davis Bennett
 
 import os
 import numpy as np
+from typing import Iterable, Union
 
 
 class FIBSEMHeader(object):
@@ -526,14 +527,16 @@ def _read_header(fobj):
     return fibsem_header
 
 
-def readfibsem(path):
+def _read(path: str) -> FIBSEMData:
     """
+
+    Read a single .dat file.
 
     Parameters
     ----------
-    path
+    path : string denoting a path to a .dat file
 
-    Returns
+    Returns : an instance of FIBSEMData
     -------
 
     """
@@ -571,6 +574,26 @@ def readfibsem(path):
     raw_data = np.rollaxis(raw_data, 2)
     # Once read into the FIBSEMData structure it will be in memory, not memmap.
     return FIBSEMData(raw_data, fibsem_header)
+
+
+def readfibsem(path: Union[str, Iterable[str]]):
+    """
+
+    Parameters
+    ----------
+    path : string or iterable of strings representing paths to .dat files.
+
+    Returns a single FIBSEMDataset or an iterable of FIBSEMDatasets, depending on whether a single path or multiple
+    paths are supplied as arguments.
+    -------
+
+    """
+    if isinstance(path, str):
+        return _read(path)
+    elif isinstance(path, Iterable):
+        return [readfibsem(p) for p in path]
+    else:
+        raise ValueError("Path must be an instance of string or iterable of strings")
 
 
 def _convert_data(fibsem):
