@@ -2,6 +2,8 @@ import numpy as np
 import dask.array as da
 from typing import Iterable
 
+def daskify(files: Iterable):
+
 
 def padstack(arrays: Iterable, fill_value: int = 0) -> da.Array:
     """
@@ -17,7 +19,6 @@ def padstack(arrays: Iterable, fill_value: int = 0) -> da.Array:
 
     """
     shapes = np.array([a.shape for a in arrays])
-
     bounds = shapes.max(0)
     pad_extent = [
         list(zip((0,) * shapes.shape[1], bounds - np.array(a.shape))) for a in arrays
