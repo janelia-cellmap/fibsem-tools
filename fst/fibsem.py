@@ -36,8 +36,9 @@ class FIBSEMData(np.ndarray):
 
     def __array_finalize__(self, obj):
         # see InfoArray.__array_finalize__ for comments
-        if obj is None: return
-        self.header = getattr(obj, 'header', None)
+        if obj is None:
+            return
+        self.header = getattr(obj, "header", None)
 
 
 class _DTypeDict(object):
@@ -87,10 +88,10 @@ def _read_header(fobj):
             "SWdate",  # Read in SW date
             "TimeStep",  # Read in AI sampling time (including oversampling) in seconds
             "ChanNum",  # Read in number of channels
-            "EightBit"  # Read in 8-bit data switch
+            "EightBit",  # Read in 8-bit data switch
         ],
         [">u4", ">u2", ">u2", ">S10", ">f8", ">u1", ">u1"],
-        [0, 4, 6, 8, 24, 32, 33]
+        [0, 4, 6, 8, 24, 32, 33],
     )
     # read initial header
     base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
@@ -98,36 +99,36 @@ def _read_header(fobj):
     # now fobj is at position 34, return to 0
     fobj.seek(0, os.SEEK_SET)
     if fibsem_header.FileMagicNum != 3555587570:
-        raise RuntimeError("FileMagicNum should be 3555587570 but is {}".format(fibsem_header.FileMagicNum))
+        raise RuntimeError(
+            "FileMagicNum should be 3555587570 but is {}".format(
+                fibsem_header.FileMagicNum
+            )
+        )
 
     if fibsem_header.FileVersion == 1:
-        header_dtype.update("Scaling", ('>f8', (fibsem_header.ChanNum, 4)), 36)
+        header_dtype.update("Scaling", (">f8", (fibsem_header.ChanNum, 4)), 36)
     elif fibsem_header.FileVersion in {2, 3, 4, 5, 6}:
-        header_dtype.update("Scaling", ('>f4', (fibsem_header.ChanNum, 4)), 36)
+        header_dtype.update("Scaling", (">f4", (fibsem_header.ChanNum, 4)), 36)
     else:
         # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain, 2nd order, 3rd order)
-        header_dtype.update("Scaling", ('>f4', (2, 4)), 36)
+        header_dtype.update("Scaling", (">f4", (2, 4)), 36)
 
     header_dtype.update(
-        ["XResolution",  # X Resolution
-         "YResolution"],  # Y Resolution
-        ['>u4', '>u4'],
-        [100, 104]
+        ["XResolution", "YResolution"],  # X Resolution  # Y Resolution
+        [">u4", ">u4"],
+        [100, 104],
     )
 
     if fibsem_header.FileVersion in {1, 2, 3}:
         header_dtype.update(
-            [
-                "Oversampling",  # AI oversampling
-                "AIDelay",  # Read AI delay (
-            ],
+            ["Oversampling", "AIDelay"],  # AI oversampling  # Read AI delay (
             [">u1", ">i2"],
-            [108, 109]
+            [108, 109],
         )
     else:
-        header_dtype.update("Oversampling", '>u2', 108)  # AI oversampling
+        header_dtype.update("Oversampling", ">u2", 108)  # AI oversampling
 
-    header_dtype.update("ZeissScanSpeed", '>u1', 111)  # Scan speed (Zeiss #)
+    header_dtype.update("ZeissScanSpeed", ">u1", 111)  # Scan speed (Zeiss #)
     if fibsem_header.FileVersion in {1, 2, 3}:
         header_dtype.update(
             [
@@ -137,7 +138,7 @@ def _read_header(fobj):
                 "Xmax",  # X coil maximum voltage
             ],
             [">f8", ">f8", ">f8", ">f8"],
-            [112, 120, 128, 136]
+            [112, 120, 128, 136],
         )
         # fibsem_header.Detmin = -10 # Detector minimum voltage
         # fibsem_header.Detmax = 10 # Detector maximum voltage
@@ -150,10 +151,10 @@ def _read_header(fobj):
                 "Xmax",  # X coil maximum voltage
                 "Detmin",  # Detector minimum voltage
                 "Detmax",  # Detector maximum voltage
-                "DecimatingFactor"  # Decimating factor
+                "DecimatingFactor",  # Decimating factor
             ],
             [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u2"],
-            [112, 116, 120, 124, 128, 132, 136]
+            [112, 116, 120, 124, 128, 132, 136],
         )
 
     header_dtype.update(
@@ -165,7 +166,7 @@ def _read_header(fobj):
             "Notes",  # Read in notes
         ],
         [">u1", ">u1", ">u1", ">u1", ">S200"],
-        [151, 152, 153, 154, 180]
+        [151, 152, 153, 154, 180],
     )
 
     if fibsem_header.FileVersion in {1, 2}:
@@ -213,18 +214,87 @@ def _read_header(fobj):
                 "FIBShiftY",  # FIB beam shift Y in micron
             ],
             [
-                ">S10", ">S18", ">S20", ">S20", ">f8", ">f8", ">f8", ">f8", ">u1",
-                ">u1", ">f8", ">f8", ">f8", ">f8", ">f8", ">f8", ">f8",
-                ">f8", ">f8", ">f8", ">f8", ">f8", ">f8", ">f8", ">f8",
-                ">f8", ">f8", ">f8", ">u1", ">f8", ">u1", ">f8", ">f8",
-                ">f8", ">f8", ">f8", ">f8", ">f8", ">f8"
+                ">S10",
+                ">S18",
+                ">S20",
+                ">S20",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">u1",
+                ">u1",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">u1",
+                ">f8",
+                ">u1",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
             ],
             [
-                380, 390, 700, 720, 408, 416, 424, 432, 440, 441, 448, 456,
-                464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552,
-                560, 568, 576, 584, 600, 608, 616, 624, 632, 640, 648, 656,
-                664, 672, 680
-            ]
+                380,
+                390,
+                700,
+                720,
+                408,
+                416,
+                424,
+                432,
+                440,
+                441,
+                448,
+                456,
+                464,
+                472,
+                480,
+                488,
+                496,
+                504,
+                512,
+                520,
+                528,
+                536,
+                544,
+                552,
+                560,
+                568,
+                576,
+                584,
+                600,
+                608,
+                616,
+                624,
+                632,
+                640,
+                648,
+                656,
+                664,
+                672,
+                680,
+            ],
         )
     else:
         header_dtype.update(
@@ -273,18 +343,91 @@ def _read_header(fobj):
                 "FIBShiftY",  # FIB beam shift Y in micron
             ],
             [
-                ">S10", ">S18", ">S20", ">S20", ">f4", ">f4", ">f4", ">f4", ">u1",
-                ">u1", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4",
-                ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4",
-                ">f4", ">f4", ">f4", ">f4", ">f4", ">u1", ">f4", ">u1",
-                ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4"
+                ">S10",
+                ">S18",
+                ">S20",
+                ">S20",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">u1",
+                ">u1",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">u1",
+                ">f4",
+                ">u1",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
             ],
             [
-                380, 390, 410, 430, 460, 464, 468, 472, 480, 481, 490,
-                494, 498, 502, 510, 514, 518, 522, 526, 530, 534, 538,
-                542, 546, 550, 554, 560, 564, 568, 572, 600, 604, 608,
-                620, 624, 628, 632, 636, 640, 644, 648
-            ]
+                380,
+                390,
+                410,
+                430,
+                460,
+                464,
+                468,
+                472,
+                480,
+                481,
+                490,
+                494,
+                498,
+                502,
+                510,
+                514,
+                518,
+                522,
+                526,
+                530,
+                534,
+                538,
+                542,
+                546,
+                550,
+                554,
+                560,
+                564,
+                568,
+                572,
+                600,
+                604,
+                608,
+                620,
+                624,
+                628,
+                632,
+                636,
+                640,
+                644,
+                648,
+            ],
         )
 
     if fibsem_header.FileVersion in {5, 6, 7, 8}:
@@ -310,14 +453,45 @@ def _read_header(fobj):
                 "SEMSpecimenI",  # SEM specimen current (nA)
             ],
             [
-                ">u4", ">u4", ">f4", ">f4", ">f4", ">f4", ">f4",
-                ">f4", ">u2", ">u1", ">u1", ">f4", ">f4", ">f4",
-                ">f4", ">f4", ">S30", ">f4"
+                ">u4",
+                ">u4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">u2",
+                ">u1",
+                ">u1",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">S30",
+                ">f4",
             ],
             [
-                652, 656, 660, 664, 668, 672, 676, 680, 684, 686,
-                689, 690, 694, 698, 702, 706, 800, 980
-            ]
+                652,
+                656,
+                660,
+                664,
+                668,
+                672,
+                676,
+                680,
+                684,
+                686,
+                689,
+                690,
+                694,
+                698,
+                702,
+                706,
+                800,
+                980,
+            ],
         )
 
     if fibsem_header.FileVersion in {6, 7}:
@@ -333,7 +507,7 @@ def _read_header(fobj):
                 "FIBSliceNum",  # FIB slice #
             ],
             [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u4"],
-            [850, 854, 858, 862, 866, 870, 874, 878]
+            [850, 854, 858, 862, 866, 870, 874, 878],
         )
     if fibsem_header.FileVersion == 8:
         header_dtype.update(
@@ -342,7 +516,7 @@ def _read_header(fobj):
                 "MillingI",  # Milling current (nA)
             ],
             [">f4", ">f4"],
-            [882, 886]
+            [882, 886],
         )
     header_dtype.update("FileLength", ">i8", 1000)  # Read in file length in bytes
 
@@ -365,21 +539,42 @@ def readfibsem(path):
 
     """
     # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data type
-    with open(path, 'rb') as fobj:  # Open the file written by LabView (big-ian byte ordering and 64-bit long data type)
+    with open(
+        path, "rb"
+    ) as fobj:  # Open the file written by LabView (big-ian byte ordering and 64-bit long data type)
         # read header
         fibsem_header = _read_header(fobj)
     # read data
     if fibsem_header.EightBit == 1:
-        raw_data = np.memmap(path, dtype=">u1", mode="r", offset=1024,
-                             shape=(fibsem_header.YResolution, fibsem_header.XResolution, fibsem_header.ChanNum))
+        raw_data = np.memmap(
+            path,
+            dtype=">u1",
+            mode="r",
+            offset=1024,
+            shape=(
+                fibsem_header.YResolution,
+                fibsem_header.XResolution,
+                fibsem_header.ChanNum,
+            ),
+        )
     else:
-        raw_data = np.memmap(path, dtype=">i2", mode="r", offset=1024,
-                             shape=(fibsem_header.YResolution, fibsem_header.XResolution, fibsem_header.ChanNum))
+        raw_data = np.memmap(
+            path,
+            dtype=">i2",
+            mode="r",
+            offset=1024,
+            shape=(
+                fibsem_header.YResolution,
+                fibsem_header.XResolution,
+                fibsem_header.ChanNum,
+            ),
+        )
     raw_data = np.rollaxis(raw_data, 2)
     # Once read into the FIBSEMData structure it will be in memory, not memmap.
     return FIBSEMData(raw_data, fibsem_header)
 
-   def _convert_data(fibsem):
+
+def _convert_data(fibsem):
     """
 
     Parameters
@@ -397,19 +592,34 @@ def readfibsem(path):
         if fibsem.header.AI1:
             DetectorA = fibsem[0]
             Scaled[0] = np.int16(
-                fibsem[0] * fibsem.header.ScanRate / fibsem.header.Scaling[0, 0] / fibsem.header.Scaling[0, 2] /
-                fibsem.header.Scaling[0, 3] + fibsem.header.Scaling[0, 1])
+                fibsem[0]
+                * fibsem.header.ScanRate
+                / fibsem.header.Scaling[0, 0]
+                / fibsem.header.Scaling[0, 2]
+                / fibsem.header.Scaling[0, 3]
+                + fibsem.header.Scaling[0, 1]
+            )
             if fibsem.header.AI2:
                 DetectorB = fibsem[1]
                 Scaled[1] = np.int16(
-                    fibsem[1] * fibsem.header.ScanRate / fibsem.header.Scaling[1, 0] / fibsem.header.Scaling[1, 2] /
-                    fibsem.header.Scaling[1, 3] + fibsem.header.Scaling[1, 1])
+                    fibsem[1]
+                    * fibsem.header.ScanRate
+                    / fibsem.header.Scaling[1, 0]
+                    / fibsem.header.Scaling[1, 2]
+                    / fibsem.header.Scaling[1, 3]
+                    + fibsem.header.Scaling[1, 1]
+                )
 
         elif fibsem.header.AI2:
             DetectorB = fibsem[0]
             Scaled[0] = np.int16(
-                fibsem[0] * fibsem.header.ScanRate / fibsem.header.Scaling[0, 0] / fibsem.header.Scaling[0, 2] /
-                fibsem.header.Scaling[0, 3] + fibsem.header.Scaling[0, 1])
+                fibsem[0]
+                * fibsem.header.ScanRate
+                / fibsem.header.Scaling[0, 0]
+                / fibsem.header.Scaling[0, 2]
+                / fibsem.header.Scaling[0, 3]
+                + fibsem.header.Scaling[0, 1]
+            )
 
     else:
         raise NotImplementedError("Don't support non-8 bit files")
