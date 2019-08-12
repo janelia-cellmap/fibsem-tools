@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# fibsem.py
 """
 Functions for reading FIB-SEM data from Harald Hess' proprietary format
 Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem.py
@@ -622,5 +621,5 @@ def _convert_data(fibsem):
             )
 
     else:
-        raise NotImplementedError("Don't support non-8 bit files")
+        raise NotImplementedError("Doesn't support non-8 bit files")
     return DetectorA, DetectorB, Scaled
