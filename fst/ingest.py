@@ -1,11 +1,9 @@
 import numpy as np
 import dask.array as da
-from typing import Iterable
-
-def daskify(files: Iterable):
+from typing import Iterable, Union
 
 
-def padstack(arrays: Iterable, fill_value: int = 0) -> da.Array:
+def padstack(arrays: Iterable[da.Array], fill_value: Union[int, float] = 0) -> da.Array:
     """
     Stack arrays with variable axis sizes. A bounding box is calculated across all the arrays
 

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 Functions for reading FIB-SEM data from Harald Hess' proprietary format
 Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem.py
