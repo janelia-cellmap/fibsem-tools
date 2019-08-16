@@ -8,6 +8,9 @@ import os
 import numpy as np
 from typing import Iterable, Union
 
+MAGIC_NUMBER = 3555587570
+
+
 
 class FIBSEMHeader(object):
     """Structure to hold header info"""
@@ -19,6 +22,18 @@ class FIBSEMHeader(object):
         """update internal dictionary"""
         self.__dict__.update(kwargs)
 
+    def to_native_types(self):
+        for k, v in self.__dict__.items():
+            if isinstance(v, np.integer):
+                self.__dict__[k] = int(v)
+            elif isinstance(v, np.bytes_):
+                self.__dict__[k] = v.tostring().decode('utf-8')
+            elif isinstance(v, np.ndarray):
+                self.__dict__[k] = v.tolist()
+            elif isinstance(v, np.floating):
+                self.__dict__[k] = float(v)
+            else:
+                self.__dict__[k] = v
 
 class FIBSEMData(np.ndarray):
     """Subclass of ndarray to attach header data to fibsem data"""
@@ -96,20 +111,19 @@ def _read_header(fobj):
     fibsem_header = FIBSEMHeader(**dict(zip(base_header.dtype.names, base_header[0])))
     # now fobj is at position 34, return to 0
     fobj.seek(0, os.SEEK_SET)
-    if fibsem_header.FileMagicNum != 3555587570:
+    if fibsem_header.FileMagicNum != MAGIC_NUMBER:
         raise RuntimeError(
-            "FileMagicNum should be 3555587570 but is {}".format(
-                fibsem_header.FileMagicNum
+            f"FileMagicNum should be {MAGIC_NUMBER} but is {fibsem_header.FileMagicNum}"
             )
-        )
 
+    _scaling_offset = 36
     if fibsem_header.FileVersion == 1:
-        header_dtype.update("Scaling", (">f8", (fibsem_header.ChanNum, 4)), 36)
+        header_dtype.update("Scaling", (">f8", (fibsem_header.ChanNum, 4)), _scaling_offset)
     elif fibsem_header.FileVersion in {2, 3, 4, 5, 6}:
-        header_dtype.update("Scaling", (">f4", (fibsem_header.ChanNum, 4)), 36)
+        header_dtype.update("Scaling", (">f4", (fibsem_header.ChanNum, 4)), _scaling_offset)
     else:
         # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain, 2nd order, 3rd order)
-        header_dtype.update("Scaling", (">f4", (2, 4)), 36)
+        header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
 
     header_dtype.update(
         ["XResolution", "YResolution"],  # X Resolution  # Y Resolution
@@ -521,6 +535,7 @@ def _read_header(fobj):
     # read header
     header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
     fibsem_header = FIBSEMHeader(**dict(zip(header.dtype.names, header[0])))
+    fibsem_header.to_native_types()
 
     return fibsem_header
 
@@ -541,8 +556,7 @@ def _read(path: str) -> FIBSEMData:
     # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data type
     with open(
         path, "rb"
-    ) as fobj:  # Open the file written by LabView (big-ian byte ordering and 64-bit long data type)
-        # read header
+    ) as fobj:
         fibsem_header = _read_header(fobj)
     # read data
     if fibsem_header.EightBit == 1:
