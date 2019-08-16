@@ -4,20 +4,65 @@ from glob import glob
 from pathlib import Path
 from fst.ingest import padstack
 from fst import readfibsem
-from numpy import where, array
-from typing import Union
+import numpy as np
+from typing import Union, NoReturn
 import logging
 import sys
+import zarr
+import numcodecs
 from multiprocessing import cpu_count
+from dask.diagnostics import ProgressBar
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-
-_INPUT_FMTS = set(("dat",))
-_OUTPUT_FMTS = set(("zarr",))
+_INPUT_FMTS = {"dat"}
+_OUTPUT_FMTS = {"zarr", "n5"}
+max_chunksize = 256
 readers = dict(dat=readfibsem)
 
+roi_size = 1024
 
-def prepare_data(path: Union[str, list], max_chunksize: int = 512) -> da.Array:
+
+def n5_store(
+    array: da.Array, dest: str, path: str = "/volumes", name: str = "raw"
+) -> da.Array:
+    store = zarr.N5Store(dest)
+    compressor = numcodecs.GZip(level=1)
+    group = zarr.group(overwrite=True, store=store, path=path)
+
+    z = group.zeros(
+        shape=array.shape,
+        chunks=array.chunksize,
+        dtype=array.dtype,
+        compressor=compressor,
+        name=name,
+    )
+
+    return array.store(z, compute=False)
+
+
+def zarr_store(
+    array: da.Array, dest: str, path: str = "/volumes", name: str = "raw"
+) -> da.Array:
+    compressor = numcodecs.GZip(level=1)
+    group = zarr.group(overwrite=True, store=dest, path=path)
+
+    z = group.zeros(
+        shape=array.shape,
+        chunks=array.chunksize,
+        dtype=array.dtype,
+        compressor=compressor,
+        name=name,
+    )
+
+    return array.store(z, compute=False)
+
+
+stores = dict(n5=n5_store, zarr=zarr_store)
+
+
+def prepare_data(
+    path: Union[str, list], max_chunksize: int = max_chunksize
+) -> da.Array:
     if isinstance(path, str):
         fnames = sorted(glob(path))
     elif isinstance(path, list):
@@ -30,19 +75,26 @@ def prepare_data(path: Union[str, list], max_chunksize: int = 512) -> da.Array:
             f"Cannot load images with format {input_fmt}. Try {_INPUT_FMTS} instead."
         )
     logging.info(f"Preparing {len(fnames)} images...")
-    stacked = padstack(readers[input_fmt](fnames))
+    stacked = padstack(readers[input_fmt](fnames)).swapaxes(0, 1)
+    logging.info(f"Assembled dataset with shape {stacked.shape}")
     rechunked = stacked.rechunk(
-        where(array(stacked.shape) < max_chunksize, stacked.shape, max_chunksize)
+        (
+            1,
+            *np.where(
+                np.array(stacked.shape[1:]) < max_chunksize,
+                stacked.shape[1:],
+                max_chunksize,
+            ),
+        )
     )
     return rechunked
 
 
 def save_data(data: da.Array, dest: str):
-    from dask.diagnostics import ProgressBar
     logging.info(f"Begin saving data to {dest}")
     num_workers = max(int(cpu_count() / 8), 2)
     with ProgressBar():
-        data.to_zarr(url=dest, compute=False).compute(num_workers=num_workers)
+        data.compute(num_workers=num_workers)
 
 
 if __name__ == "__main__":
@@ -93,5 +145,6 @@ if __name__ == "__main__":
         )
 
     padded_array = prepare_data(args.source)
+    store = stores[output_fmt](padded_array, args.dest)
     if not args.dry_run:
-        save_data(padded_array, args.dest)
+        save_data(store, args.dest)
