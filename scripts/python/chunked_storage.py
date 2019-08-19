@@ -12,18 +12,20 @@ import zarr
 import numcodecs
 from multiprocessing import cpu_count
 from dask.diagnostics import ProgressBar
+from json import dumps
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 _INPUT_FMTS = {"dat"}
 _OUTPUT_FMTS = {"zarr", "n5"}
 max_chunksize = 256
+
 readers = dict(dat=readfibsem)
 
 roi_size = 1024
 
 
 def n5_store(
-    array: da.Array, dest: str, path: str = "/volumes", name: str = "raw"
+    array: da.Array, metadata: list,  dest: str, path: str = "/volumes", name: str = "raw"
 ) -> da.Array:
     store = zarr.N5Store(dest)
     compressor = numcodecs.GZip(level=1)
@@ -36,12 +38,12 @@ def n5_store(
         compressor=compressor,
         name=name,
     )
-
+    z.attrs['metadata'] = metadata
     return array.store(z, compute=False)
 
 
 def zarr_store(
-    array: da.Array, dest: str, path: str = "/volumes", name: str = "raw"
+    array: da.Array, metadata: list, dest: str, path: str = "/volumes", name: str = "raw"
 ) -> da.Array:
     compressor = numcodecs.GZip(level=1)
     group = zarr.group(overwrite=True, store=dest, path=path)
@@ -53,7 +55,7 @@ def zarr_store(
         compressor=compressor,
         name=name,
     )
-
+    z.attrs['metadata'] = metadata
     return array.store(z, compute=False)
 
 
@@ -62,7 +64,7 @@ stores = dict(n5=n5_store, zarr=zarr_store)
 
 def prepare_data(
     path: Union[str, list], max_chunksize: int = max_chunksize
-) -> da.Array:
+) -> tuple:
     if isinstance(path, str):
         fnames = sorted(glob(path))
     elif isinstance(path, list):
@@ -75,7 +77,9 @@ def prepare_data(
             f"Cannot load images with format {input_fmt}. Try {_INPUT_FMTS} instead."
         )
     logging.info(f"Preparing {len(fnames)} images...")
-    stacked = padstack(readers[input_fmt](fnames)).swapaxes(0, 1)
+    data = readers[input_fmt](fnames)
+    metadata = [d.header.__dict__ for d in data]
+    stacked = padstack(data).swapaxes(0, 1)
     logging.info(f"Assembled dataset with shape {stacked.shape}")
     rechunked = stacked.rechunk(
         (
@@ -87,7 +91,7 @@ def prepare_data(
             ),
         )
     )
-    return rechunked
+    return rechunked, metadata
 
 
 def save_data(data: da.Array, dest: str):
@@ -98,17 +102,6 @@ def save_data(data: da.Array, dest: str):
 
 
 if __name__ == "__main__":
-    try:
-        import zarr
-    except ImportError:
-        _OUTPUT_FMTS.remove("zarr")
-        _OUTPUT_FMTS.remove("n5")
-    try:
-        import h5py
-    except ImportError:
-        _OUTPUT_FMTS.remove("hdf5")
-    if len(_OUTPUT_FMTS) == 0:
-        raise ImportError(f"No chunked storage library found. Tried {_OUTPUT_FMTS}")
 
     parser = argparse.ArgumentParser(
         description="Save a sequence of images to a chunked store."
@@ -144,7 +137,7 @@ if __name__ == "__main__":
             f"Cannot write a chunked store using format {output_fmt}. Try one of {_OUTPUT_FMTS}"
         )
 
-    padded_array = prepare_data(args.source)
-    store = stores[output_fmt](padded_array, args.dest)
+    padded_array, metadata = prepare_data(args.source)
+    store = stores[output_fmt](padded_array, metadata, args.dest)
     if not args.dry_run:
         save_data(store, args.dest)
