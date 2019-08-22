@@ -10,18 +10,16 @@ import logging
 import sys
 import zarr
 import numcodecs
-from multiprocessing import cpu_count
 from dask.diagnostics import ProgressBar
+
 from json import dumps
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-_INPUT_FMTS = {"dat"}
-_OUTPUT_FMTS = {"zarr", "n5"}
+INPUT_FMTS = {"dat"}
+OUTPUT_FMTS = {"zarr", "n5"}
 max_chunksize = 256
 
 readers = dict(dat=readfibsem)
-
-roi_size = 1024
 
 
 def n5_store(
@@ -72,15 +70,15 @@ def prepare_data(
     else:
         raise ValueError(f"Path variable should be string or list, not {type(path)}")
     input_fmt = Path(fnames[0]).suffix[1:]
-    if input_fmt not in _INPUT_FMTS:
+    if input_fmt not in INPUT_FMTS:
         raise ValueError(
-            f"Cannot load images with format {input_fmt}. Try {_INPUT_FMTS} instead."
+            f"Cannot load images with format {input_fmt}. Try {INPUT_FMTS} instead."
         )
     logging.info(f"Preparing {len(fnames)} images...")
     data = readers[input_fmt](fnames)
-    metadata = [d.header.__dict__ for d in data]
-    stacked = padstack(data).swapaxes(0, 1)
-    logging.info(f"Assembled dataset with shape {stacked.shape}")
+
+    meta = [d.header.__dict__ for d in data]
+    stacked = padstack(data, constant_values='minimum-minus-one').swapaxes(0, 1)
     rechunked = stacked.rechunk(
         (
             1,
@@ -91,14 +89,15 @@ def prepare_data(
             ),
         )
     )
-    return rechunked, metadata
+    logging.info(f"Assembled dataset with shape {rechunked.shape} using chunk sizes {rechunked.chunksize}")
+
+    return rechunked, meta
 
 
 def save_data(data: da.Array, dest: str):
     logging.info(f"Begin saving data to {dest}")
-    num_workers = max(int(cpu_count() / 8), 2)
     with ProgressBar():
-        data.compute(num_workers=num_workers)
+        data.compute()
 
 
 if __name__ == "__main__":
@@ -119,7 +118,7 @@ if __name__ == "__main__":
         "-d",
         "--dest",
         help="The chunked store to create with the input files. Supported chunked store"
-        f" formats: {_OUTPUT_FMTS} formats are supported",
+        f" formats: {OUTPUT_FMTS} formats are supported",
         required=True,
     )
 
@@ -132,9 +131,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     output_fmt = Path(args.dest).suffix[1:]
-    if output_fmt not in _OUTPUT_FMTS:
+    if output_fmt not in OUTPUT_FMTS:
         raise NotImplementedError(
-            f"Cannot write a chunked store using format {output_fmt}. Try one of {_OUTPUT_FMTS}"
+            f"Cannot write a chunked store using format {output_fmt}. Try one of {OUTPUT_FMTS}"
         )
 
     padded_array, metadata = prepare_data(args.source)
