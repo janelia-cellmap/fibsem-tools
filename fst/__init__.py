@@ -1,1 +1,1 @@
-from .fibsem import readfibsem
+from fst.io.fibsem import readfibsem

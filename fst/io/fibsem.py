@@ -8,8 +8,8 @@ import os
 import numpy as np
 from typing import Iterable, Union
 
+# This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3555587570
-
 
 
 class FIBSEMHeader(object):
@@ -34,6 +34,7 @@ class FIBSEMHeader(object):
                 self.__dict__[k] = float(v)
             else:
                 self.__dict__[k] = v
+
 
 class FIBSEMData(np.ndarray):
     """Subclass of ndarray to attach header data to fibsem data"""
@@ -588,7 +589,8 @@ def _read(path: str) -> FIBSEMData:
     return FIBSEMData(raw_data, fibsem_header)
 
 
-def readfibsem(path: Union[str, Iterable[str]]):
+# reading multiple files is handled upstream in fst.io.read
+def read_fibsem(path: Union[str, Iterable[str]]):
     """
 
     Parameters
@@ -603,7 +605,7 @@ def readfibsem(path: Union[str, Iterable[str]]):
     if isinstance(path, str):
         return _read(path)
     elif isinstance(path, Iterable):
-        return [readfibsem(p) for p in path]
+        return [_read(p) for p in path]
     else:
         raise ValueError("Path must be an instance of string or iterable of strings")
 
@@ -619,13 +621,13 @@ def _convert_data(fibsem):
     -------
 
     """
-    ## Convert raw_data data to electron counts
+    # Convert raw_data data to electron counts
     if fibsem.header.EightBit == 1:
-        Scaled = np.empty(fibsem.shape, dtype=np.int16)
-        DetectorA, DetectorB = fibsem
+        scaled = np.empty(fibsem.shape, dtype=np.int16)
+        detector_a, detector_b = fibsem
         if fibsem.header.AI1:
-            DetectorA = fibsem[0]
-            Scaled[0] = np.int16(
+            detector_a = fibsem[0]
+            scaled[0] = np.int16(
                 fibsem[0]
                 * fibsem.header.ScanRate
                 / fibsem.header.Scaling[0, 0]
@@ -634,8 +636,8 @@ def _convert_data(fibsem):
                 + fibsem.header.Scaling[0, 1]
             )
             if fibsem.header.AI2:
-                DetectorB = fibsem[1]
-                Scaled[1] = np.int16(
+                detector_b = fibsem[1]
+                scaled[1] = np.int16(
                     fibsem[1]
                     * fibsem.header.ScanRate
                     / fibsem.header.Scaling[1, 0]
@@ -645,8 +647,8 @@ def _convert_data(fibsem):
                 )
 
         elif fibsem.header.AI2:
-            DetectorB = fibsem[0]
-            Scaled[0] = np.int16(
+            detector_b = fibsem[0]
+            scaled[0] = np.int16(
                 fibsem[0]
                 * fibsem.header.ScanRate
                 / fibsem.header.Scaling[0, 0]
@@ -656,5 +658,15 @@ def _convert_data(fibsem):
             )
 
     else:
-        raise NotImplementedError("Doesn't support non-8 bit files")
-    return DetectorA, DetectorB, Scaled
+        if fibsem.header.FileVersion in {1,2,3,4,5,6}:
+            #scaled =
+
+            if fibsem.header.AI1:
+                detector_a = fibsem.header.Scaling[0,0] + fibsem[0] * fibsem.header.Scaling[0,1]
+                if fibsem.header.AI2:
+                    detector_b = fibsem.header.Scaling[1,0] + fibsem[1] * fibsem.header.Scaling[1,1]
+                    if fibsem.header.AI3:
+                        detector_c = fibsem.header.Scaling[2, 0] + fibsem[1] * fibsem.header.Scaling[1, 1]
+        else:
+            pass
+    return detector_a, detector_b, scaled
