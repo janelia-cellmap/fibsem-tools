@@ -5,12 +5,12 @@ import zarr
 
 
 def read_n5(path: str) -> zarr.hierarchy.Group:
-    result = zarr.open(zarr.N5Store(path))
+    result = zarr.open(zarr.N5Store(path), mode='r')
     return result
 
 
 def read_zarr(path: str) -> zarr.hierarchy.Group:
-    result = zarr.open(path)
+    result = zarr.open(path, mode='r')
     return result
 
 
