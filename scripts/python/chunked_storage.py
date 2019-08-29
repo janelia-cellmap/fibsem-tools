@@ -2,7 +2,7 @@ import dask.array as da
 import argparse
 from glob import glob
 from pathlib import Path
-from fst.io.ingest import padstack
+from fst.io.ingest import padstack, arrays_from_delayed
 from fst.io import read
 import numpy as np
 from typing import Union
@@ -12,42 +12,63 @@ import zarr
 import numcodecs
 from dask.diagnostics import ProgressBar
 from fst.distributed import bsub_available
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+from dask.utils import SerializableLock
+import time
+
+lock = SerializableLock()
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 OUTPUT_FMTS = {"zarr", "n5"}
-max_chunksize = 256
-num_distributed_workers = 10
+max_chunksize = 1024
 
 # todo: move data writing functions to fst.io
 
 
 def n5_store(
-    array: da.Array,
+    array: Union[da.Array, list],
     metadata: list,
     dest: str,
     path: str = "/volumes",
-    name: str = "raw",
+    name: Union[str, list] = "raw",
 ) -> da.Array:
     store = zarr.N5Store(dest)
-    compressor = numcodecs.GZip(level=1)
+    compressor = numcodecs.GZip(level=9)
     group = zarr.group(overwrite=True, store=store, path=path)
 
-    z = group.zeros(
-        shape=array.shape,
-        chunks=array.chunksize,
-        dtype=array.dtype,
-        compressor=compressor,
-        name=name,
-    )
-    z.attrs["metadata"] = metadata
-    return array.store(z, compute=False)
+    # check that array is a list iff name is a list
+    assert isinstance(array, list) == isinstance(name, list)
+
+    if isinstance(array, list):
+        result = []
+        for ind, arr in enumerate(array):
+            z = group.zeros(
+                shape=arr.shape,
+                chunks=arr.chunksize,
+                dtype=arr.dtype,
+                compressor=compressor,
+                name=name[ind],
+            )
+            z.attrs["metadata"] = metadata
+            result.append(arr.store(z, compute=False, lock=lock))
+
+    elif isinstance(array, da.Array):
+        z = group.zeros(
+            shape=array.shape,
+            chunks=array.chunksize,
+            dtype=array.dtype,
+            compressor=compressor,
+            name=name,
+        )
+        z.attrs["metadata"] = metadata
+        result = array.store(z, compute=False, lock=lock)
+    return result
 
 
 def zarr_store(
-    array: da.Array,
+    array: Union[da.Array, list],
     metadata: list,
     dest: str,
     path: str = "/volumes",
-    name: str = "raw",
+    name: Union[str, list] = "raw",
 ) -> da.Array:
     compressor = numcodecs.GZip(level=1)
     group = zarr.group(overwrite=True, store=dest, path=path)
@@ -66,7 +87,7 @@ def zarr_store(
 stores = dict(n5=n5_store, zarr=zarr_store)
 
 
-def prepare_data(path: Union[str, list], max_chunksize: int = max_chunksize) -> tuple:
+def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
     if isinstance(path, str):
         fnames = sorted(glob(path))
     elif isinstance(path, list):
@@ -75,10 +96,17 @@ def prepare_data(path: Union[str, list], max_chunksize: int = max_chunksize) -> 
         raise ValueError(f"Path variable should be string or list, not {type(path)}")
 
     logging.info(f"Preparing {len(fnames)} images...")
-    data = read(fnames)
-    meta = [d.header.__dict__ for d in data]
+
+    data_eager = read(fnames, lazy=False)
+    meta, shapes, dtypes = [], [], []
+    # build lists of metadata for each image
+    for d in data_eager:
+        meta.append(d.header.__dict__)
+        shapes.append(d.shape)
+        dtypes.append(d.dtype)
+    data = arrays_from_delayed(read(fnames, lazy=True), shapes=shapes, dtypes=dtypes)
     stacked = padstack(data, constant_values="minimum-minus-one").swapaxes(0, 1)
-    # single chunks along channel and z axes for raw data
+    # For raw data, single chunks along channel and z axes. Channels will become their own datasets
     rechunked = stacked.rechunk(
         (
             1,
@@ -97,14 +125,13 @@ def prepare_data(path: Union[str, list], max_chunksize: int = max_chunksize) -> 
     return rechunked, meta
 
 
-def save_data(data: da.Array, dest: str):
-    logging.info(f"Begin saving data to {dest}")
+def save_data(data: Union[da.Array, list]):
     with ProgressBar():
-        data.compute()
+        da.compute(data)
 
 
 if __name__ == "__main__":
-
+    start_time = time.time()
     parser = argparse.ArgumentParser(
         description="Save a sequence of images to a chunked store."
     )
@@ -126,6 +153,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "-nw",
+        "--num_workers",
+        help="The number of workers to use for distributed computation",
+        default=None
+    )
+
+    parser.add_argument(
         "--dry-run",
         help="Dry run. Does everything except save data.",
         action="store_true",
@@ -133,15 +167,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     # check if we are on the cluster
-
+    num_workers = int(args.num_workers)
     output_fmt = Path(args.dest).suffix[1:]
     if output_fmt not in OUTPUT_FMTS:
         raise NotImplementedError(
             f"Cannot write a chunked store using format {output_fmt}. Try one of {OUTPUT_FMTS}"
         )
 
-    padded_array, metadata = prepare_data(args.source)
-    store = stores[output_fmt](padded_array, metadata, args.dest)
+    padded_array, metadata = prepare_data(args.source, max_chunksize=max_chunksize)
+    dataset_path = '/volumes/raw'
+    dataset_names = ['ch' + str(r) for r in range(padded_array.shape[0])]
+    my_stores = stores[output_fmt]([*padded_array], metadata, args.dest, path=dataset_path, name=dataset_names)
     if not args.dry_run:
         running_on_cluster = bsub_available()
         if running_on_cluster:
@@ -149,6 +185,12 @@ if __name__ == "__main__":
             from distributed import Client
             cluster = get_jobqueue_cluster(project='cosem')
             client = Client(cluster)
-            cluster.start_workers(num_distributed_workers)
+            cluster.start_workers(num_workers)
+        from distributed import Client, LocalCluster
+        cluster = LocalCluster(n_workers=num_workers)
+        client = Client(cluster)
 
-        save_data(store, args.dest)
+        logging.info(f'Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}')
+        save_data(my_stores)
+        elapsed_time = time.time() - start_time
+        logging.info(f'Save completed in {elapsed_time} s')
