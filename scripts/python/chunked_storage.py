@@ -15,8 +15,6 @@ from fst.distributed import bsub_available
 from dask.utils import SerializableLock
 import time
 
-lock = SerializableLock()
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 OUTPUT_FMTS = {"zarr", "n5"}
 max_chunksize = 1024
 
@@ -132,6 +130,7 @@ def save_data(data: Union[da.Array, list]):
 
 if __name__ == "__main__":
     start_time = time.time()
+
     parser = argparse.ArgumentParser(
         description="Save a sequence of images to a chunked store."
     )
@@ -165,8 +164,19 @@ if __name__ == "__main__":
         action="store_true",
     )
 
+    parser.add_argument(
+        "-lf",
+        "--log_file",
+        help="Path to a logfile that will be created to track progress of the conversion."
+    )
+
     args = parser.parse_args()
-    # check if we are on the cluster
+    lock = SerializableLock()
+
+    logging.basicConfig(filename=args.log_file,
+                        filemode='a',
+                        level=logging.INFO)
+
     num_workers = int(args.num_workers)
     output_fmt = Path(args.dest).suffix[1:]
     if output_fmt not in OUTPUT_FMTS:
