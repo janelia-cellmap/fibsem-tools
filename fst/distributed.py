@@ -13,6 +13,9 @@
 from dask_jobqueue import LSFCluster
 import os
 
+# todo: make this a class that inherits from dask_jobqueue.LSFCluster
+
+
 def get_jobqueue_cluster(
     walltime="60:00",
     cores=1,
@@ -47,7 +50,7 @@ def get_jobqueue_cluster(
         local_directory=local_directory,
         memory=memory,
         env_extra=env_extra,
-        job_extra=['-o /dev/null'],
+        job_extra=["-o /dev/null"],
         **kwargs
     )
     return cluster
