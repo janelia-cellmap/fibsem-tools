@@ -14,7 +14,7 @@ from dask_jobqueue import LSFCluster
 import os
 
 def get_jobqueue_cluster(
-    walltime="12:00",
+    walltime="60:00",
     cores=1,
     local_directory=None,
     memory="16GB",
