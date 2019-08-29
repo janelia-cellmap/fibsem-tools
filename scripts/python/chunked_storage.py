@@ -13,6 +13,7 @@ import numcodecs
 from dask.diagnostics import ProgressBar
 from fst.distributed import bsub_available
 from dask.utils import SerializableLock
+from distributed import Client
 import time
 
 OUTPUT_FMTS = {"zarr", "n5"}
@@ -192,13 +193,13 @@ if __name__ == "__main__":
         running_on_cluster = bsub_available()
         if running_on_cluster:
             from fst.distributed import get_jobqueue_cluster
-            from distributed import Client
             cluster = get_jobqueue_cluster(project='cosem')
             client = Client(cluster)
             cluster.start_workers(num_workers)
-        from distributed import Client, LocalCluster
-        cluster = LocalCluster(n_workers=num_workers)
-        client = Client(cluster)
+        else:
+            from distributed import LocalCluster
+            cluster = LocalCluster(n_workers=num_workers)
+            client = Client(cluster)
 
         logging.info(f'Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}')
         save_data(my_stores)
