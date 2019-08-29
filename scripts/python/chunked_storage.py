@@ -76,15 +76,16 @@ def prepare_data(path: Union[str, list], max_chunksize: int = max_chunksize) -> 
 
     logging.info(f"Preparing {len(fnames)} images...")
     data = read(fnames)
-
     meta = [d.header.__dict__ for d in data]
     stacked = padstack(data, constant_values="minimum-minus-one").swapaxes(0, 1)
+    # single chunks along channel and z axes for raw data
     rechunked = stacked.rechunk(
         (
             1,
+            1,
             *np.where(
-                np.array(stacked.shape[1:]) < max_chunksize,
-                stacked.shape[1:],
+                np.array(stacked.shape[2:]) < max_chunksize,
+                stacked.shape[2:],
                 max_chunksize,
             ),
         )
