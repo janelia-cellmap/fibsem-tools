@@ -10,9 +10,6 @@
 # License: MIT
 #
 
-from dask_jobqueue import LSFCluster
-import os
-
 # todo: make this a class that inherits from dask_jobqueue.LSFCluster
 
 
@@ -31,6 +28,9 @@ def get_jobqueue_cluster(
     The full API for the LSFCluster object can be found here:
     https://jobqueue.dask.org/en/latest/generated/dask_jobqueue.LSFCluster.html#dask_jobqueue.LSFCluster
     """
+
+    from dask_jobqueue import LSFCluster
+    import os
 
     if env_extra is None:
         env_extra = [
@@ -54,3 +54,17 @@ def get_jobqueue_cluster(
         **kwargs
     )
     return cluster
+
+
+def bsub_available() -> bool:
+    """
+
+    Returns True if the `bsub` command is available on the path, False otherwise. This is used to check whether code is
+    running on the Janelia Compute Cluster.
+
+    -------
+
+    """
+    from shutil import which
+    result = which('bsub') is not None
+    return result
