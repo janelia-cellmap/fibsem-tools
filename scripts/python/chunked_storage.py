@@ -2,28 +2,30 @@ import dask.array as da
 import argparse
 from glob import glob
 from pathlib import Path
-from fst.ingest import padstack
-from fst import readfibsem
+from fst.io.ingest import padstack
+from fst.io import read
 import numpy as np
-from typing import Union, NoReturn
+from typing import Union
 import logging
 import sys
 import zarr
 import numcodecs
 from dask.diagnostics import ProgressBar
-
-from json import dumps
-
+from fst.distributed import bsub_available
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-INPUT_FMTS = {"dat"}
 OUTPUT_FMTS = {"zarr", "n5"}
 max_chunksize = 256
+num_distributed_workers = 10
 
-readers = dict(dat=readfibsem)
+# todo: move data writing functions to fst.io
 
 
 def n5_store(
-    array: da.Array, metadata: list,  dest: str, path: str = "/volumes", name: str = "raw"
+    array: da.Array,
+    metadata: list,
+    dest: str,
+    path: str = "/volumes",
+    name: str = "raw",
 ) -> da.Array:
     store = zarr.N5Store(dest)
     compressor = numcodecs.GZip(level=1)
@@ -36,12 +38,16 @@ def n5_store(
         compressor=compressor,
         name=name,
     )
-    z.attrs['metadata'] = metadata
+    z.attrs["metadata"] = metadata
     return array.store(z, compute=False)
 
 
 def zarr_store(
-    array: da.Array, metadata: list, dest: str, path: str = "/volumes", name: str = "raw"
+    array: da.Array,
+    metadata: list,
+    dest: str,
+    path: str = "/volumes",
+    name: str = "raw",
 ) -> da.Array:
     compressor = numcodecs.GZip(level=1)
     group = zarr.group(overwrite=True, store=dest, path=path)
@@ -53,32 +59,26 @@ def zarr_store(
         compressor=compressor,
         name=name,
     )
-    z.attrs['metadata'] = metadata
+    z.attrs["metadata"] = metadata
     return array.store(z, compute=False)
 
 
 stores = dict(n5=n5_store, zarr=zarr_store)
 
 
-def prepare_data(
-    path: Union[str, list], max_chunksize: int = max_chunksize
-) -> tuple:
+def prepare_data(path: Union[str, list], max_chunksize: int = max_chunksize) -> tuple:
     if isinstance(path, str):
         fnames = sorted(glob(path))
     elif isinstance(path, list):
         fnames = path
     else:
         raise ValueError(f"Path variable should be string or list, not {type(path)}")
-    input_fmt = Path(fnames[0]).suffix[1:]
-    if input_fmt not in INPUT_FMTS:
-        raise ValueError(
-            f"Cannot load images with format {input_fmt}. Try {INPUT_FMTS} instead."
-        )
+
     logging.info(f"Preparing {len(fnames)} images...")
-    data = readers[input_fmt](fnames)
+    data = read(fnames)
 
     meta = [d.header.__dict__ for d in data]
-    stacked = padstack(data, constant_values='minimum-minus-one').swapaxes(0, 1)
+    stacked = padstack(data, constant_values="minimum-minus-one").swapaxes(0, 1)
     rechunked = stacked.rechunk(
         (
             1,
@@ -89,7 +89,9 @@ def prepare_data(
             ),
         )
     )
-    logging.info(f"Assembled dataset with shape {rechunked.shape} using chunk sizes {rechunked.chunksize}")
+    logging.info(
+        f"Assembled dataset with shape {rechunked.shape} using chunk sizes {rechunked.chunksize}"
+    )
 
     return rechunked, meta
 
@@ -129,6 +131,7 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    # check if we are on the cluster
 
     output_fmt = Path(args.dest).suffix[1:]
     if output_fmt not in OUTPUT_FMTS:
@@ -139,4 +142,12 @@ if __name__ == "__main__":
     padded_array, metadata = prepare_data(args.source)
     store = stores[output_fmt](padded_array, metadata, args.dest)
     if not args.dry_run:
+        running_on_cluster = bsub_available()
+        if running_on_cluster:
+            from fst.distributed import get_jobqueue_cluster
+            from distributed import Client
+            cluster = get_jobqueue_cluster(project='cosem')
+            client = Client(cluster)
+            cluster.start_workers(num_distributed_workers)
+
         save_data(store, args.dest)
