@@ -25,41 +25,45 @@ def padstack(
     """
 
     shapes = np.array([a.shape for a in arrays])
-    bounds = shapes.max(0)
-    pad_extent = [
-        list(zip((0,) * shapes.shape[1], bounds - np.array(a.shape))) for a in arrays
-    ]
-
-    if isinstance(constant_values, Number):
-        padded = [
-            (
-                da.pad(
-                    a,
-                    pad_width=pad_extent[ind],
-                    mode="constant",
-                    constant_values=constant_values,
-                )
-            )
-            for ind, a in enumerate(arrays)
-        ]
-    elif constant_values == "minimum-minus-one":
-        delmin = delayed(np.min)
-        # this will be bad if the minimum value in the data hits the floor of the datatype
-        fill_value = int(min(delayed(delmin(a) for a in arrays).compute()) - 1)
-
-        padded = [
-            (
-                da.pad(
-                    a,
-                    pad_width=pad_extent[ind],
-                    mode="constant",
-                    constant_values=fill_value,
-                )
-            )
-            for ind, a in enumerate(arrays)
+    # check whether all the shapes are identical; in this case, no padding is needed.
+    if np.unique(shapes, axis=0).shape[0] == 1:
+        stacked = da.stack(arrays)
+    else:
+        bounds = shapes.max(0)
+        pad_extent = [
+            list(zip((0,) * shapes.shape[1], bounds - np.array(a.shape))) for a in arrays
         ]
 
-    stacked = da.stack(padded)
+        if isinstance(constant_values, Number):
+            padded = [
+                (
+                    da.pad(
+                        a,
+                        pad_width=pad_extent[ind],
+                        mode="constant",
+                        constant_values=constant_values,
+                    )
+                )
+                for ind, a in enumerate(arrays)
+            ]
+        elif constant_values == "minimum-minus-one":
+            delmin = delayed(np.min)
+            # this will be bad if the minimum value in the data hits the floor of the datatype
+            fill_value = int(min(delayed(delmin(a) for a in arrays).compute()) - 1)
+
+            padded = [
+                (
+                    da.pad(
+                        a,
+                        pad_width=pad_extent[ind],
+                        mode="constant",
+                        constant_values=fill_value,
+                    )
+                )
+                for ind, a in enumerate(arrays)
+            ]
+
+        stacked = da.stack(padded)
     return stacked
 
 
