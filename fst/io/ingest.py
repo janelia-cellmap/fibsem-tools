@@ -4,6 +4,7 @@ from typing import Iterable, Union
 from numbers import Number
 from dask import delayed
 
+
 def padstack(
     arrays: Iterable[da.Array], constant_values: Union[int, float, str] = 0
 ) -> da.Array:
@@ -31,7 +32,8 @@ def padstack(
     else:
         bounds = shapes.max(0)
         pad_extent = [
-            list(zip((0,) * shapes.shape[1], bounds - np.array(a.shape))) for a in arrays
+            list(zip((0,) * shapes.shape[1], bounds - np.array(a.shape)))
+            for a in arrays
         ]
 
         if isinstance(constant_values, Number):
@@ -86,7 +88,7 @@ def arrays_from_delayed(args, shapes=None, dtypes=None):
     """
 
     if shapes is None or dtypes is None:
-        sample = args[0].compute(scheduler='threads')
+        sample = args[0].compute(scheduler="threads")
         if shapes is None:
             shapes = (sample.shape,) * len(args)
         if dtypes is None:
@@ -94,5 +96,8 @@ def arrays_from_delayed(args, shapes=None, dtypes=None):
 
     assert len(shapes) == len(args) and len(dtypes) == len(args)
 
-    arrays = [da.from_delayed(args[ind], shape=shapes[ind], dtype=dtypes[ind]) for ind in range(len(args))]
+    arrays = [
+        da.from_delayed(args[ind], shape=shapes[ind], dtype=dtypes[ind])
+        for ind in range(len(args))
+    ]
     return arrays

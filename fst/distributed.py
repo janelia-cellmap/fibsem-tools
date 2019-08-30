@@ -66,5 +66,6 @@ def bsub_available() -> bool:
 
     """
     from shutil import which
-    result = which('bsub') is not None
+
+    result = which("bsub") is not None
     return result

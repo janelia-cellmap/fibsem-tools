@@ -44,11 +44,13 @@ def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
     return stacked, meta
 
 
-def prepare_chunked_store(dest_path, data_path, names, shapes, dtypes, compressor, chunks, metadata):
+def prepare_chunked_store(
+    dest_path, data_path, names, shapes, dtypes, compressor, chunks, metadata
+):
     group = zarr.group(overwrite=True, store=zarr.N5Store(dest_path), path=data_path)
-    for n, s, d, c, m in zip(names, shapes,  dtypes, chunks, metadata):
+    for n, s, d, c, m in zip(names, shapes, dtypes, chunks, metadata):
         g = group.zeros(name=n, shape=s, dtype=d, compressor=compressor, chunks=c)
-        g.attrs['metadata'] = m
+        g.attrs["metadata"] = m
 
 
 def save_blockwise(v, store_path, split_dim, block_info):
@@ -57,9 +59,11 @@ def save_blockwise(v, store_path, split_dim, block_info):
     # of the zarr/n5 file located at store_path
 
     num_sinks = v.shape[split_dim]
-    sinks = [zarr.open(store_path, mode='a')[f'/volumes/raw/ch{d}'] for d in range(num_sinks)]
+    sinks = [
+        zarr.open(store_path, mode="a")[f"/volumes/raw/ch{d}"] for d in range(num_sinks)
+    ]
 
-    pos = block_info[0]['array-location']
+    pos = block_info[0]["array-location"]
     # get rid of the split dimension
     pos.pop(split_dim)
     idx = tuple(slice(*i) for i in pos)
@@ -95,7 +99,7 @@ if __name__ == "__main__":
         "-nw",
         "--num_workers",
         help="The number of workers to use for distributed computation",
-        default=None
+        default=None,
     )
 
     parser.add_argument(
@@ -107,14 +111,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-lf",
         "--log_file",
-        help="Path to a logfile that will be created to track progress of the conversion."
+        help="Path to a logfile that will be created to track progress of the conversion.",
     )
 
     args = parser.parse_args()
 
-    logging.basicConfig(filename=args.log_file,
-                        filemode='a',
-                        level=logging.INFO)
+    logging.basicConfig(filename=args.log_file, filemode="a", level=logging.INFO)
 
     num_workers = int(args.num_workers)
     output_fmt = Path(args.dest).suffix[1:]
@@ -124,37 +126,48 @@ if __name__ == "__main__":
         )
 
     padded_array, metadata = prepare_data(args.source, max_chunksize=max_chunksize)
-    dataset_path = '/volumes/raw'
+    dataset_path = "/volumes/raw"
     num_channels = padded_array.shape[channel_dim]
-    n5_names = [f'ch{r}' for r in range(num_channels)]
+    n5_names = [f"ch{r}" for r in range(num_channels)]
     n5_shapes = list(padded_array.shape)
     n5_shapes.pop(channel_dim)
     n5_shapes = num_channels * (n5_shapes,)
     n5_chunks = num_channels * ((1, max_chunksize, max_chunksize),)
     n5_dtypes = num_channels * (padded_array.dtype,)
 
-    prepare_chunked_store(dest_path=args.dest,
-                          data_path=dataset_path,
-                          names=n5_names,
-                          shapes=n5_shapes,
-                          dtypes=n5_dtypes,
-                          compressor=compressor,
-                          chunks=n5_chunks,
-                          metadata=metadata)
+    prepare_chunked_store(
+        dest_path=args.dest,
+        data_path=dataset_path,
+        names=n5_names,
+        shapes=n5_shapes,
+        dtypes=n5_dtypes,
+        compressor=compressor,
+        chunks=n5_chunks,
+        metadata=metadata,
+    )
 
     if not args.dry_run:
         running_on_cluster = bsub_available()
         if running_on_cluster:
             from fst.distributed import get_jobqueue_cluster
-            cluster = get_jobqueue_cluster(project='cosem')
+
+            cluster = get_jobqueue_cluster(project="cosem")
             client = Client(cluster)
             cluster.start_workers(num_workers)
         else:
             from distributed import LocalCluster
+
             cluster = LocalCluster(n_workers=num_workers)
             client = Client(cluster)
 
-        logging.info(f'Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}')
-        padded_array.map_blocks(save_blockwise, store_path=args.dest, split_dim=channel_dim, dtype=padded_array.dtype).compute()
+        logging.info(
+            f"Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}"
+        )
+        padded_array.map_blocks(
+            save_blockwise,
+            store_path=args.dest,
+            split_dim=channel_dim,
+            dtype=padded_array.dtype,
+        ).compute()
         elapsed_time = time.time() - start_time
-        logging.info(f'Save completed in {elapsed_time} s')
+        logging.info(f"Save completed in {elapsed_time} s")

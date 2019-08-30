@@ -52,7 +52,9 @@ def read_single(path: str, lazy=False):
     try:
         reader = readers[fmt]
     except KeyError:
-        raise ValueError(f"Cannot open images with extension {fmt}. Try one of {list(readers.keys())}")
+        raise ValueError(
+            f"Cannot open images with extension {fmt}. Try one of {list(readers.keys())}"
+        )
     if lazy:
         reader = delayed(reader)
     result = reader(path)
