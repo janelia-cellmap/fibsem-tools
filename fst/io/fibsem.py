@@ -27,7 +27,7 @@ class FIBSEMHeader(object):
             if isinstance(v, np.integer):
                 self.__dict__[k] = int(v)
             elif isinstance(v, np.bytes_):
-                self.__dict__[k] = v.tostring().decode('utf-8')
+                self.__dict__[k] = v.tostring().decode("utf-8")
             elif isinstance(v, np.ndarray):
                 self.__dict__[k] = v.tolist()
             elif isinstance(v, np.floating):
@@ -115,13 +115,17 @@ def _read_header(fobj):
     if fibsem_header.FileMagicNum != MAGIC_NUMBER:
         raise RuntimeError(
             f"FileMagicNum should be {MAGIC_NUMBER} but is {fibsem_header.FileMagicNum}"
-            )
+        )
 
     _scaling_offset = 36
     if fibsem_header.FileVersion == 1:
-        header_dtype.update("Scaling", (">f8", (fibsem_header.ChanNum, 4)), _scaling_offset)
+        header_dtype.update(
+            "Scaling", (">f8", (fibsem_header.ChanNum, 4)), _scaling_offset
+        )
     elif fibsem_header.FileVersion in {2, 3, 4, 5, 6}:
-        header_dtype.update("Scaling", (">f4", (fibsem_header.ChanNum, 4)), _scaling_offset)
+        header_dtype.update(
+            "Scaling", (">f4", (fibsem_header.ChanNum, 4)), _scaling_offset
+        )
     else:
         # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain, 2nd order, 3rd order)
         header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
@@ -555,9 +559,7 @@ def _read(path: str) -> FIBSEMData:
 
     """
     # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data type
-    with open(
-        path, "rb"
-    ) as fobj:
+    with open(path, "rb") as fobj:
         fibsem_header = _read_header(fobj)
     # read data
     if fibsem_header.EightBit == 1:
@@ -658,15 +660,24 @@ def _convert_data(fibsem):
             )
 
     else:
-        if fibsem.header.FileVersion in {1,2,3,4,5,6}:
-            #scaled =
+        if fibsem.header.FileVersion in {1, 2, 3, 4, 5, 6}:
+            # scaled =
 
             if fibsem.header.AI1:
-                detector_a = fibsem.header.Scaling[0,0] + fibsem[0] * fibsem.header.Scaling[0,1]
+                detector_a = (
+                    fibsem.header.Scaling[0, 0]
+                    + fibsem[0] * fibsem.header.Scaling[0, 1]
+                )
                 if fibsem.header.AI2:
-                    detector_b = fibsem.header.Scaling[1,0] + fibsem[1] * fibsem.header.Scaling[1,1]
+                    detector_b = (
+                        fibsem.header.Scaling[1, 0]
+                        + fibsem[1] * fibsem.header.Scaling[1, 1]
+                    )
                     if fibsem.header.AI3:
-                        detector_c = fibsem.header.Scaling[2, 0] + fibsem[1] * fibsem.header.Scaling[1, 1]
+                        detector_c = (
+                            fibsem.header.Scaling[2, 0]
+                            + fibsem[1] * fibsem.header.Scaling[1, 1]
+                        )
         else:
             pass
     return detector_a, detector_b, scaled
