@@ -1,4 +1,3 @@
-import dask.array as da
 import argparse
 from glob import glob
 from pathlib import Path
@@ -7,77 +6,17 @@ from fst.io import read
 import numpy as np
 from typing import Union
 import logging
-import sys
 import zarr
 import numcodecs
-from dask.diagnostics import ProgressBar
 from fst.distributed import bsub_available
-from dask.utils import SerializableLock
 from distributed import Client
 import time
 
 OUTPUT_FMTS = {"n5"}
 max_chunksize = 1024
-compressor = numcodecs.GZip(level=1)
-lock = False
-# todo: move data writing functions to fst.io
-
-
-def save_blockwise(v, store_path, block_info):
-    # assumes input is 5D with first dimension == 1 and 
-    # second dimension == 2, and third + fourth dimensions the full size
-    # of the zarr/n5 file located at store_path
-    split_dim = 1
-    sinks = [zarr.open(store_path,mode='w')[f'/volumes/raw/ch{d}'] for d in range(2)]
-    
-    pos = block_info[0]['array-location']
-    # get rid of the channel dimension
-    pos.pop(split_dim)
-    idx = tuple(slice(*i) for i in pos)
-    for ind in range(2):
-        sinks[ind][idx] = np.expand_dims(v[0,ind], 0)
-    return np.zeros((1,) * v.ndim)
-
-
-def n5_store(
-    array: Union[da.Array, list],
-    metadata: list,
-    dest: str,
-    path: str = "/volumes",
-    name: Union[str, list] = "raw",
-) -> da.Array:
-    store = zarr.N5Store(dest)
-    group = zarr.group(overwrite=True, store=store, path=path)
-
-    # check that array is a list iff name is a list
-    assert isinstance(array, list) == isinstance(name, list)
-
-    if isinstance(array, list):
-        result = []
-        for ind, arr in enumerate(array):
-            z = group.zeros(
-                shape=arr.shape,
-                chunks=arr.chunksize,
-                dtype=arr.dtype,
-                compressor=compressor,
-                name=name[ind],
-            )
-            z.attrs["metadata"] = metadata
-            result.append(arr.store(z, compute=False, lock=lock))
-
-    elif isinstance(array, da.Array):
-        z = group.zeros(
-            shape=array.shape,
-            chunks=array.chunksize,
-            dtype=array.dtype,
-            compressor=compressor,
-            name=name,
-        )
-        z.attrs["metadata"] = metadata
-        result = array.store(z, compute=False, lock=lock)
-    return result
-
-stores = dict(n5=n5_store)
+compressor = numcodecs.GZip(level=9)
+# raw data are stored z c y x
+channel_dim = 1
 
 
 def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
@@ -89,7 +28,6 @@ def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
         raise ValueError(f"Path variable should be string or list, not {type(path)}")
 
     logging.info(f"Preparing {len(fnames)} images...")
-
     data_eager = read(fnames, lazy=False)
     meta, shapes, dtypes = [], [], []
     # build lists of metadata for each image
@@ -98,21 +36,36 @@ def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
         shapes.append(d.shape)
         dtypes.append(d.dtype)
     data = arrays_from_delayed(read(fnames, lazy=True), shapes=shapes, dtypes=dtypes)
-    #stacked = padstack(data, constant_values="minimum-minus-one").swapaxes(0, 1)
     stacked = padstack(data, constant_values="minimum-minus-one")
-    rechunked = stacked
-    # For raw data, single chunks along channel and z axes. Channels will become their own datasets
-    #rechunked = stacked.rechunk((1,1,*np.where(np.array(stacked.shape[2:]) < max_chunksize, stacked.shape[2:], max_chunksize,),))
     logging.info(
-        f"Assembled dataset with shape {rechunked.shape} using chunk sizes {rechunked.chunksize}"
+        f"Assembled dataset with shape {stacked.shape} using chunk sizes {stacked.chunksize}"
     )
 
-    return rechunked, meta
+    return stacked, meta
 
 
-def save_data(data: Union[da.Array, list]):
-    with ProgressBar():
-        da.compute(data)
+def prepare_chunked_store(dest_path, data_path, names, shapes, dtypes, compressor, chunks, metadata):
+    group = zarr.group(overwrite=True, store=zarr.N5Store(dest_path), path=data_path)
+    for n, s, d, c, m in zip(names, shapes,  dtypes, chunks, metadata):
+        g = group.zeros(name=n, shape=s, dtype=d, compressor=compressor, chunks=c)
+        g.attrs['metadata'] = m
+
+
+def save_blockwise(v, store_path, split_dim, block_info):
+    # assumes input is 5D with first dimension == 1 and
+    # second dimension == 2, and third + fourth dimensions the full size
+    # of the zarr/n5 file located at store_path
+
+    num_sinks = v.shape[split_dim]
+    sinks = [zarr.open(store_path, mode='a')[f'/volumes/raw/ch{d}'] for d in range(num_sinks)]
+
+    pos = block_info[0]['array-location']
+    # get rid of the split dimension
+    pos.pop(split_dim)
+    idx = tuple(slice(*i) for i in pos)
+    for ind in range(num_sinks):
+        sinks[ind][idx] = np.expand_dims(v[0, ind], 0)
+    return np.zeros((1,) * v.ndim)
 
 
 if __name__ == "__main__":
@@ -158,7 +111,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    #lock = SerializableLock()
 
     logging.basicConfig(filename=args.log_file,
                         filemode='a',
@@ -173,16 +125,23 @@ if __name__ == "__main__":
 
     padded_array, metadata = prepare_data(args.source, max_chunksize=max_chunksize)
     dataset_path = '/volumes/raw'
-    dataset_names = ['ch' + str(r) for r in range(2)]
-    #my_stores = stores[output_fmt]([*padded_array], metadata, args.dest, path=dataset_path, name=dataset_names)
-    
-    # stick this in a function
-    group = zarr.group(overwrite=True, store=zarr.N5Store(args.dest), path=dataset_path)
-    # we are sending elements along the first axis to separate arrays 
-    out_shape = list(padded_array.shape)
-    out_shape.pop(1)
-    [group.zeros(name=n, shape=out_shape, compressor=compressor, chunks=(1,max_chunksize,max_chunksize)) for n in dataset_names]
-    import pdb; pdb.set_trace()
+    num_channels = padded_array.shape[channel_dim]
+    n5_names = [f'ch{r}' for r in range(num_channels)]
+    n5_shapes = list(padded_array.shape)
+    n5_shapes.pop(channel_dim)
+    n5_shapes = num_channels * (n5_shapes,)
+    n5_chunks = num_channels * ((1, max_chunksize, max_chunksize),)
+    n5_dtypes = num_channels * (padded_array.dtype,)
+
+    prepare_chunked_store(dest_path=args.dest,
+                          data_path=dataset_path,
+                          names=n5_names,
+                          shapes=n5_shapes,
+                          dtypes=n5_dtypes,
+                          compressor=compressor,
+                          chunks=n5_chunks,
+                          metadata=metadata)
+
     if not args.dry_run:
         running_on_cluster = bsub_available()
         if running_on_cluster:
@@ -196,7 +155,6 @@ if __name__ == "__main__":
             client = Client(cluster)
 
         logging.info(f'Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}')
-        padded_array.map_blocks(save_blockwise, store_path=args.dest, dtype=padded_array.dtype).compute()
-        # save_data(my_stores)
+        padded_array.map_blocks(save_blockwise, store_path=args.dest, split_dim=channel_dim, dtype=padded_array.dtype).compute()
         elapsed_time = time.time() - start_time
         logging.info(f'Save completed in {elapsed_time} s')
