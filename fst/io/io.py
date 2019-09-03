@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Union, Iterable
 import zarr
 from dask import delayed
-
+import os
 
 def read_n5(path: str) -> zarr.hierarchy.Group:
     result = zarr.open(zarr.N5Store(path), mode="r")
@@ -60,3 +60,19 @@ def read_single(path: str, lazy=False):
     result = reader(path)
 
     return result
+
+
+def get_umask():
+    import subprocess
+    umask = int(subprocess.run('umask', capture_output=True).stdout.decode('utf-8'))
+    return umask
+
+
+def chmodr(path, mode):
+    """
+    Recursively change permissions of all files in a directory.
+    """
+    for dirpath, dirnames, filenames in os.walk(path):
+        for f in filenames:
+            full_file = os.path.join(dirpath, f)
+            os.chmod(full_file, mode)

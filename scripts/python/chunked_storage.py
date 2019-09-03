@@ -2,7 +2,7 @@ import argparse
 from glob import glob
 from pathlib import Path
 from fst.io.ingest import padstack, arrays_from_delayed
-from fst.io import read
+from fst.io import read, get_umask, chmodr
 import numpy as np
 from typing import Union
 import logging
@@ -169,5 +169,13 @@ if __name__ == "__main__":
             split_dim=channel_dim,
             dtype=padded_array.dtype,
         ).compute()
+        # zarr saves data in temporary files, which have very
+        # restricted permissions. This function call recursively applies
+        # new permissions to all the files  in the newly created container based on the current umask setting
+        umask = get_umask()
+        # convert the umask to a file permission
+        mode = 0o777 - umask
+        chmodr(args.dest, mode)
+        
         elapsed_time = time.time() - start_time
         logging.info(f"Save completed in {elapsed_time} s")
