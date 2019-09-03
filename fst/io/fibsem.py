@@ -562,30 +562,26 @@ def _read(path: str) -> FIBSEMData:
     with open(path, "rb") as fobj:
         fibsem_header = _read_header(fobj)
     # read data
-    if fibsem_header.EightBit == 1:
-        raw_data = np.memmap(
-            path,
-            dtype=">u1",
-            mode="r",
-            offset=1024,
-            shape=(
-                fibsem_header.YResolution,
-                fibsem_header.XResolution,
-                fibsem_header.ChanNum,
-            ),
-        )
+    shape = (fibsem_header.YResolution,
+             fibsem_header.XResolution,
+             fibsem_header.ChanNum,)
+    offset = 1024
+    if fibsem_header.Eighbit == 1:
+        dtype = ">u1"
     else:
+        dtype = ">i2"
+
+    try:
         raw_data = np.memmap(
             path,
-            dtype=">i2",
+            dtype=dtype,
             mode="r",
-            offset=1024,
-            shape=(
-                fibsem_header.YResolution,
-                fibsem_header.XResolution,
-                fibsem_header.ChanNum,
-            ),
+            offset=offset,
+            shape=shape,
         )
+    except ValueError:
+        raw_data = np.zeros(dtype=dtype, shape=shape)
+
     raw_data = np.rollaxis(raw_data, 2)
     # Once read into the FIBSEMData structure it will be in memory, not memmap.
     return FIBSEMData(raw_data, fibsem_header)
