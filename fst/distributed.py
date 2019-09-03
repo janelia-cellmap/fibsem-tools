@@ -15,10 +15,10 @@
 
 def get_jobqueue_cluster(
     walltime="60:00",
-    cores=1,
+    ncpus=1,
     local_directory=None,
     memory="16GB",
-    env_extra=None,
+    env_extra='single-threaded',
     **kwargs
 ):
     """
@@ -32,7 +32,7 @@ def get_jobqueue_cluster(
     from dask_jobqueue import LSFCluster
     import os
 
-    if env_extra is None:
+    if env_extra is 'single-threaded':
         env_extra = [
             "export NUM_MKL_THREADS=1",
             "export OPENBLAS_NUM_THREADS=1",
@@ -46,9 +46,9 @@ def get_jobqueue_cluster(
     cluster = LSFCluster(
         queue="normal",
         walltime=walltime,
-        cores=cores,
+        ncpus=ncpus,
         local_directory=local_directory,
-        memory=memory,
+        mem=memory,
         env_extra=env_extra,
         job_extra=["-o /dev/null"],
         **kwargs
