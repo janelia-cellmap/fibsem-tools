@@ -63,16 +63,39 @@ def read_single(path: str, lazy=False):
 
 
 def get_umask():
-    import subprocess
-    umask = int(subprocess.run('umask', capture_output=True).stdout.decode('utf-8'))
-    return umask
+    """
+
+    Returns the current umask as an int
+    -------
+
+    """
+    current_umask = os.umask(0)
+    os.umask(current_umask)
+
+    return current_umask
 
 
 def chmodr(path, mode):
     """
-    Recursively change permissions of all files in a directory.
+
+    Parameters
+    ----------
+    path: A string specifying a directory to recursively process.
+    mode: Either a valid `mode` argument to os.chmod, e.g. 0o777, or the string 'umask', in which case permissions are
+    set based on the user's current umask value.
+
+    Returns 0
+    -------
+
     """
+
+    if mode == 'umask':
+        umask = get_umask()
+        # convert the umask to a file permission
+        mode = 0o777 - umask
+
     for dirpath, dirnames, filenames in os.walk(path):
         for f in filenames:
             full_file = os.path.join(dirpath, f)
             os.chmod(full_file, mode)
+    return 0

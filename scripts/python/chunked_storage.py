@@ -15,7 +15,7 @@ import time
 OUTPUT_FMTS = {"n5"}
 max_chunksize = 1024
 compressor = numcodecs.GZip(level=9)
-# raw data are stored z c y x
+# raw data are stored z c y x, we will split images into two channels along the channel dimension
 channel_dim = 1
 
 
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         "-nw",
         "--num_workers",
         help="The number of workers to use for distributed computation",
-        default=None,
+        default=8,
     )
 
     parser.add_argument(
@@ -119,6 +119,7 @@ if __name__ == "__main__":
     logging.basicConfig(filename=args.log_file, filemode="a", level=logging.INFO)
 
     num_workers = int(args.num_workers)
+
     output_fmt = Path(args.dest).suffix[1:]
     if output_fmt not in OUTPUT_FMTS:
         raise NotImplementedError(
@@ -152,14 +153,13 @@ if __name__ == "__main__":
             from fst.distributed import get_jobqueue_cluster
 
             cluster = get_jobqueue_cluster(project="cosem")
-            client = Client(cluster)
             cluster.start_workers(num_workers)
         else:
             from distributed import LocalCluster
-
             cluster = LocalCluster(n_workers=num_workers)
             client = Client(cluster)
 
+        client = Client(cluster)
         logging.info(
             f"Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}"
         )
@@ -172,10 +172,7 @@ if __name__ == "__main__":
         # zarr saves data in temporary files, which have very
         # restricted permissions. This function call recursively applies
         # new permissions to all the files  in the newly created container based on the current umask setting
-        umask = get_umask()
-        # convert the umask to a file permission
-        mode = 0o777 - umask
-        chmodr(args.dest, mode)
+        chmodr(args.dest, mode='umask')
         
         elapsed_time = time.time() - start_time
         logging.info(f"Save completed in {elapsed_time} s")
