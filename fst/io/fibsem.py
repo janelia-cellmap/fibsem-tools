@@ -566,7 +566,7 @@ def _read(path: str) -> FIBSEMData:
              fibsem_header.XResolution,
              fibsem_header.ChanNum,)
     offset = 1024
-    if fibsem_header.Eighbit == 1:
+    if fibsem_header.EightBit == 1:
         dtype = ">u1"
     else:
         dtype = ">i2"
