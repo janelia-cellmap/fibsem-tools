@@ -136,6 +136,7 @@ if __name__ == "__main__":
     n5_chunks = num_channels * ((1, max_chunksize, max_chunksize),)
     n5_dtypes = num_channels * (padded_array.dtype,)
 
+    logging.info('Initializing chunked storage....')
     prepare_chunked_store(
         dest_path=args.dest,
         data_path=dataset_path,
@@ -172,6 +173,11 @@ if __name__ == "__main__":
         # zarr saves data in temporary files, which have very
         # restricted permissions. This function call recursively applies
         # new permissions to all the files  in the newly created container based on the current umask setting
+
+        client.close()
+        cluster.close()
+
+        logging.info(f'Updating permissions of files in {args.dest}')
         chmodr(args.dest, mode='umask')
         
         elapsed_time = time.time() - start_time
