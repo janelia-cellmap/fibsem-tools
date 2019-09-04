@@ -16,6 +16,7 @@
 def get_jobqueue_cluster(
     walltime="60:00",
     ncpus=1,
+    cores=1,
     local_directory=None,
     memory="16GB",
     env_extra='single-threaded',
@@ -46,9 +47,10 @@ def get_jobqueue_cluster(
     cluster = LSFCluster(
         queue="normal",
         walltime=walltime,
+        cores=cores,
         ncpus=ncpus,
         local_directory=local_directory,
-        mem=memory,
+        memory=memory,
         env_extra=env_extra,
         job_extra=["-o /dev/null"],
         **kwargs
