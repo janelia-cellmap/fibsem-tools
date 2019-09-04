@@ -580,6 +580,7 @@ def _read(path: str) -> FIBSEMData:
             shape=shape,
         )
     except ValueError:
+        # todo: read what data is available
         raw_data = np.zeros(dtype=dtype, shape=shape)
 
     raw_data = np.rollaxis(raw_data, 2)
