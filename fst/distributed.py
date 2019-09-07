@@ -33,7 +33,7 @@ def get_jobqueue_cluster(
     from dask_jobqueue import LSFCluster
     import os
 
-    if env_extra is 'single-threaded':
+    if env_extra == 'single-threaded':
         env_extra = [
             "export NUM_MKL_THREADS=1",
             "export OPENBLAS_NUM_THREADS=1",
