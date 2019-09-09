@@ -4,6 +4,7 @@ from typing import Union, Iterable
 import zarr
 from dask import delayed
 import os
+import h5py
 
 def read_n5(path: str) -> zarr.hierarchy.Group:
     result = zarr.open(zarr.N5Store(path), mode="r")
@@ -14,11 +15,16 @@ def read_zarr(path: str) -> zarr.hierarchy.Group:
     result = zarr.open(path, mode="r")
     return result
 
+def read_h5(path: str) -> : h5py._hl.files.File
+    result = h5py.File(path, mode="r")
+    return result
+
 
 readers = dict()
 readers[".dat"] = read_fibsem
 readers[".n5"] = read_n5
 readers[".zarr"] = read_zarr
+readers[".h5"] = read_h5
 
 
 def read(path: Union[str, Iterable[str]], lazy=False):
