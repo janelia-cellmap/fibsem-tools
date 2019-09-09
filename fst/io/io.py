@@ -1,22 +1,51 @@
 from .fibsem import read_fibsem
 from pathlib import Path
-from typing import Union, Iterable
+from typing import Union, Iterable, List
 import zarr
 from dask import delayed
 import os
 import h5py
 
-def read_n5(path: str) -> zarr.hierarchy.Group:
-    result = zarr.open(zarr.N5Store(path), mode="r")
+
+def split_path(path: str, sep: str = ':') -> List[str]:
+    """
+    Split paths of the form `/foo/bar:baz` into `['foo/bar', 'baz'].
+
+    Parameters
+    ----------
+    path: A string representing either a compound path (a/b/c:d) or a regular path (a/b/c)
+    sep: A string denoting the separator to use when splitting the input string.
+
+    Returns a list of strings. If the separator is not found in the input string, the second string will be empty.
+    -------
+
+    """
+    parts = path.split(sep)
+    if len(parts) == 1:
+        parts.append('')
+    elif len(parts) > 2:
+        raise ValueError(f'Input string {path} contains too many instances of {sep}.')
+    return parts
+
+
+def read_n5(dir_path: str, container_path: Union[str, None] = '') -> zarr.hierarchy.Group:
+    result = zarr.open(zarr.N5Store(dir_path), mode="r")
+    if container_path:
+        result = result[container_path]
     return result
 
 
-def read_zarr(path: str) -> zarr.hierarchy.Group:
-    result = zarr.open(path, mode="r")
+def read_zarr(dir_path: str, container_path: Union[str, None] = '') -> zarr.hierarchy.Group:
+    result = zarr.open(dir_path, mode="r")
+    if container_path:
+        result = result[container_path]
     return result
 
-def read_h5(path: str) -> : h5py._hl.files.File
-    result = h5py.File(path, mode="r")
+
+def read_h5(dir_path: str, container_path: Union[str, None] = '') ->  h5py._hl.files.File:
+    result = h5py.File(dir_path, mode="r")
+    if container_path:
+        result = result[container_path]
     return result
 
 
@@ -54,7 +83,8 @@ def read(path: Union[str, Iterable[str]], lazy=False):
 
 def read_single(path: str, lazy=False):
     # read a single image by looking up the reader in the dict of image readers
-    fmt = Path(path).suffix
+    path_outer, path_inner = split_path(path)
+    fmt = Path(path_outer).suffix
     try:
         reader = readers[fmt]
     except KeyError:
@@ -63,7 +93,11 @@ def read_single(path: str, lazy=False):
         )
     if lazy:
         reader = delayed(reader)
-    result = reader(path)
+
+    if path_inner == '':
+        result = reader(path_outer)
+    else:
+        result = reader(path_outer, path_inner)
 
     return result
 
