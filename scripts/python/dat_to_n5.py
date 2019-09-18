@@ -170,13 +170,13 @@ if __name__ == "__main__":
             split_dim=channel_dim,
             dtype=padded_array.dtype,
         ).compute()
-        # zarr saves data in temporary files, which have very
-        # restricted permissions. This function call recursively applies
-        # new permissions to all the files  in the newly created container based on the current umask setting
 
         client.close()
         cluster.close()
-
+        
+        # zarr saves data in temporary files, which have very
+        # restricted permissions. This function call recursively applies
+        # new permissions to all the files  in the newly created container based on the current umask setting
         logging.info(f'Updating permissions of files in {args.dest}')
         chmodr(args.dest, mode='umask')
         
