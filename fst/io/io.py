@@ -14,7 +14,7 @@ def split_path_at_container(path):
     result = None
     pathobj = Path(path)
     if pathobj.suffix in _container_extensions:
-        result = path
+        result = [path, '']
     else:
         for parent in pathobj.parents:
             if parent.suffix in _container_extensions:
