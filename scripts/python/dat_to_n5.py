@@ -14,7 +14,7 @@ import time
 
 OUTPUT_FMTS = {"n5"}
 max_chunksize = 1024
-compressor = numcodecs.GZip(level=9)
+compressor = numcodecs.GZip(level=-1)
 # raw data are stored z c y x, we will split images into two channels along the channel dimension
 channel_dim = 1
 
