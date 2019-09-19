@@ -58,16 +58,12 @@ def split_path(path: str, sep: str = ':') -> List[str]:
 
 
 def read_n5(dir_path: str, container_path: str = '') -> Union[zarr.hierarchy.Group, zarr.core.Array]:
-    result = zarr.open(zarr.N5Store(dir_path), mode="r")
-    if container_path != '':
-        result = result[container_path]
+    result = zarr.open(zarr.N5Store(dir_path), path=container_path, mode="r")
     return result
 
 
 def read_zarr(dir_path: str, container_path: str = '') -> Union[zarr.hierarchy.Group, zarr.core.Array]:
-    result = zarr.open(dir_path, mode="r")
-    if container_path != '':
-        result = result[container_path]
+    result = zarr.open(dir_path, path=container_path, mode="r")
     return result
 
 
@@ -80,6 +76,10 @@ def read_h5(dir_path: str, container_path: str = '') ->  Union[h5py._hl.files.Fi
 
 def access_n5(dir_path: str, container_path: str = '', **kwargs):
     return zarr.open(zarr.N5Store(dir_path), path=container_path, **kwargs)
+
+
+def access_zarr(dir_path: str, container_path: str = '', **kwargs):
+    return zarr.open(dir_path, path=container_path, **kwargs)
 
 
 readers = dict()
@@ -103,12 +103,7 @@ def access(path: Union[str, Iterable[str]], mode='r', lazy=False, **kwargs):
     -------
 
     """
-    if mode == 'r':
-        return read(path, lazy=lazy)
-    elif mode == 'w':
-        pass
-    elif mode == 'a':
-        pass
+
 
 
 def read(path: Union[str, Iterable[str]], lazy=False):
@@ -146,7 +141,7 @@ def read_single(path: str, lazy=False):
         raise ValueError(
             f"Cannot open images with extension {fmt}. Try one of {list(readers.keys())}"
         )
-    if lazy:
+    if lazy is True:
         reader = delayed(reader)
 
     if path_inner == '':
