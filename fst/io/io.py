@@ -187,5 +187,8 @@ def chmodr(path, mode):
     for dirpath, dirnames, filenames in os.walk(path):
         for f in filenames:
             full_file = os.path.join(dirpath, f)
-            os.chmod(full_file, mode)
+            try:
+                os.chmod(full_file, mode)
+            except PermissionError:
+                pass
     return 0
