@@ -2,7 +2,7 @@ import argparse
 from glob import glob
 from pathlib import Path
 from fst.io.ingest import padstack, arrays_from_delayed
-from fst.io import read, get_umask, chmodr
+from fst.io import read, chmodr
 import numpy as np
 from typing import Union
 import logging
@@ -11,22 +11,27 @@ import numcodecs
 from fst.distributed import bsub_available
 from distributed import Client
 import time
+import dask.array as da
+from fst.pyramid import lazy_pyramid, get_downsampled_offset
 
 OUTPUT_FMTS = {"n5"}
 max_chunksize = 1024
 compressor = numcodecs.GZip(level=-1)
 # raw data are stored z c y x, we will split images into two channels along the channel dimension
 channel_dim = 1
+downscale_factor = 2
 
 
-def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
+def prepare_data(path):
     if isinstance(path, str):
         fnames = sorted(glob(path))
     elif isinstance(path, list):
         fnames = path
     else:
         raise ValueError(f"Path variable should be string or list, not {type(path)}")
-
+    # set the function to use for pyramid downscaling
+    reduction = np.mean
+    scaling_factors = (1, 1, downscale_factor, downscale_factor)
     logging.info(f"Preparing {len(fnames)} images...")
     data_eager = read(fnames, lazy=False)
     meta, shapes, dtypes = [], [], []
@@ -37,30 +42,43 @@ def prepare_data(path: Union[str, list], max_chunksize: int) -> tuple:
         dtypes.append(d.dtype)
     data = arrays_from_delayed(read(fnames, lazy=True), shapes=shapes, dtypes=dtypes)
     stacked = padstack(data, constant_values="minimum-minus-one")
+
     logging.info(
         f"Assembled dataset with shape {stacked.shape} using chunk sizes {stacked.chunksize}"
     )
 
-    return stacked, meta
+    pyramid = lazy_pyramid(stacked, reduction, scaling_factors, preserve_dtype=True)
+
+    return pyramid, meta
 
 
 def prepare_chunked_store(
-    dest_path, data_path, names, shapes, dtypes, compressor, chunks, metadata
+    dest_path, data_path, names, shapes, dtypes, compressor, chunks, group_attrs, array_attrs,
 ):
-    group = zarr.group(overwrite=True, store=zarr.N5Store(dest_path), path=data_path)
-    for n, s, d, c, m in zip(names, shapes, dtypes, chunks, metadata):
+    group = zarr.group(overwrite=True,
+                       store=zarr.N5Store(dest_path),
+                       path=data_path)
+    group.attrs.update(group_attrs)
+    for n, s, d, c, a in zip(names, shapes, dtypes, chunks, array_attrs):
         g = group.zeros(name=n, shape=s, dtype=d, compressor=compressor, chunks=c)
-        g.attrs["metadata"] = m
+        g.attrs.update(a)
 
 
-def save_blockwise(v, store_path, split_dim, block_info):
+def set_contrast_limits(path):
+    arr = da.from_array(read(path))
+    clims = da.compute([arr.min(), arr.max()])
+    arr.attrs['contrast_limits'] = {'min': clims[0], 'max': clims[1]}
+    return 0
+
+
+def save_blockwise(v, store_path, split_dim, multiscale_level, block_info):
     # assumes input is 5D with first dimension == 1 and
     # second dimension == 2, and third + fourth dimensions the full size
     # of the zarr/n5 file located at store_path
 
     num_sinks = v.shape[split_dim]
     sinks = [
-        zarr.open(store_path, mode="a")[f"/volumes/raw/ch{d}"] for d in range(num_sinks)
+        zarr.open(store_path, mode="a")[f"/volumes/raw/ch{d}/s{multiscale_level}"] for d in range(num_sinks)
     ]
 
     pos = block_info[0]["array-location"]
@@ -114,11 +132,19 @@ if __name__ == "__main__":
         help="Path to a logfile that will be created to track progress of the conversion.",
     )
 
+    parser.add_argument(
+        "-ml",
+        "--multiscale_levels",
+        help="The number of multiscale levels to create, in addition to full resolution. E.g., if ml=4 (the default), "
+             "downscaled data will be saved with downscaling factors of 2, 4, 8, 16, in addition to full-resolution.",
+        default=4
+    )
+
     args = parser.parse_args()
 
     logging.basicConfig(filename=args.log_file, filemode="a", level=logging.INFO)
-
     num_workers = int(args.num_workers)
+    multiscale_levels = range(0, args.multiscale_levels + 1)
 
     output_fmt = Path(args.dest).suffix[1:]
     if output_fmt not in OUTPUT_FMTS:
@@ -126,27 +152,39 @@ if __name__ == "__main__":
             f"Cannot write a chunked store using format {output_fmt}. Try one of {OUTPUT_FMTS}"
         )
 
-    padded_array, metadata = prepare_data(args.source, max_chunksize=max_chunksize)
-    dataset_path = "/volumes/raw"
-    num_channels = padded_array.shape[channel_dim]
-    n5_names = [f"ch{r}" for r in range(num_channels)]
-    n5_shapes = list(padded_array.shape)
-    n5_shapes.pop(channel_dim)
-    n5_shapes = num_channels * (n5_shapes,)
-    n5_chunks = num_channels * ((1, max_chunksize, max_chunksize),)
-    n5_dtypes = num_channels * (padded_array.dtype,)
+    pyramid, metadata = prepare_data(args.source)
+    pyramid = pyramid[:multiscale_levels[-1]]
 
-    logging.info('Initializing chunked storage....')
-    prepare_chunked_store(
-        dest_path=args.dest,
-        data_path=dataset_path,
-        names=n5_names,
-        shapes=n5_shapes,
-        dtypes=n5_dtypes,
-        compressor=compressor,
-        chunks=n5_chunks,
-        metadata=metadata,
-    )
+    num_channels = pyramid[0].array.shape[channel_dim]
+
+    dataset_paths = [f"/volumes/raw/ch{ch}" for ch in range(num_channels)]
+    logging.info('Initializing chunked storage for multiple pyramid levels....')
+    for dp in dataset_paths:
+        chunks = ((1, max_chunksize, max_chunksize),) * len(pyramid)
+        shapes, names, dtypes, array_attrs = [], [], [], []
+        group_attrs = {'metadata': metadata}
+        for ind, level in enumerate(pyramid):
+            shapes.append(level.array.sum(channel_dim).shape)
+            names.append(f's{ind}')
+            dtypes.append(level.array.dtype)
+            # resolution should go in here but we can't quite get that from the metadata yet
+            _scale = list(level.scale_factors)
+            _scale.pop(channel_dim)
+            # zyx to xyz
+            _scale = _scale[::-1]
+            array_attrs.append({'downsamplingFactors':_scale})
+
+        prepare_chunked_store(
+            dest_path=args.dest,
+            data_path=dp,
+            names=names,
+            shapes=shapes,
+            dtypes=dtypes,
+            compressor=compressor,
+            chunks=chunks,
+            group_attrs=group_attrs,
+            array_attrs=array_attrs,
+        )
 
     if not args.dry_run:
         running_on_cluster = bsub_available()
@@ -158,18 +196,21 @@ if __name__ == "__main__":
         else:
             from distributed import LocalCluster
             cluster = LocalCluster(n_workers=num_workers)
-            client = Client(cluster)
 
         client = Client(cluster)
         logging.info(
             f"Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}"
         )
-        padded_array.map_blocks(
-            save_blockwise,
-            store_path=args.dest,
-            split_dim=channel_dim,
-            dtype=padded_array.dtype,
-        ).compute()
+        pyramid_saver = tuple(l.array.map_blocks(save_blockwise,
+                                      store_path=args.dest,
+                                      split_dim=channel_dim,
+                                      dtype=pyramid[0].array.dtype,
+                                      multiscale_level=ind) for ind, l in enumerate(pyramid))
+
+        client.compute(pyramid_saver, sync=True)
+
+        # logging.info(f"Calculating minimum and maximum intensity value of the data...")
+        # [set_contrast_limits(args.dest + dataset_path + n) for n in n5_names]
 
         client.close()
         cluster.close()

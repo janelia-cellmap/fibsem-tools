@@ -1,7 +1,7 @@
 import numpy as np
 import dask.array as da
 import dask
-
+from collections import namedtuple
 
 def even_padding(length, window):
     """
@@ -39,17 +39,29 @@ def prepad(array, scale_factors, mode='reflect'):
 
     mode: String. The edge mode used by the padding routine. See `dask.array.pad` for more documentation.
 
-    Returns a single-chunked dask array with padded dimensions.
+    Returns a dask array with padded dimensions.
     -------
 
     """
     pw = tuple((0, even_padding(ax, scale)) for ax, scale in zip(array.shape, scale_factors))
+
     result = None
     mode = 'reflect'
     if isinstance(array, dask.array.core.Array):
-        result = da.pad(array, pw, mode=mode).rechunk((-1,) * im.ndim)
+        result = da.pad(array, pw, mode=mode)
     else:
-        result = da.pad(da.from_array(array), pw, mode=mode).rechunk((-1,) * array.ndim)
+        result = da.pad(da.from_array(array), pw, mode=mode)
+
+    # rechunk so that padding does not change number of chunks
+    new_chunks = list(result.chunks)
+    for ind, c in enumerate(result.chunks):
+        if pw[ind][-1] > 0:
+            tmp = list(c)
+            tmp[-2] += tmp[-1]
+            new_chunks[ind] = tuple(tmp[:-1])
+
+    new_chunks = tuple(new_chunks)
+    result = result.rechunk(new_chunks)
     return result
 
 
@@ -82,35 +94,49 @@ def get_downscale_depth(array, scale_factors):
     return min(depths.values())
 
 
-def lazy_pyramid(array, reduction, scale_factors):
+def lazy_pyramid(array, reduction, scale_factors, preserve_dtype=True):
     """
     Lazily generate an image pyramid
 
     Parameters
     ----------
     array: ndarray to be downscaled.
+
     reduction: a function that aggregates data over windows.
+
     scale_factors: an iterable of integers that specifies how much to downscale each axis of the array.
 
-    Returns a list of dask arrays, one per level of downscaling
+    preserve_dtype: Boolean, determines whether lower levels of the pyramid are coerced to the same dtype as the input.
+
+    Returns a list of named tuples, one per level of downscaling, each with an `array` field (containing a dask array
+    representing a downscaled image), a `scaling_factors` field containing the scaling factors used to create that
+    array, and an `offset` field which contains the offset into the first pixel of the downsampled image.
     -------
 
     """
     assert len(scale_factors) == array.ndim
+
     # level 0 is the original
-    result = [da.from_array(array)]
+    Level = namedtuple('level', 'array scale_factors offset')
+    result = [Level(array=da.asarray(array), scale_factors=(1,) * array.ndim, offset=(0,) * array.ndim)]
 
     # figure out the maximum depth
     levels = range(1, get_downscale_depth(array, scale_factors))
     for l in levels:
         scale = tuple(s ** l for s in scale_factors)
-        result.append(downscale(array, reduction, scale))
+        arr = downscale(array, reduction, scale)
+        if preserve_dtype:
+            arr = arr.astype(array.dtype)
+        result.append(Level(array=arr,
+                            scale_factors=scale,
+                            offset=get_downsampled_offset(scale)))
     return result
 
 
-def get_downsampled_offset(ndim, scale_factors):
+def get_downsampled_offset(scale_factors):
     """
     For a given number of dimension and a sequence of downscale factors, calculate the starting offset of the downscaled
     array in the units of the full-resolution data.
     """
+    ndim = len(scale_factors)
     return np.mgrid[tuple(slice(scale_factors[dim]) for dim in range(ndim))].mean(tuple(range(1, 1 + ndim)))
