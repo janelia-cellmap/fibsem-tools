@@ -192,7 +192,7 @@ if __name__ == "__main__":
             from fst.distributed import get_jobqueue_cluster
 
             cluster = get_jobqueue_cluster(project="cosem")
-            cluster.start_workers(num_workers)
+            cluster.scale(num_workers)
         else:
             from distributed import LocalCluster
             cluster = LocalCluster(n_workers=num_workers)
