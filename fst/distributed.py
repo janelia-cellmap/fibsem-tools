@@ -53,6 +53,7 @@ def get_jobqueue_cluster(
         memory=memory,
         env_extra=env_extra,
         job_extra=["-o /dev/null"],
+        use_stdin=True,
         **kwargs
     )
     return cluster
