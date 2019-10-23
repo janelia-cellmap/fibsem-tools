@@ -19,6 +19,7 @@ import os
 # this is necessary to ensure that workers get the job script from stdin
 dask.config.set({"jobqueue.lsf.use-stdin": True})
 
+
 def get_jobqueue_cluster(
     walltime="60:00",
     ncpus=1,
@@ -56,7 +57,6 @@ def get_jobqueue_cluster(
         memory=memory,
         env_extra=env_extra,
         job_extra=["-o /dev/null"],
-        use_stdin=True,
         **kwargs
     )
     return cluster
