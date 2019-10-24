@@ -41,6 +41,7 @@ def prepare_data(path):
         shapes.append(d.shape)
         dtypes.append(d.dtype)
     data = arrays_from_delayed(read(fnames, lazy=True), shapes=shapes, dtypes=dtypes)
+
     stacked = padstack(data, constant_values="minimum-minus-one")
 
     logging.info(
@@ -192,8 +193,7 @@ if __name__ == "__main__":
             from fst.distributed import get_jobqueue_cluster
 
             cluster = get_jobqueue_cluster(project="cosem")
-            cluster.adapt()
-            #cluster.scale(num_workers)
+            cluster.scale(num_workers)
         else:
             from distributed import LocalCluster
             cluster = LocalCluster(n_workers=num_workers)
