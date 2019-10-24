@@ -65,7 +65,8 @@ def padstack(
                 for ind, a in enumerate(arrays)
             ]
 
-        stacked = da.stack(padded)
+        stacked = da.stack(padded).rechunk((1, *shapes.max(0)))
+
     return stacked
 
 
@@ -101,3 +102,5 @@ def arrays_from_delayed(args, shapes=None, dtypes=None):
         for ind in range(len(args))
     ]
     return arrays
+
+
