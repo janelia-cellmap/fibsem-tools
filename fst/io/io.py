@@ -36,7 +36,7 @@ def split_path(path: str, sep: str = ':') -> List[str]:
     input path, a second attempt will be made to look for a supported container format extension and split the path at
     that point.
 
-    Returns a list of strings. If the separator is not found in the input string, the second string will be empty.
+    Returns a list of 2 strings. If the separator is not found in the input string, the second string will be empty.
     -------
 
     """
@@ -57,57 +57,87 @@ def split_path(path: str, sep: str = ':') -> List[str]:
     return result
 
 
-def read_n5(dir_path: str, container_path: str = '') -> Union[zarr.hierarchy.Group, zarr.core.Array]:
-    result = zarr.open(zarr.N5Store(dir_path), path=container_path, mode="r")
-    return result
+def access_fibsem(path, mode):
+    if mode != 'r':
+        raise ValueError('Fibsem data can only be accessed with mode = "r", i.e. read-only')
+    return read_fibsem(path)
 
 
-def read_zarr(dir_path: str, container_path: str = '') -> Union[zarr.hierarchy.Group, zarr.core.Array]:
-    result = zarr.open(dir_path, path=container_path, mode="r")
-    return result
+def access_n5(dir_path: str, container_path: str, mode, **kwargs):
+    return zarr.open(zarr.N5Store(dir_path),
+                     path=container_path,
+                     mode=mode,
+                     **kwargs)
 
 
-def read_h5(dir_path: str, container_path: str = '') ->  Union[h5py._hl.files.File, h5py._hl.group.Group, h5py._hl.dataset.Dataset]:
-    result = h5py.File(dir_path, mode="r")
+def access_zarr(dir_path: str, container_path: str, mode, **kwargs):
+    return zarr.open(dir_path,
+                     path=container_path,
+                     mode=mode,
+                     **kwargs)
+
+
+def access_h5(dir_path: str, container_path: str, mode, **kwargs):
+    result = h5py.File(dir_path, mode=mode)
     if container_path != '':
         result = result[container_path]
     return result
 
 
-def access_n5(dir_path: str, container_path: str = '', **kwargs):
-    return zarr.open(zarr.N5Store(dir_path), path=container_path, **kwargs)
+accessors = dict()
+accessors[".dat"] = access_fibsem
+accessors[".n5"] = access_n5
+accessors[".zarr"] = access_zarr
+accessors[".h5"] = access_h5
 
 
-def access_zarr(dir_path: str, container_path: str = '', **kwargs):
-    return zarr.open(dir_path, path=container_path, **kwargs)
-
-
-readers = dict()
-readers[".dat"] = read_fibsem
-readers[".n5"] = read_n5
-readers[".zarr"] = read_zarr
-readers[".h5"] = read_h5
-
-
-def access(path: Union[str, Iterable[str]], mode='r', lazy=False, **kwargs):
+def access(path: Union[str, Iterable[str]], mode, lazy=False, **kwargs):
     """
-    Enable reading and writing from array formats.
+
+    Access data on disk from a variety of array storage formats.
 
     Parameters
     ----------
-    path
-    mode
-    lazy
+    path: A path or collection of paths to image files. If `path` is a string, then the appropriate reader will be
+          selected based on the extension of the path, and the file will be read. If `path` is a collection of strings,
+          it is assumed that each string is a path to an image and each will be read sequentially.
 
-    Returns an array-like object, a collection of array-like objects, a chunked store, or a dask.delayed object.
+    lazy: A boolean, defaults to False. If True, this function returns the native file reader wrapped by
+    dask.delayed. This is advantageous for distributed computing.
+
+    mode: The access mode for the file. e.g. 'r' for read-only access.
+
+    Returns an array-like object, a collection of array-like objects, a chunked store, or
+    a dask.delayed object.
     -------
 
     """
+    if isinstance(path, str):
+        path_outer, path_inner = split_path(path)
+        fmt = Path(path_outer).suffix
+
+        try:
+            accessor = accessors[fmt]
+        except KeyError:
+            raise ValueError(
+                f"Cannot access images with extension {fmt}. Try one of {list(accessors.keys())}"
+            )
+
+        if lazy:
+            accessor = delayed(accessor)
+
+        return accessor(path_outer, path_inner, mode=mode, **kwargs)
+
+    elif isinstance(path, Iterable):
+        return [access(p, mode, lazy, **kwargs) for p in path]
+    else:
+        raise ValueError("`path` must be a string or iterable of strings")
 
 
-
-def read(path: Union[str, Iterable[str]], lazy=False):
+def read(path: Union[str, Iterable[str]], lazy=False, **kwargs):
     """
+
+    Access data on disk with read-only permissions
 
     Parameters
     ----------
@@ -123,33 +153,7 @@ def read(path: Union[str, Iterable[str]], lazy=False):
     -------
 
     """
-    if isinstance(path, str):
-        return read_single(path, lazy)
-    elif isinstance(path, Iterable):
-        return [read_single(p, lazy) for p in path]
-    else:
-        raise ValueError("`path` must be an instance of string or iterable of strings")
-
-
-def read_single(path: str, lazy=False):
-    # read a single image by looking up the reader in the dict of image readers
-    path_outer, path_inner = split_path(path)
-    fmt = Path(path_outer).suffix
-    try:
-        reader = readers[fmt]
-    except KeyError:
-        raise ValueError(
-            f"Cannot open images with extension {fmt}. Try one of {list(readers.keys())}"
-        )
-    if lazy is True:
-        reader = delayed(reader)
-
-    if path_inner == '':
-        result = reader(path_outer)
-    else:
-        result = reader(path_outer, path_inner)
-
-    return result
+    return access(path, mode='r', lazy=lazy, **kwargs)
 
 
 def get_umask():
