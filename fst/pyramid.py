@@ -80,7 +80,9 @@ def downscale(array, reduction, scale_factors):
 
     """
     from dask.array import coarsen
-    return coarsen(reduction, prepad(array, scale_factors), {d: s for d, s in enumerate(scale_factors)})
+    padded = prepad(array, scale_factors)
+    import pdb; pdb.set_trace()
+    return coarsen(reduction, padded, {d: s for d, s in enumerate(scale_factors)})
 
 
 def get_downscale_depth(array, scale_factors):
@@ -118,10 +120,12 @@ def lazy_pyramid(array, reduction, scale_factors, preserve_dtype=True):
 
     # level 0 is the original
     Level = namedtuple('level', 'array scale_factors offset')
+
     result = [Level(array=da.asarray(array), scale_factors=(1,) * array.ndim, offset=(0,) * array.ndim)]
 
     # figure out the maximum depth
     levels = range(1, get_downscale_depth(array, scale_factors))
+
     for l in levels:
         scale = tuple(s ** l for s in scale_factors)
         arr = downscale(array, reduction, scale)

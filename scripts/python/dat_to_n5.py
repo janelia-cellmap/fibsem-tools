@@ -2,17 +2,16 @@ import argparse
 from glob import glob
 from pathlib import Path
 from fst.io.ingest import padstack, arrays_from_delayed
-from fst.io import read, chmodr
+from fst.io import read, chmodr, access
 import numpy as np
-from typing import Union
+
 import logging
-import zarr
 import numcodecs
-from fst.distributed import bsub_available
-from distributed import Client
+from fst.distributed import bsub_available, get_jobqueue_cluster
+from distributed import Client, LocalCluster
 import time
 import dask.array as da
-from fst.pyramid import lazy_pyramid, get_downsampled_offset
+from fst.pyramid import lazy_pyramid
 
 OUTPUT_FMTS = {"n5"}
 max_chunksize = 1024
@@ -54,11 +53,9 @@ def prepare_data(path):
 
 
 def prepare_chunked_store(
-    dest_path, data_path, names, shapes, dtypes, compressor, chunks, group_attrs, array_attrs,
+        dest_path, data_path, names, shapes, dtypes, compressor, chunks, group_attrs, array_attrs,
 ):
-    group = zarr.group(overwrite=True,
-                       store=zarr.N5Store(dest_path),
-                       path=data_path)
+    group = access(dest_path + data_path, mode='w')
     group.attrs.update(group_attrs)
     for n, s, d, c, a in zip(names, shapes, dtypes, chunks, array_attrs):
         g = group.zeros(name=n, shape=s, dtype=d, compressor=compressor, chunks=c)
@@ -66,9 +63,10 @@ def prepare_chunked_store(
 
 
 def set_contrast_limits(path):
-    arr = da.from_array(read(path))
-    clims = da.compute([arr.min(), arr.max()])
-    arr.attrs['contrast_limits'] = {'min': clims[0], 'max': clims[1]}
+    arr = access(path, mode='a')
+    dar = da.from_array(arr)
+    clims = da.compute([dar.min(), dar.max()])[0].tolist()
+    arr.attrs['contrastLimits'] = {'min': clims[0], 'max': clims[1]}
     return 0
 
 
@@ -79,7 +77,7 @@ def save_blockwise(v, store_path, split_dim, multiscale_level, block_info):
 
     num_sinks = v.shape[split_dim]
     sinks = [
-        zarr.open(store_path, mode="a")[f"/volumes/raw/ch{d}/s{multiscale_level}"] for d in range(num_sinks)
+        access(store_path + f"/volumes/raw/ch{d}/s{multiscale_level}", mode="a") for d in range(num_sinks)
     ]
 
     pos = block_info[0]["array-location"]
@@ -101,8 +99,8 @@ if __name__ == "__main__":
         "-s",
         "--source",
         help="Files to process. Must be either a single directory (e.g., `/data/` "
-        "or a wild-card expansion of a single directory (e.g., `/data/*.dat`). "
-        "Files will be sorted by filename.",
+             "or a wild-card expansion of a single directory (e.g., `/data/*.dat`). "
+             "Files will be sorted by filename.",
         required=True,
         nargs="+",
     )
@@ -110,7 +108,7 @@ if __name__ == "__main__":
         "-d",
         "--dest",
         help="The chunked store to create with the input files. Supported chunked store"
-        f" formats: {OUTPUT_FMTS} formats are supported",
+             f" formats: {OUTPUT_FMTS} formats are supported",
         required=True,
     )
 
@@ -136,9 +134,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-ml",
         "--multiscale_levels",
-        help="The number of multiscale levels to create, in addition to full resolution. E.g., if ml=4 (the default), "
+        help="The number of multiscale levels to create, in addition to full resolution. E.g., if ml=6 (the default), "
              "downscaled data will be saved with downscaling factors of 2, 4, 8, 16, in addition to full-resolution.",
-        default=4
+        default=6
     )
 
     args = parser.parse_args()
@@ -173,7 +171,7 @@ if __name__ == "__main__":
             _scale.pop(channel_dim)
             # zyx to xyz
             _scale = _scale[::-1]
-            array_attrs.append({'downsamplingFactors':_scale})
+            array_attrs.append({'downsamplingFactors': _scale})
 
         prepare_chunked_store(
             dest_path=args.dest,
@@ -188,14 +186,11 @@ if __name__ == "__main__":
         )
 
     if not args.dry_run:
-        running_on_cluster = bsub_available()
-        if running_on_cluster:
-            from fst.distributed import get_jobqueue_cluster
-
+        on_cluster = bsub_available()
+        if on_cluster:
             cluster = get_jobqueue_cluster(project="cosem")
             cluster.scale(num_workers)
         else:
-            from distributed import LocalCluster
             cluster = LocalCluster(n_workers=num_workers)
 
         client = Client(cluster)
@@ -203,24 +198,24 @@ if __name__ == "__main__":
             f"Begin saving data to {args.dest}. View status at the following address: {cluster.dashboard_link}"
         )
         pyramid_saver = tuple(l.array.map_blocks(save_blockwise,
-                                      store_path=args.dest,
-                                      split_dim=channel_dim,
-                                      dtype=pyramid[0].array.dtype,
-                                      multiscale_level=ind) for ind, l in enumerate(pyramid))
+                                                 store_path=args.dest,
+                                                 split_dim=channel_dim,
+                                                 dtype=pyramid[0].array.dtype,
+                                                 multiscale_level=ind) for ind, l in enumerate(pyramid))
 
         client.compute(pyramid_saver, sync=True)
 
-        # logging.info(f"Calculating minimum and maximum intensity value of the data...")
-        # [set_contrast_limits(args.dest + dataset_path + n) for n in n5_names]
+        logging.info(f"Saving minimum and maximum intensity value of the highest resolution level...")
+        [set_contrast_limits(args.dest + dp + '/s0') for dp in dataset_paths]
 
         client.close()
         cluster.close()
-        
+
         # zarr saves data in temporary files, which have very
         # restricted permissions. This function call recursively applies
         # new permissions to all the files  in the newly created container based on the current umask setting
         logging.info(f'Updating permissions of files in {args.dest}')
         chmodr(args.dest, mode='umask')
-        
+
         elapsed_time = time.time() - start_time
         logging.info(f"Save completed in {elapsed_time} s")

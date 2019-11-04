@@ -115,6 +115,7 @@ def access(path: Union[str, Iterable[str]], mode, lazy=False, **kwargs):
     if isinstance(path, str):
         path_outer, path_inner = split_path(path)
         fmt = Path(path_outer).suffix
+        is_container = fmt in _container_extensions
 
         try:
             accessor = accessors[fmt]
@@ -125,8 +126,10 @@ def access(path: Union[str, Iterable[str]], mode, lazy=False, **kwargs):
 
         if lazy:
             accessor = delayed(accessor)
-
-        return accessor(path_outer, path_inner, mode=mode, **kwargs)
+        if is_container:
+            return accessor(path_outer, path_inner, mode=mode, **kwargs)
+        else:
+            return accessor(path_outer, mode=mode, **kwargs)
 
     elif isinstance(path, Iterable):
         return [access(p, mode, lazy, **kwargs) for p in path]
