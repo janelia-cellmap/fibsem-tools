@@ -135,7 +135,7 @@ if __name__ == "__main__":
         "-ml",
         "--multiscale_levels",
         help="The number of multiscale levels to create, in addition to full resolution. E.g., if ml=6 (the default), "
-             "downscaled data will be saved with downscaling factors of 2, 4, 8, 16, in addition to full-resolution.",
+             "downscaled data will be saved with downscaling factors of 2, 4, 8, 16, 32 in addition to full-resolution.",
         default=6
     )
 
@@ -154,6 +154,12 @@ if __name__ == "__main__":
     pyramid, metadata = prepare_data(args.source)
     pyramid = pyramid[:multiscale_levels[-1]]
 
+    scales = []
+    for l in pyramid:
+        _scale = l.scale_factors
+        _scale.pop(channel_dim)
+        scales.append(_scale[::-1])
+
     num_channels = pyramid[0].array.shape[channel_dim]
 
     dataset_paths = [f"/volumes/raw/ch{ch}" for ch in range(num_channels)]
@@ -161,17 +167,14 @@ if __name__ == "__main__":
     for dp in dataset_paths:
         chunks = ((1, max_chunksize, max_chunksize),) * len(pyramid)
         shapes, names, dtypes, array_attrs = [], [], [], []
-        group_attrs = {'metadata': metadata}
+        group_attrs = {'metadata': metadata, 'scales': scales}
         for ind, level in enumerate(pyramid):
             shapes.append(level.array.sum(channel_dim).shape)
             names.append(f's{ind}')
             dtypes.append(level.array.dtype)
             # resolution should go in here but we can't quite get that from the metadata yet
-            _scale = list(level.scale_factors)
-            _scale.pop(channel_dim)
-            # zyx to xyz
-            _scale = _scale[::-1]
-            array_attrs.append({'downsamplingFactors': _scale})
+
+            array_attrs.append({'scale': scales[ind]})
 
         prepare_chunked_store(
             dest_path=args.dest,
@@ -205,8 +208,8 @@ if __name__ == "__main__":
 
         client.compute(pyramid_saver, sync=True)
 
-        logging.info(f"Saving minimum and maximum intensity value of the highest resolution level...")
-        [set_contrast_limits(args.dest + dp + '/s0') for dp in dataset_paths]
+        #logging.info(f"Saving minimum and maximum intensity value of the highest resolution level...")
+        #[set_contrast_limits(args.dest + dp + '/s0') for dp in dataset_paths]
 
         client.close()
         cluster.close()
@@ -214,8 +217,8 @@ if __name__ == "__main__":
         # zarr saves data in temporary files, which have very
         # restricted permissions. This function call recursively applies
         # new permissions to all the files  in the newly created container based on the current umask setting
-        logging.info(f'Updating permissions of files in {args.dest}')
-        chmodr(args.dest, mode='umask')
+        # logging.info(f'Updating permissions of files in {args.dest}')
+        # chmodr(args.dest, mode='umask')
 
         elapsed_time = time.time() - start_time
         logging.info(f"Save completed in {elapsed_time} s")
