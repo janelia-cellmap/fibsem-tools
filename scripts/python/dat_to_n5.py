@@ -238,7 +238,6 @@ if __name__ == "__main__":
     logger.info('Begin saving data...')
     to_store = []
     for ind_l, l in enumerate(pyramid):
-        rolled = da.rollaxis(l.array, channel_dim)
         for ind_c in range(l.array.shape[channel_dim]):
             path = f'{args.dest}/volumes/raw/ch{ind_c}/s{ind_l}'
             store = da.take(l.array, ind_c, axis=channel_dim).map_blocks(save_blockwise, path, dtype='int')
