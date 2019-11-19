@@ -81,7 +81,6 @@ def downscale(array, reduction, scale_factors):
     """
     from dask.array import coarsen
     padded = prepad(array, scale_factors)
-    import pdb; pdb.set_trace()
     return coarsen(reduction, padded, {d: s for d, s in enumerate(scale_factors)})
 
 

@@ -21,7 +21,7 @@ dask.config.set({"jobqueue.lsf.use-stdin": True})
 
 
 def get_jobqueue_cluster(
-    walltime="60:00",
+    walltime="1:00",
     ncpus=1,
     cores=1,
     local_directory=None,
