@@ -5,6 +5,8 @@ import zarr
 from dask import delayed
 import os
 import h5py
+from shutil import rmtree
+from glob import glob
 
 _container_extensions = ('.zarr', '.n5', '.h5')
 
@@ -78,7 +80,7 @@ def access_zarr(dir_path: str, container_path: str, mode, **kwargs):
 
 
 def access_h5(dir_path: str, container_path: str, mode, **kwargs):
-    result = h5py.File(dir_path, mode=mode)
+    result = h5py.File(dir_path, mode=mode, **kwargs)
     if container_path != '':
         result = result[container_path]
     return result
@@ -170,6 +172,86 @@ def get_umask():
     os.umask(current_umask)
 
     return current_umask
+
+
+def get_array_paths(root_path):
+    if root_path[-1] != os.path.sep:
+        root_path += os.path.sep
+    root = read(root_path)
+    if isinstance(root, zarr.hierarchy.array):
+        arrays = [root]
+    else:
+        arrays = get_arrays(root)
+
+    result = [g for r in arrays for g in glob(root_path + r.path + '/*')]
+
+    return result
+
+
+def get_arrays(g):
+    result = []
+    groups, arrays = list(g.groups()), list(g.arrays())
+
+    if len(arrays) >= 1:
+        [result.append(a[1]) for a in arrays]
+
+    if len(groups) >= 1:
+        [result.extend(get_arrays(g[1])) for g in groups]
+
+    return result
+
+
+def dask_delete(path):
+    if os.path.isdir(path):
+        return delayed(rmtree)(path)
+    else:
+        return delayed(os.unlink)(path)
+
+
+def rmtree_parallel(path):
+    """
+    Use dask to remove the contents of a directory in parallel. Parallelization is performed over the elements in the
+    directory, so this will achieve no speedup if the directory contains a single element.
+
+    path: String, a path to the container folder, e.g. /home/user/tmp/
+
+    return: 0
+
+    """
+    stuff = tuple(Path(path).glob('*'))
+    if len(stuff) >= 1:
+        _ = delayed(map(dask_delete, stuff)).compute(scheduler='threads')
+    rmtree(path)
+    return 0
+
+
+def same_compressor(arr, compressor):
+    """
+
+    Determine if the compressor associated with an array is the same as a different compressor.
+
+    arr: A zarr array
+    compressor: a Numcodecs compressor, e.g. GZip(-1)
+    return: True or False, depending on whether the zarr array's compressor matches the parameters (name, level) of the
+    compressor.
+    """
+    comp = arr.compressor.compressor_config
+    return comp['id'] == compressor.codec_id and comp['level'] == compressor.level
+
+
+def same_array_props(arr, shape, dtype, compressor, chunks):
+    """
+
+    Determine if a zarr array has properties that match the input properties.
+
+    arr: A zarr array
+    shape: A tuple. This will be compared with arr.shape.
+    dtype: A numpy dtype. This will be compared with arr.dtype.
+    compressor: A numcodecs compressor, e.g. GZip(-1). This will be compared with the compressor of arr.
+    chunks: A tuple. This will be compared with arr.chunks
+    return: True if all the properties of arr match the kwargs, False otherwise.
+    """
+    return (arr.shape == shape) & (arr.dtype == dtype) & same_compressor(arr, compressor) & (arr.chunks == chunks)
 
 
 def chmodr(path, mode):

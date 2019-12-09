@@ -1,9 +1,5 @@
 import numpy as np
 import dask.array as da
-from typing import Iterable, Union
-from numbers import Number
-from dask import delayed
-
 
 def padstack(arrays, constant_values):
     """
@@ -30,16 +26,20 @@ def padstack(arrays, constant_values):
         list(zip([0] * shapes.shape[1], (bounds - np.array(a.shape)).tolist()))
         for a in arrays
     ]
+
+    # pad elements of the first axis differently
+    def padfun(array, pad_width, constant_values):
+        return np.stack([np.pad(a, pad_width, cv)  for a, cv in zip(array, constant_values)])
+
     # check whether all the shapes are identical; in this case, no padding is needed.
     if np.unique(shapes, axis=0).shape[0] == 1:
         stacked = da.stack(arrays)
     else:
         padded = [
-                a.map_blocks(np.pad,
-                             pad_width=pad_extent[ind],
-                             mode="constant",
+                a.map_blocks(padfun,
+                             pad_width=pad_extent[ind][1:],
                              constant_values=constant_values,
-                             chunks=tuple(c + p[1] - p[0] for c,p in zip(a.chunksize, pad_extent[ind])),
+                             chunks=tuple(c + p[1] - p[0] for c, p in zip(a.chunksize, pad_extent[ind])),
                              dtype=a.dtype)
                 for ind, a in enumerate(arrays)]
 
