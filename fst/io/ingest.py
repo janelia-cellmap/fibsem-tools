@@ -29,8 +29,7 @@ def padstack(arrays, constant_values):
 
     # pad elements of the first axis differently
     def padfun(array, pad_width, constant_values):
-        return np.stack([np.pad(a, pad_width, cv)  for a, cv in zip(array, constant_values)])
-
+        return np.stack([np.pad(a, pad_width, constant_values=cv) for a, cv in zip(array, constant_values)])
     # check whether all the shapes are identical; in this case, no padding is needed.
     if np.unique(shapes, axis=0).shape[0] == 1:
         stacked = da.stack(arrays)

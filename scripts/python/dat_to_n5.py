@@ -4,6 +4,7 @@ from pathlib import Path
 from fst.io.ingest import padstack, arrays_from_delayed
 from fst.io import read, access, rmtree_parallel, same_array_props
 import numpy as np
+import os
 import logging
 import numcodecs
 from fst.distributed import bsub_available, get_jobqueue_cluster
@@ -39,7 +40,10 @@ def prepare_data(path):
     if isinstance(path, str):
         fnames = sorted(glob(path))
     elif isinstance(path, list):
-        fnames = path
+        if len(path) == 1 and os.path.isdir(path[0]):
+            fnames = sorted(glob(path[0] + '*.dat'))
+        else:
+            fnames = path
     else:
         raise ValueError(f"Path variable should be string or list, not {type(path)}")
     # set the function to use for pyramid downscaling
@@ -133,7 +137,7 @@ def prepare_cluster():
     if bsub_available():
         cluster = get_jobqueue_cluster(project="cosem")
     else:
-        cluster = LocalCluster()
+        cluster = LocalCluster(threads_per_worker=2)
 
     client = Client(cluster)
     logger.info(
@@ -142,9 +146,14 @@ def prepare_cluster():
     return client
 
 
-if __name__ == "__main__":
+def main():
+    import dask
+    dask.config.set({"distributed.worker.memory.target": False,
+                     "distributed.worker.memory.spill": False,
+                     "distributed.worker.memory.pause": 0.70,
+                     "distributed.worker.memory.terminate": 0.95,
+                     "logging.distributed": "error"})
     start_time = time.time()
-
     parser = argparse.ArgumentParser(
         description="Save a sequence of images to a chunked store."
     )
@@ -206,10 +215,22 @@ if __name__ == "__main__":
 
     client = prepare_cluster()
     data, metadata = prepare_data(args.source)
-    client.cluster.scale(num_workers)
-    logger.info("Calculating minimum and maximum values of the input data...")
-    contrast_limits = get_contrast_limits(data).compute().T
-    client.cluster.scale(0)
+
+    num_channels = data[0].shape[channel_dim-1]
+
+    raw_group = access(args.dest + "/volumes/raw", mode="a")
+    raw_group.attrs.clear()
+    raw_group.attrs["metadata"] = metadata
+
+    dataset_paths = [f"/{raw_group.path}/ch{ch}" for ch in range(num_channels)]
+    contrast_limits = np.stack([np.array(raw_group[f'ch{ch}'].attrs.get('rawHistogramBounds', np.NaN)) for ch in range(num_channels)])
+    if np.any(np.isnan(contrast_limits)):
+        client.cluster.scale(num_workers)
+        logger.info("Calculating minimum and maximum values of the input data...")
+        contrast_limits = get_contrast_limits(data).compute().T
+        client.cluster.scale(0)
+    else:
+        logger.info("Using previously calculated minimum and maximum values of the input data...")
 
     pyramid, padding = prepare_pyramids(
         data,
@@ -228,14 +249,6 @@ if __name__ == "__main__":
         _scale = list(l.scale_factors)
         _scale.pop(channel_dim)
         scales.append(_scale[::-1])
-
-    num_channels = pyramid[0].array.shape[channel_dim]
-
-    raw_group = access(args.dest + "/volumes/raw", mode="a")
-    raw_group.attrs.clear()
-    raw_group.attrs["metadata"] = metadata
-
-    dataset_paths = [f"/{raw_group.path}/ch{ch}" for ch in range(num_channels)]
 
     logger.info("Initializing chunked storage for multiple pyramid levels....")
     for ind_d, dp in enumerate(dataset_paths):
@@ -280,15 +293,27 @@ if __name__ == "__main__":
     for ind_l, l in enumerate(pyramid):
         for ind_c in range(l.array.shape[channel_dim]):
             path = f"{args.dest}/volumes/raw/ch{ind_c}/s{ind_l}"
-            store = da.to_zarr(da.take(l.array, ind_c, axis=channel_dim), path, compute=False)
-            #store = da.take(l.array, ind_c, axis=channel_dim).map_blocks(
-            #    save_blockwise, path, dtype="int"
-            #)
+            store = da.take(l.array, ind_c, axis=channel_dim).map_blocks(
+                save_blockwise, path, dtype="int"
+            )
             to_store.append(store)
 
     client.cluster.scale(num_workers)
-    client.compute(to_store, sync=True)
+    # for most datasets it's totally feasible to just run client.compute(to_store), but for very large datasets
+    # the long task graph can choke the scheduler, so I chunk stuff along the z axis.
+
+    stepsize = num_workers * 20
+    nsteps = range(int(np.ceil(len(data) / stepsize)))
+    for idx in nsteps:
+        span = slice(idx * stepsize, min(idx * stepsize + stepsize, len(data)))
+        logger.info(f"Saving Z planes {span.start} through {span.stop - 1}")
+        client.compute([t[span] for t in to_store], sync=True)
     client.cluster.scale(0)
 
     elapsed_time = time.time() - start_time
     logger.info(f"Save completed in {elapsed_time} s")
+    return 0
+
+
+if __name__ == "__main__":
+    main()
