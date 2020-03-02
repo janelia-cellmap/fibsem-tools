@@ -10,11 +10,14 @@
 # License: MIT
 #
 
-# todo: make this a class that inherits from dask_jobqueue.LSFCluster
 from shutil import which
 import dask
+import dask.array as da
+from distributed import Client, LocalCluster
 from dask_jobqueue import LSFCluster
 import os
+import numpy as np
+from pathlib import Path
 
 # this is necessary to ensure that workers get the job script from stdin
 dask.config.set({"jobqueue.lsf.use-stdin": True})
@@ -24,7 +27,6 @@ def get_jobqueue_cluster(
     walltime="1:00",
     ncpus=1,
     cores=1,
-    local_directory=None,
     memory="16GB",
     env_extra='single-threaded',
     **kwargs
@@ -45,18 +47,24 @@ def get_jobqueue_cluster(
             "export OMP_NUM_THREADS=1",
         ]
 
-    if local_directory is None:
-        local_directory = "/scratch/" + os.environ["USER"] + "/"
-
+    USER = os.environ["USER"]
+    HOME = os.environ["HOME"]
+    
+    if "local_directory" not in kwargs:
+        kwargs["local_directory"] = f"/scratch/{USER}/"
+    
+    if "log_directory" not in kwargs:
+        log_dir = f"{HOME}/.dask_distributed/"
+        Path(log_dir).mkdir(parents=False, exist_ok=True)
+        kwargs["log_directory"] = log_dir
+    
     cluster = LSFCluster(
         queue="normal",
         walltime=walltime,
         cores=cores,
         ncpus=ncpus,
-        local_directory=local_directory,
         memory=memory,
         env_extra=env_extra,
-        job_extra=["-o /dev/null"],
         **kwargs
     )
     return cluster
@@ -74,3 +82,27 @@ def bsub_available() -> bool:
 
     result = which("bsub") is not None
     return result
+
+
+def prepare_cluster(**kwargs):
+    """
+    Create a dask.distributed Client object with either a Jobqueue cluster (for use on the Janelia Compute Cluster)
+    or a LocalCluster (for use on a single machine). Keyword arguments given to this function will be forwarded to
+    the `get_jobqueue_cluster` function or the LocalCluster constructor.
+    """
+    if bsub_available():
+        cluster = get_jobqueue_cluster(**kwargs)
+    else:
+        cluster = LocalCluster(**kwargs)
+
+    client = Client(cluster)    
+    return client
+
+
+def blockwise(arr):
+    """
+    A generator that yields (slice, block) tuples from a dask array. This effectively breaks a dask array into separate
+    chunks.
+    """
+    for i, sl in zip(np.ndindex(arr.numblocks), da.core.slices_from_chunks(arr.chunks)):
+        yield (sl, arr.blocks[i])
