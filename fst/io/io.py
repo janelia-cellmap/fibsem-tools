@@ -1,99 +1,92 @@
 from .fibsem import read_fibsem
 from pathlib import Path
-from typing import Union, Iterable, List
+from collections.abc import Sequence
+from typing import Union, Iterable, List, Optional, Callable, Dict
 import zarr
 from dask import delayed
 import os
 import h5py
 from shutil import rmtree
 from glob import glob
-
+from itertools import groupby
+from collections import defaultdict
 _container_extensions = ('.zarr', '.n5', '.h5')
 
 
-def split_path_at_container(path):
-    # check whether a path contains a valid file path to a container file, and if so which container format it is
-    result = None
-    pathobj = Path(path)
-    if pathobj.suffix in _container_extensions:
-        result = [path, '']
+def broadcast_kwargs(**kwargs):
+    """
+    For each keyword: arg in kwargs, assert that there are only 2 types of args: sequences with length = 1 
+    or sequences with some length = k. Every arg with length 1 will be repeated k times, such that the return value 
+    is a dict of kwargs with minimum length = k.
+    """
+    grouped = defaultdict(list)
+    sorter = lambda v: len(v[1])
+    s = sorted(kwargs.items(), key=sorter)
+    for l,v in groupby(s, key=sorter):
+        grouped[l].extend(v)
+
+    assert len(grouped.keys()) <= 2
+    if len(grouped.keys()) == 2:
+        assert min(grouped.keys()) == 1
+        output_length = max(grouped.keys())
+        singletons, nonsingletons = tuple(grouped.values())
+        singletons = ((k,  v * output_length) for k, v in singletons)
+        result = {**dict(singletons), **dict(nonsingletons)}
     else:
-        for parent in pathobj.parents:
-            if parent.suffix in _container_extensions:
-                result = path.split(parent.suffix)
-                result[0] += parent.suffix
+        result = kwargs
+    
     return result
 
 
-def split_path(path: str, sep: str = ':') -> List[str]:
+def split_path_at_container(upper_path: Union[str, Path], lower_path: Union[str, Path] = '') -> List[Path]:
     """
-    Split paths of the form `foo/bar.ext:baz` into `['foo/bar.ext', 'baz'] around the separator, e.g. `:`.
-    If there is no separator, split `foo/bar.ext/baz` into  `['foo/bar.ext', 'baz']` using `.ext` as a separator, where
-    `.ext` is a valid container extension
-
-    Parameters
-    ----------
-    path: A string representing either a compound path (a/b/c:d) or a regular path (a/b/c)
-    sep: A string denoting the separator to use when splitting the input string. If the separator is not found in the
-    input path, a second attempt will be made to look for a supported container format extension and split the path at
-    that point.
-
-    Returns a list of 2 strings. If the separator is not found in the input string, the second string will be empty.
-    -------
-
+    Recursively climb a path, checking at each level of the path whether the tail of the path represents a directory
+    with a container extension. Returns the path broken at the level where a container is found.  
     """
-    parts = path.split(sep)
-    result = [path, '']
-    if len(parts) == 1:
-        # look for a directory that ends one of the container formats
-        container_split = split_path_at_container(path)
-        if container_split is not None:
-            result = container_split
+    upper, lower = Path(upper_path), Path(lower_path)
+    
+    if upper.suffix in _container_extensions:
+        result = [upper, lower]
+    else:
+        if len(upper.parts) >= 2:
+            result = split_path_at_container(Path(*upper.parts[:-1]), Path(upper.parts[-1], lower))
         else:
-            parts.append('')
-            result = parts
-    elif len(parts) == 2:
-        result = parts
-    elif len(parts) > 2:
-        raise ValueError(f'Input string {path} contains too many instances of {sep}.')
+            raise ValueError(f'Could not find any suffixes matching {_container_extensions} in {upper / lower}')
+    
     return result
 
 
-def access_fibsem(path, mode):
-    if mode != 'r':
-        raise ValueError('Fibsem data can only be accessed with mode = "r", i.e. read-only')
+def access_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
     return read_fibsem(path)
 
 
-def access_n5(dir_path: str, container_path: str, mode, **kwargs):
+def access_n5(dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs):
     return zarr.open(zarr.N5Store(dir_path),
                      path=container_path,
-                     mode=mode,
                      **kwargs)
 
 
-def access_zarr(dir_path: str, container_path: str, mode, **kwargs):
+def access_zarr(dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs):
     return zarr.open(dir_path,
                      path=container_path,
-                     mode=mode,
                      **kwargs)
 
 
-def access_h5(dir_path: str, container_path: str, mode, **kwargs):
+def access_h5(dir_path: Union[str, Path], container_path: Union[str, Path], mode: str, **kwargs):
     result = h5py.File(dir_path, mode=mode, **kwargs)
     if container_path != '':
         result = result[container_path]
     return result
 
 
-accessors = dict()
+accessors: Dict[str, Callable] = {}
 accessors[".dat"] = access_fibsem
 accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
 accessors[".h5"] = access_h5
 
 
-def access(path: Union[str, Iterable[str]], mode, lazy=False, **kwargs):
+def access(path: Union[str, Path, Iterable[str], Iterable[Path]], mode: str, lazy: bool = False, **kwargs):
     """
 
     Access data on disk from a variety of array storage formats.
@@ -114,8 +107,14 @@ def access(path: Union[str, Iterable[str]], mode, lazy=False, **kwargs):
     -------
 
     """
-    if isinstance(path, str):
-        path_outer, path_inner = split_path(path)
+    if isinstance(path, (str, Path)):
+        path_inner: Union[str, Path]
+        path_outer, path_inner = split_path_at_container(path)
+        
+        # str(Path('')) => '.', which we don't want for an empty trailing path
+        if str(path_inner) == '.':
+            path_inner = ''
+        
         fmt = Path(path_outer).suffix
         is_container = fmt in _container_extensions
 
@@ -139,7 +138,7 @@ def access(path: Union[str, Iterable[str]], mode, lazy=False, **kwargs):
         raise ValueError("`path` must be a string or iterable of strings")
 
 
-def read(path: Union[str, Iterable[str]], lazy=False, **kwargs):
+def read(path: Union[str, Path, Iterable[str], Iterable[Path]], lazy=False, **kwargs):
     """
 
     Access data on disk with read-only permissions
@@ -161,17 +160,71 @@ def read(path: Union[str, Iterable[str]], lazy=False, **kwargs):
     return access(path, mode='r', lazy=lazy, **kwargs)
 
 
-def get_umask():
+""" def create_array(group, attrs, **kwargs):
+    # check if the array needs to be created    
+    if name not in group:
+        arr = group.zeros(**kwargs)
+    else:
+        arr = group[name]
+        if (not same_array_props(arr, 
+                                shape=argdict['shape'], 
+                                dtype=argdict['dtype'], 
+                                compressor=argdict['compressor'], 
+                                chunks=argdict['chunks'])) and overwrite:                    
+                rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
+        else:
+            if overwrite == False:
+                raise FileExistsError(f'{path}/{name} already exists as an array. Call this function with overwrite=True to delete this array.')
+            else:
+                rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
+                arr = group.zeros(**argdict)
+    arr.attrs.put(array_attrs[ind])
+ """
+
+
+def create_arrays(
+    path: Union[str, Path],
+    names: Sequence,
+    shapes: Sequence,
+    dtypes: Sequence,
+    compressors: Sequence,
+    chunks: Sequence,
+    group_attrs: Sequence,
+    array_attrs: Sequence,
+    overwrite: bool=True
+):
+    """
+    Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). These arrays will be filled with 0s.    
     """
 
-    Returns the current umask as an int
-    -------
+    # check that all sequential arguments are the same length
+    
+    group = access(path, mode="a")
+    group.attrs.put(group_attrs)
+    
+    argdicts = tuple({k: v for k,v in zip(('name','shape','dtype','compressor','chunks'), vals)} for vals in zip(names, shapes, dtypes, compressors, chunks))
 
-    """
-    current_umask = os.umask(0)
-    os.umask(current_umask)
-
-    return current_umask
+    for ind, argdict in enumerate(argdicts):
+        # check if the array needs to be created
+        name = argdict['name']
+        if name not in group:
+            arr = group.zeros(**argdict)
+        else:
+            arr = group[name]
+            if (not same_array_props(arr, 
+                                    shape=argdict['shape'], 
+                                    dtype=argdict['dtype'], 
+                                    compressor=argdict['compressor'], 
+                                    chunks=argdict['chunks'])) and overwrite:                    
+                    rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
+            else:
+                if overwrite == False:
+                    raise FileExistsError(f'{path}/{name} already exists as an array. Call this function with overwrite=True to delete this array.')
+                else:
+                    rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
+                    arr = group.zeros(**argdict)
+        arr.attrs.put(array_attrs[ind])
+    return group
 
 
 def get_array_paths(root_path):
@@ -252,32 +305,3 @@ def same_array_props(arr, shape, dtype, compressor, chunks):
     return: True if all the properties of arr match the kwargs, False otherwise.
     """
     return (arr.shape == shape) & (arr.dtype == dtype) & same_compressor(arr, compressor) & (arr.chunks == chunks)
-
-
-def chmodr(path, mode):
-    """
-
-    Parameters
-    ----------
-    path: A string specifying a directory to recursively process.
-    mode: Either a valid `mode` argument to os.chmod, e.g. 0o777, or the string 'umask', in which case permissions are
-    set based on the user's current umask value.
-
-    Returns 0
-    -------
-
-    """
-
-    if mode == 'umask':
-        umask = get_umask()
-        # convert the umask to a file permission
-        mode = 0o777 - umask
-
-    for dirpath, dirnames, filenames in os.walk(path):
-        for f in filenames:
-            full_file = os.path.join(dirpath, f)
-            try:
-                os.chmod(full_file, mode)
-            except PermissionError:
-                pass
-    return 0
