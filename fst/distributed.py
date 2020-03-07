@@ -28,7 +28,7 @@ def get_jobqueue_cluster(
     ncpus=1,
     cores=1,
     memory="16GB",
-    env_extra='single-threaded',
+    threads_per_worker=1,
     **kwargs
 ):
     """
@@ -39,13 +39,15 @@ def get_jobqueue_cluster(
     https://jobqueue.dask.org/en/latest/generated/dask_jobqueue.LSFCluster.html#dask_jobqueue.LSFCluster
     """
 
-    if env_extra == 'single-threaded':
+    if threads_per_worker == 1:
         env_extra = [
             "export NUM_MKL_THREADS=1",
             "export OPENBLAS_NUM_THREADS=1",
             "export OPENMP_NUM_THREADS=1",
             "export OMP_NUM_THREADS=1",
         ]
+    else:
+        raise ValueError('threads_per_worker can only be 1')
 
     USER = os.environ["USER"]
     HOME = os.environ["HOME"]
@@ -79,12 +81,11 @@ def bsub_available() -> bool:
     -------
 
     """
-
     result = which("bsub") is not None
     return result
 
 
-def prepare_cluster(**kwargs):
+def get_cluster(**kwargs):
     """
     Create a dask.distributed Client object with either a Jobqueue cluster (for use on the Janelia Compute Cluster)
     or a LocalCluster (for use on a single machine). Keyword arguments given to this function will be forwarded to
@@ -93,6 +94,8 @@ def prepare_cluster(**kwargs):
     if bsub_available():
         cluster = get_jobqueue_cluster(**kwargs)
     else:
+        if 'host' not in kwargs:
+            kwargs['host'] = ''
         cluster = LocalCluster(**kwargs)
 
     client = Client(cluster)    
