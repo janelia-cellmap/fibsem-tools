@@ -7,7 +7,7 @@ import numpy as np
 import os
 import logging
 import numcodecs
-from fst.distributed import bsub_available, get_jobqueue_cluster, prepare_cluster
+from fst.distributed import bsub_available, get_jobqueue_cluster, get_cluster
 from toolz import partition
 from typing import Tuple, List, Union
 
@@ -26,11 +26,10 @@ grid_spacing_unit = "nm"
 max_chunksize = 1024
 compressor = numcodecs.GZip(level=-1)
 # all channels will the stored as subgroups under root_group_path
-root_group_path = 'volumes/raw/'
-# raw data are stored z c y x, we will split images into two channels along the channel axis
-channel_dim = 1
+root_group_path = Path('volumes/raw/')
+# raw data are stored z | c y x, we will split images into two channels along the channel axis
+channel_dim = 0
 downscale_factor = 2
-
 
 # set up logging
 logger = logging.getLogger(program_name)
@@ -81,7 +80,7 @@ def read_grid_spacing(metadata: list) -> dict:
     return {'z': axial,'y': lateral,'x': lateral}
 
 
-def read_minmax(array_paths: List[str]) -> np.array:
+def read_minmax(array_paths: Union[List[str], List[Path]]) -> np.array:
     minmax = np.zeros((len(array_paths), 2))
     for ind, pth in enumerate(array_paths):
         lims = np.array([np.NaN,np.NaN])
@@ -113,27 +112,6 @@ def prepare_pyramids(data, fill_values, chunks, reduction, downscale_factor, out
     return pyramid, padding
 
 
-@dask.delayed
-def save_pyramid_slicewise(arr, z_index, scale_factors, reduction, depth, output_path):
-    pyramid = lazy_pyramid(arr, reduction, scale_factors)[:depth]
-    for ind_l, pyr in enumerate(pyramid):
-        layer = pyr.data.compute(scheduler='threads')
-        for ind_ch, ch in enumerate(layer):
-            dataset_path = f'{output_path}ch{ind_ch}/s{ind_l}'
-            sink = access(dataset_path, mode='a')
-            sink[z_index] = ch
-    return 0
-
-
-def save_blockwise(arr, path, block_info):
-    sink = access(path, mode="a")
-    pos = block_info[0]["array-location"]
-    idx = tuple(slice(*i) for i in pos)
-    sink[idx] = arr
-
-    return np.zeros((1,) * arr.ndim)
-
-
 def change_dtype(data: list, output_dtype: str, offset: np.array) -> list:
     """
     Lazy histogram-preserving datatype adjustment of a collection of array-likes. 
@@ -158,6 +136,18 @@ def change_dtype(data: list, output_dtype: str, offset: np.array) -> list:
     return [da.from_delayed(adjuster(d, upcast=upcast, offset=offset.reshape(-1, 1, 1), dtype=output_dtype), dtype=output_dtype, shape=d.shape) for d in data]
 
 
+@dask.delayed
+def save_pyramid_slicewise(arr, z_index, scale_factors, reduction, depth, output_path):
+    pyramid = lazy_pyramid(arr, reduction, scale_factors)[:depth]
+    for ind_l, pyr in enumerate(pyramid):
+        layer = pyr.data.compute(scheduler='synchronous')
+        for ind_ch, ch in enumerate(layer):
+            dataset_path = Path(output_path) / f'ch{ind_ch}' / f's{ind_l}'            
+            sink = access(dataset_path, mode='a')
+            sink[z_index] = ch
+    return 0
+
+
 def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_levels: int, datatype: str, output_chunks: tuple):
     start_time = time.time()
     num_workers = int(num_workers)
@@ -171,18 +161,17 @@ def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_l
     if datatype not in OUTPUT_DTYPES:
         raise ValueError(f'Datatype must be one of {OUTPUT_DTYPES}')
 
-    client = prepare_cluster()
+    client = get_cluster(threads_per_worker=1)
     logger.info(f'Observe progress at {client.cluster.dashboard_link}')
     
     data, metadata = prepare_data(source)
     grid_spacing = read_grid_spacing(metadata)
     grid_spacing_n5 = (grid_spacing['x'], grid_spacing['y'], grid_spacing['z'])
-    num_channels = data[0].shape[channel_dim-1]
+    num_channels = data[0].shape[channel_dim]
 
-    root_group = access(f'{dest}/{root_group_path}', mode="a")
-    
+    root_group = access(Path(dest) / root_group_path, mode="a")   
     root_group.attrs.put({"metadata": metadata})
-    dataset_paths = [f"{dest}/{root_group_path}/ch{ch}" for ch in range(num_channels)]
+    dataset_paths = [Path(dest) / root_group_path / f'ch{ch}' for ch in range(num_channels)]
 
     minmax = read_minmax(dataset_paths)
 
@@ -204,16 +193,16 @@ def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_l
     )
     
     sample_pyramid = lazy_pyramid(
-        padded[0], np.mean, (1, downscale_factor, downscale_factor))[: levels[-1]]
+        np.take(padded[0], 0, channel_dim), np.mean, (downscale_factor, downscale_factor))[: levels[-1]]
 
     scales = []
     for l in sample_pyramid:
-        _scale = list(l.scale_factors)[1:][::-1]        
-        scales.append([*_scale,1])
+        scale = list(l.scale_factors)        
+        scales.append([*scale, 1])
 
-    logger.info("Initializing chunked storage for multiple pyramid levels....")
+    logger.info("Initializing storage for multiple pyramid levels....")
     for ind_d, dp in enumerate(dataset_paths):
-        chunks = [[output_chunks]] * len(padded)
+        chunks = [output_chunks] * len(padded)
         shapes, names, dtypes, array_attrs = [], [], [], []
         group_attrs = {
             "downsamplingFactors": scales,
@@ -223,7 +212,7 @@ def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_l
             "datatypeChange": datatype != 'same'
         }
         for ind_l, level in enumerate(sample_pyramid):
-            shapes.append(level.data.sum(channel_dim-1).shape)
+            shapes.append([len(padded),*level.shape])
             names.append(f"s{ind_l}")
             dtypes.append(level.dtype)
             array_attrs.append(
@@ -236,7 +225,7 @@ def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_l
                     "offset": get_downsampled_offset(scales[ind_l]).tolist()
                 }
             )
-
+        logger.info(f'Initializing {dp}...')
         create_arrays(
             path=dp,
             names=names,
@@ -256,19 +245,20 @@ def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_l
                                            1, downscale_factor, downscale_factor),
                                        reduction=np.mean,
                                        depth=levels[-1],
-                                       output_path=f'{dest}/{root_group_path}') for (z_idx, sl) in enumerate(padded)]
+                                       output_path=f'{dest}/{root_group_path}') for (z_idx, sl) in enumerate(padded)]    
 
+    partition_size = 10000
+    if len(to_store) < partition_size:
+        partition_size = len(to_store)
     
-    partition_size = num_workers * 10
     partitions = partition(partition_size, to_store)
-    client.cluster.scale(num_workers)
+    
     for ind_p, p in enumerate(partitions):
+        client.cluster.scale(num_workers)
         logger.info(
             f'Begin saving planes {partition_size * ind_p}:{partition_size * ind_p + len(p)}')
         client.compute(p, sync=True)
-        # Restart the client to prevent weird state-related bugs
-        client.restart()
-    client.cluster.scale(0)
+        client.cluster.scale(0)
 
     elapsed_time = time.time() - start_time
     logger.info(f"Save completed in {elapsed_time} s")

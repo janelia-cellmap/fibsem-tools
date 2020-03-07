@@ -7,6 +7,7 @@ Copyright (c) 2017, David Hoffman, Davis Bennett
 import os
 import numpy as np
 from typing import Iterable, Union
+from pathlib import Path
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3555587570
@@ -545,7 +546,7 @@ def _read_header(fobj):
     return fibsem_header
 
 
-def _read(path: str) -> FIBSEMData:
+def _read(path: Union[str, Path]) -> FIBSEMData:
     """
 
     Read a single .dat file.
@@ -585,11 +586,13 @@ def _read(path: str) -> FIBSEMData:
 
     raw_data = np.rollaxis(raw_data, 2)
     # Once read into the FIBSEMData structure it will be in memory, not memmap.
-    return FIBSEMData(raw_data, fibsem_header)
+    result = FIBSEMData(raw_data, fibsem_header)
+    del raw_data
+    return result
 
 
 # reading multiple files is handled upstream in fst.io.read
-def read_fibsem(path: Union[str, Iterable[str]]):
+def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
     """
 
     Parameters
@@ -601,12 +604,12 @@ def read_fibsem(path: Union[str, Iterable[str]]):
     -------
 
     """
-    if isinstance(path, str):
+    if isinstance(path, (str, Path)):
         return _read(path)
     elif isinstance(path, Iterable):
         return [_read(p) for p in path]
     else:
-        raise ValueError("Path must be an instance of string or iterable of strings")
+        raise ValueError("Path must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths")
 
 
 def _convert_data(fibsem):

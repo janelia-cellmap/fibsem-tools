@@ -1,21 +1,22 @@
 import numpy as np
 import dask.array as da
 
-def padstack(arrays, constant_values):
+def pad_arrays(arrays, constant_values, stack=True):
     """
-    Stack arrays with variable axis sizes. A bounding box is calculated across all the arrays and each sub-array is
-    padded to fit within the bounding box. This is a light wrapper around dask.array.pad.
+    Pad arrays with variable axis sizes. A bounding box is calculated across all the arrays and each sub-array is
+    padded to fit within the bounding box. This is a light wrapper around dask.array.pad. If `stack` is True,
+    the arrays will be combined into a larger array via da.stack.
 
     Parameters
     ----------
     arrays : An iterable collection of dask arrays
     constant_values : The value to fill when padding images
 
-    constant_values : A number or string which specifies the fill value / mode to use when padding. The only accepted
-    string value is 'min`.
+    constant_values : A number which specifies the fill value / mode to use when padding.
 
-    Returns a dask array containing the entire dataset represented by the individual arrays in `arrays` as well as a
-    list of paddings.
+    stack: boolean that determines whether the result is a single dask array (stack=True) or a list of dask arrays (stack=False).
+
+    Returns padded arrays and a list of paddings.
     -------
 
     """
@@ -30,9 +31,9 @@ def padstack(arrays, constant_values):
     # pad elements of the first axis differently
     def padfun(array, pad_width, constant_values):
         return np.stack([np.pad(a, pad_width, constant_values=cv) for a, cv in zip(array, constant_values)])
-    # check whether all the shapes are identical; in this case, no padding is needed.
+    # If all the shapes are identical no padding is needed.
     if np.unique(shapes, axis=0).shape[0] == 1:
-        stacked = da.stack(arrays)
+        padded = arrays
     else:
         padded = [
                 a.map_blocks(padfun,
@@ -42,9 +43,7 @@ def padstack(arrays, constant_values):
                              dtype=a.dtype)
                 for ind, a in enumerate(arrays)]
 
-        stacked = da.stack(padded)
-
-    return stacked, pad_extent
+    return padded, pad_extent
 
 
 def arrays_from_delayed(args, shapes=None, dtypes=None):

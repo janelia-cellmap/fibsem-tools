@@ -10,8 +10,10 @@ from shutil import rmtree
 from glob import glob
 from itertools import groupby
 from collections import defaultdict
+from dask.diagnostics import ProgressBar
+_formats = ('.dat', )
 _container_extensions = ('.zarr', '.n5', '.h5')
-
+_suffixes = (*_formats, *_container_extensions)
 
 def broadcast_kwargs(**kwargs):
     """
@@ -38,25 +40,27 @@ def broadcast_kwargs(**kwargs):
     return result
 
 
-def split_path_at_container(upper_path: Union[str, Path], lower_path: Union[str, Path] = '') -> List[Path]:
+def split_path_at_suffix(upper_path: Union[str, Path], lower_path: Union[str, Path] = '', suffixes: tuple = _suffixes) -> List[Path]:
     """
     Recursively climb a path, checking at each level of the path whether the tail of the path represents a directory
     with a container extension. Returns the path broken at the level where a container is found.  
     """
     upper, lower = Path(upper_path), Path(lower_path)
     
-    if upper.suffix in _container_extensions:
+    if upper.suffix in suffixes:
         result = [upper, lower]
     else:
         if len(upper.parts) >= 2:
-            result = split_path_at_container(Path(*upper.parts[:-1]), Path(upper.parts[-1], lower))
+            result = split_path_at_suffix(Path(*upper.parts[:-1]), Path(upper.parts[-1], lower), suffixes)
         else:
-            raise ValueError(f'Could not find any suffixes matching {_container_extensions} in {upper / lower}')
+            raise ValueError(f'Could not find any suffixes matching {suffixes} in {upper / lower}')
     
     return result
 
 
-def access_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
+def access_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]], mode: str):
+    if mode != 'r':
+        raise ValueError(f'.dat files can only be accessed in read-only mode, not {mode}.')
     return read_fibsem(path)
 
 
@@ -109,13 +113,13 @@ def access(path: Union[str, Path, Iterable[str], Iterable[Path]], mode: str, laz
     """
     if isinstance(path, (str, Path)):
         path_inner: Union[str, Path]
-        path_outer, path_inner = split_path_at_container(path)
+        path_outer, path_inner = split_path_at_suffix(path)
         
         # str(Path('')) => '.', which we don't want for an empty trailing path
         if str(path_inner) == '.':
             path_inner = ''
         
-        fmt = Path(path_outer).suffix
+        fmt = path_outer.suffix
         is_container = fmt in _container_extensions
 
         try:
@@ -160,26 +164,23 @@ def read(path: Union[str, Path, Iterable[str], Iterable[Path]], lazy=False, **kw
     return access(path, mode='r', lazy=lazy, **kwargs)
 
 
-""" def create_array(group, attrs, **kwargs):
-    # check if the array needs to be created    
+def create_array(group, attrs, **kwargs):
+    name = kwargs['name']
+    overwrite = kwargs.get('overwrite', False)
     if name not in group:
         arr = group.zeros(**kwargs)
     else:
         arr = group[name]
         if (not same_array_props(arr, 
-                                shape=argdict['shape'], 
-                                dtype=argdict['dtype'], 
-                                compressor=argdict['compressor'], 
-                                chunks=argdict['chunks'])) and overwrite:                    
-                rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
+                                shape=kwargs['shape'], 
+                                dtype=kwargs['dtype'], 
+                                compressor=kwargs['compressor'], 
+                                chunks=kwargs['chunks'])):                    
+                arr = group.zeros(**kwargs)
         else:
             if overwrite == False:
-                raise FileExistsError(f'{path}/{name} already exists as an array. Call this function with overwrite=True to delete this array.')
-            else:
-                rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
-                arr = group.zeros(**argdict)
-    arr.attrs.put(array_attrs[ind])
- """
+                raise FileExistsError(f'{group.path}/{name} already exists as an array. Call this function with overwrite=True to delete this array.')
+    arr.attrs.put(attrs)
 
 
 def create_arrays(
@@ -189,41 +190,29 @@ def create_arrays(
     dtypes: Sequence,
     compressors: Sequence,
     chunks: Sequence,
-    group_attrs: Sequence,
+    group_attrs: dict,
     array_attrs: Sequence,
-    overwrite: bool=True
-):
+    overwrite: bool=True,
+    lazy: bool = True):
     """
-    Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). These arrays will be filled with 0s.    
+    Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). If overwrite==True,
+    these arrays will be created as needed and filled with 0s. Otherwise, new arrays will be created, existing arrays with matching properties
+    will be kept as-is, and existing arrays with mismatched properties will be removed and replaced with an array of 0s.      
     """
 
-    # check that all sequential arguments are the same length
-    
+    # check that all sequential arguments are the same length    
     group = access(path, mode="a")
     group.attrs.put(group_attrs)
     
     argdicts = tuple({k: v for k,v in zip(('name','shape','dtype','compressor','chunks'), vals)} for vals in zip(names, shapes, dtypes, compressors, chunks))
-
-    for ind, argdict in enumerate(argdicts):
-        # check if the array needs to be created
-        name = argdict['name']
-        if name not in group:
-            arr = group.zeros(**argdict)
-        else:
-            arr = group[name]
-            if (not same_array_props(arr, 
-                                    shape=argdict['shape'], 
-                                    dtype=argdict['dtype'], 
-                                    compressor=argdict['compressor'], 
-                                    chunks=argdict['chunks'])) and overwrite:                    
-                    rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
-            else:
-                if overwrite == False:
-                    raise FileExistsError(f'{path}/{name} already exists as an array. Call this function with overwrite=True to delete this array.')
-                else:
-                    rmtree_parallel(str(Path.joinpath(Path(path), Path(name))))
-                    arr = group.zeros(**argdict)
-        arr.attrs.put(array_attrs[ind])
+    
+    if lazy:
+        arrs = [delayed(create_array)(group, array_attrs[ind], **argdict, overwrite=overwrite) for ind, argdict in enumerate(argdicts)]
+        with ProgressBar():
+            delayed(arrs).compute(scheduler='threads')
+    else:
+        [create_array(group, array_attrs[ind], **argdict, overwrite=overwrite) for ind, argdict in enumerate(argdicts)]
+    
     return group
 
 
