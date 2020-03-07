@@ -2,22 +2,30 @@ import numpy as np
 import dask.array as da
 import dask
 from collections import namedtuple
+from xarray import DataArray
+from typing import List, Union, Sequence, Callable
 
-def even_padding(length, window):
+
+def even_padding(length: int, window: int) -> int:
     """
     Compute how much to add to `length` such that the resulting value is evenly divisible by `window`.
+    
+    Parameters
+    ----------
+    length : int
+    window: int
     """
     return (window - (length % window)) % window
 
 
-def logn(x, n):
+def logn(x: float, n: float) -> float:
     """
     Compute the logarithm of x base n.
 
     Parameters
     ----------
-    x : numeric value.
-    n: numeric value.
+    x : float or int.
+    n: float or int.
 
     Returns np.log(x) / np.log(n)
     -------
@@ -26,7 +34,7 @@ def logn(x, n):
     return np.log(x) / np.log(n)
 
 
-def prepad(array, scale_factors, mode='reflect'):
+def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str='reflect') -> da.array:
     """
     Pad an array such that its new dimensions are evenly divisible by some integer.
 
@@ -34,7 +42,7 @@ def prepad(array, scale_factors, mode='reflect'):
     ----------
     array: An ndarray that will be padded.
 
-    scale_factors: An iterable of integers. The output array is guaranteed to have dimensions that each evenly divisible
+    scale_factors: An iterable of integers. The output array is guaranteed to have dimensions that are each evenly divisible
     by the corresponding scale factor.
 
     mode: String. The edge mode used by the padding routine. See `dask.array.pad` for more documentation.
@@ -43,7 +51,8 @@ def prepad(array, scale_factors, mode='reflect'):
     -------
 
     """
-    pw = tuple((0, even_padding(ax, scale)) for ax, scale in zip(array.shape, scale_factors))
+    pw = tuple((0, even_padding(ax, scale))
+               for ax, scale in zip(array.shape, scale_factors))
 
     result = None
     mode = 'reflect'
@@ -60,12 +69,11 @@ def prepad(array, scale_factors, mode='reflect'):
             tmp[-2] += tmp[-1]
             new_chunks[ind] = tuple(tmp[:-1])
 
-    new_chunks = tuple(new_chunks)
-    result = result.rechunk(new_chunks)
+    result = result.rechunk(tuple(new_chunks))
     return result
 
 
-def downscale(array, reduction, scale_factors):
+def downscale(array: Union[np.array, da.array], reduction: Callable, scale_factors: Sequence) -> Union[np.array, da.array]:
     """
     Downscale an array using windowed aggregation. This function is a light wrapper for `dask.array.coarsen`.
 
@@ -79,12 +87,12 @@ def downscale(array, reduction, scale_factors):
     -------
 
     """
-    from dask.array import coarsen
+    from dask.array import coarsen    
     padded = prepad(array, scale_factors)
     return coarsen(reduction, padded, {d: s for d, s in enumerate(scale_factors)})
 
 
-def get_downscale_depth(array, scale_factors):
+def get_downscale_depth(array: Union[np.array, da.array], scale_factors: Sequence) -> int:
     """
     For an array and a sequence of scale factors, calculate the maximum possible number of downscaling operations.
     """
@@ -95,7 +103,7 @@ def get_downscale_depth(array, scale_factors):
     return min(depths.values())
 
 
-def lazy_pyramid(array, reduction, scale_factors, preserve_dtype=True):
+def lazy_pyramid(array: Union[np.array, da.array], reduction: Callable, scale_factors: Sequence, preserve_dtype: bool=True, max_depth: int=5) -> List[DataArray]:
     """
     Lazily generate an image pyramid
 
@@ -109,36 +117,37 @@ def lazy_pyramid(array, reduction, scale_factors, preserve_dtype=True):
 
     preserve_dtype: Boolean, determines whether lower levels of the pyramid are coerced to the same dtype as the input.
 
-    Returns a list of named tuples, one per level of downscaling, each with an `array` field (containing a dask array
-    representing a downscaled image), a `scaling_factors` field containing the scaling factors used to create that
-    array, and an `offset` field which contains the offset into the first pixel of the downsampled image.
+    Returns a list of DataArrays, one per level of downscaling. These DataArrays have `coords` properties that track the changing offset (if any)
+    induced by the downsampling operation. Additionally, the scale factors are stored each DataArray's attrs propery under the key `scale_factors` 
     -------
 
     """
     assert len(scale_factors) == array.ndim
 
-    # level 0 is the original
-    Level = namedtuple('level', 'array scale_factors offset')
-
-    result = [Level(array=da.asarray(array), scale_factors=(1,) * array.ndim, offset=(0,) * array.ndim)]
+    scale = (1,) * array.ndim
+    result = [DataArray(data=da.asarray(array),
+                        coords=tuple(offset + np.arange(dim, dtype='float32')
+                              for dim, offset in zip(array.shape, get_downsampled_offset(scale))),
+                        attrs={'scale_factors': scale})]
 
     # figure out the maximum depth
-    levels = range(1, get_downscale_depth(array, scale_factors))
+    levels = range(1, get_downscale_depth(array, scale_factors))[:max_depth]
 
     for l in levels:
         scale = tuple(s ** l for s in scale_factors)
         arr = downscale(array, reduction, scale)
         if preserve_dtype:
             arr = arr.astype(array.dtype)
-        result.append(Level(array=arr,
-                            scale_factors=scale,
-                            offset=get_downsampled_offset(scale)))
+        result.append(DataArray(data=arr,
+                                coords=tuple(offset + np.arange(dim, dtype='float32')
+                              for dim, offset in zip(arr.shape, get_downsampled_offset(scale))),
+                                attrs={'scale_factors': scale}))
     return result
 
 
-def get_downsampled_offset(scale_factors):
+def get_downsampled_offset(scale_factors: Sequence) -> np.array:
     """
-    For a given number of dimension and a sequence of downscale factors, calculate the starting offset of the downscaled
+    For a given number of dimensions and a sequence of downscale factors, calculate the starting offset of the downscaled
     array in the units of the full-resolution data.
     """
     ndim = len(scale_factors)
