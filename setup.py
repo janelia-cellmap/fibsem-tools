@@ -15,7 +15,7 @@ EMAIL = "bennettd@janelia.hhmi.org"
 AUTHOR = "Davis Bennett"
 REQUIRES_PYTHON = ">=3.7.0"
 VERSION = "0.1.0"
-REQUIRED = ["dask", "numpy", "zarr", "dask_jobqueue", "xarray"]
+REQUIRED = ["dask", "numpy", "zarr", "dask_jobqueue", "xarray", "h5py"]
 
 EXTRAS = {}
 
