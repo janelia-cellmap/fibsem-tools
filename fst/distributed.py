@@ -12,6 +12,8 @@
 
 from shutil import which
 import dask
+dask.config.set({"jobqueue.lsf.use-stdin": True})
+dask.config.set({"distributed.comm.timeouts.connect": 60})
 import dask.array as da
 from distributed import Client, LocalCluster
 from dask_jobqueue import LSFCluster
@@ -20,7 +22,7 @@ import numpy as np
 from pathlib import Path
 
 # this is necessary to ensure that workers get the job script from stdin
-dask.config.set({"jobqueue.lsf.use-stdin": True})
+
 
 
 def get_jobqueue_cluster(
@@ -98,7 +100,7 @@ def get_cluster(**kwargs):
             kwargs['host'] = ''
         cluster = LocalCluster(**kwargs)
 
-    client = Client(cluster)    
+    client = Client(cluster, set_as_default=False)    
     return client
 
 
