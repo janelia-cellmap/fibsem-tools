@@ -124,6 +124,7 @@ def lazy_pyramid(array: Union[np.array, da.array],
     
     if hasattr(array, 'coords'):
         base_coords = tuple(map(np.array, array.coords.values()))
+        base_attrs = array.attrs
         dims = array.dims
     else:
         base_coords=tuple(offset + np.arange(dim, dtype='float32')
@@ -132,7 +133,7 @@ def lazy_pyramid(array: Union[np.array, da.array],
 
     result = [DataArray(data=da.asarray(array),
                         coords=base_coords,
-                        attrs={'scale_factors': scale},
+                        attrs={'scale_factors': scale, **base_attrs},
                         dims=dims)]
 
     # figure out the maximum depth
@@ -148,7 +149,7 @@ def lazy_pyramid(array: Union[np.array, da.array],
                                 
         result.append(DataArray(data=arr,
                                 coords = new_coords,
-                                attrs={'scale_factors': scale}, 
+                                attrs={'scale_factors': scale, **base_attrs}, 
                                 dims=dims))
     return result
 
