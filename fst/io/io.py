@@ -193,20 +193,20 @@ def create_arrays(
     group_attrs: dict,
     array_attrs: Sequence,
     overwrite: bool=True,
-    lazy: bool = True):
+    parallel: bool = True):
     """
     Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). If overwrite==True,
     these arrays will be created as needed and filled with 0s. Otherwise, new arrays will be created, existing arrays with matching properties
     will be kept as-is, and existing arrays with mismatched properties will be removed and replaced with an array of 0s.      
     """
 
-    # check that all sequential arguments are the same length    
+    #todo: check that all sequential arguments are the same length    
     group = access(path, mode="a")
     group.attrs.put(group_attrs)
     
     argdicts = tuple({k: v for k,v in zip(('name','shape','dtype','compressor','chunks'), vals)} for vals in zip(names, shapes, dtypes, compressors, chunks))
     
-    if lazy:
+    if parallel:
         arrs = [delayed(create_array)(group, array_attrs[ind], **argdict, overwrite=overwrite) for ind, argdict in enumerate(argdicts)]
         with ProgressBar():
             delayed(arrs).compute(scheduler='threads')
