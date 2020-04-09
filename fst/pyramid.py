@@ -34,7 +34,7 @@ def logn(x: float, n: float) -> float:
     return np.log(x) / np.log(n)
 
 
-def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str='reflect') -> da.array:
+def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str='reflect', rechunk: bool=True) -> da.array:
     """
     Pad an array such that its new dimensions are evenly divisible by some integer.
 
@@ -62,7 +62,9 @@ def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str=
         result = da.pad(da.from_array(array), pw, mode=mode)
 
     # rechunk so that small extra chunks added by padding are fused into larger chunks    
-    result = result.rechunk(result.chunksize)
+    if rechunk:
+        new_chunks = tuple(np.multiply(scale_factors, np.ceil(np.divide(result.chunksize, scale_factors))).astype('int'))
+        result = result.rechunk(new_chunks)
     return result
 
 
@@ -114,6 +116,10 @@ def lazy_pyramid(array: Union[np.array, da.array],
 
     preserve_dtype: Boolean, determines whether lower levels of the pyramid are coerced to the same dtype as the input.
 
+    max_depth: int, sets the number of downscaling operations to perform.
+
+    rechunk: bool, defaults to True, determines whether data is rechunked to align chunks such that each chunk is a multiple of the largest downscale factor for that axis. 
+
     Returns a list of DataArrays, one per level of downscaling. These DataArrays have `coords` properties that track the changing offset (if any)
     induced by the downsampling operation. Additionally, the scale factors are stored each DataArray's attrs propery under the key `scale_factors` 
     -------
@@ -121,7 +127,10 @@ def lazy_pyramid(array: Union[np.array, da.array],
     """
     assert len(scale_factors) == array.ndim
     scale = (1,) * array.ndim
-    
+
+    # figure out the maximum depth
+    levels = range(1, get_downscale_depth(array, scale_factors))[:max_depth]
+
     if hasattr(array, 'coords'):
         base_coords = tuple(map(np.array, array.coords.values()))
         base_attrs = array.attrs
@@ -130,14 +139,13 @@ def lazy_pyramid(array: Union[np.array, da.array],
         base_coords=tuple(offset + np.arange(dim, dtype='float32')
                                 for dim, offset in zip(array.shape, get_downsampled_offset(scale)))
         dims = None
+        base_attrs = {}
 
     result = [DataArray(data=da.asarray(array),
                         coords=base_coords,
                         attrs={'scale_factors': scale, **base_attrs},
                         dims=dims)]
 
-    # figure out the maximum depth
-    levels = range(1, get_downscale_depth(array, scale_factors))[:max_depth]
 
     for l in levels:
         scale = tuple(s ** l for s in scale_factors)
