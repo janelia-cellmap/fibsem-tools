@@ -10,6 +10,8 @@ from skimage.exposure import rescale_intensity as rescale
 from numcodecs import GZip
 from fst.io import create_arrays
 from typing import List, Tuple, Union, Dict
+from dask.array.core import slices_from_chunks
+from dask import delayed
 
 output_chunks = (128,128,128)
 output_dtype = 'uint8'
@@ -84,14 +86,17 @@ def DataArrayFactory(source_path: Union[str, Path], dest_path: Union[str, Path],
     
     return data
 
-def save_blockwise(arr, path: Union[str, Path], block_info):
+def save_blockwise(arr, path: Union[str, Path], block_info=None, array_location=None):
     from fst.io import access    
     import time
     import dask
     # workers create their own client object that doesn't use the same config
-    dask.config.set({'distributed.comm.timeouts.connect':'160s'})
-    pos = block_info[0]["array-location"]    
-    idx = tuple(slice(*i) for i in pos)
+    #dask.config.set({'distributed.comm.timeouts.connect':'60s'})
+    if array_location is not None:
+        idx = array_location
+    else:
+        pos = block_info[0]["array-location"]    
+        idx = tuple(slice(*i) for i in pos)
     num_retries = 3
     sleepdur = .5
     retval = 1
@@ -146,9 +151,11 @@ def prepare_store(dataset: dataset, output_path: Union[str, Path], output_downsc
 
         pyr_save = []
         for idx, p in enumerate(pyr):
-            level_path = multiscale_grp / names[idx]    
+            level_path = multiscale_grp / names[idx]                
             o_chunks = np.maximum(read(level_path).chunks, p.data.chunksize)
-            pyr_save.append(p.data.rechunk(o_chunks).map_blocks(save_blockwise, path=level_path, dtype=p.data.dtype))
+            rechunked = p.data.rechunk(o_chunks)
+            sliced_save = [delayed(save_blockwise)(rechunked[sl], path=level_path, array_location=sl) for sl in slices_from_chunks(rechunked.chunks)]            
+            pyr_save.append(sliced_save)
         to_store.append(pyr_save)
 
-    return to_store
+    return pyr, to_store
