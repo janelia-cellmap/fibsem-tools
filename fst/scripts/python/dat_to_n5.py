@@ -8,7 +8,7 @@ import os
 import logging
 import numcodecs
 from fst.distributed import bsub_available, get_jobqueue_cluster, get_cluster
-from toolz import partition
+from toolz import partition_all
 from typing import Tuple, List, Union
 
 import time
@@ -251,7 +251,7 @@ def dat_to_n5(source: str, dest: str, num_workers: Union[str, int], multiscale_l
     if len(to_store) < partition_size:
         partition_size = len(to_store)
     
-    partitions = partition(partition_size, to_store)
+    partitions = partition_all(partition_size, to_store)
     
     for ind_p, p in enumerate(partitions):
         client.cluster.scale(num_workers)
