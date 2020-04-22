@@ -68,23 +68,27 @@ def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str=
     return result
 
 
-def downscale(array: Union[np.array, da.array], reduction: Callable, scale_factors: Sequence) -> Union[np.array, da.array]:
+def downscale(array: Union[np.array, da.array], reduction: Callable, scale_factors: Sequence, **kwargs) -> da.array:
     """
     Downscale an array using windowed aggregation. This function is a light wrapper for `dask.array.coarsen`.
 
     Parameters
     ----------
     array: The narray to be downscaled.
+    
     reduction: The function to apply to each window of the array.
-    scale_factors: A list if ints specifying how much to downscale the array per dimension.
+    
+    scale_factors: A list if ints specifying how much to downscale the array per dimension.    
+
+    **kwargs: extra kwargs passed to dask.array.coarsen
 
     Returns the downscaled version of the input as a dask array.
     -------
 
     """
-    from dask.array import coarsen    
+    from dask.array import coarsen
     padded = prepad(array, scale_factors)
-    return coarsen(reduction, padded, {d: s for d, s in enumerate(scale_factors)})
+    return coarsen(reduction, padded, {d: s for d, s in enumerate(scale_factors)}, **kwargs)
 
 
 def get_downscale_depth(array: Union[np.array, da.array], scale_factors: Sequence) -> int:
@@ -114,11 +118,12 @@ def lazy_pyramid(array: Union[np.array, da.array],
 
     scale_factors: an iterable of integers that specifies how much to downscale each axis of the array.
 
-    preserve_dtype: Boolean, determines whether lower levels of the pyramid are coerced to the same dtype as the input.
-
     max_depth: int, sets the number of downscaling operations to perform.
 
     rechunk: bool, defaults to True, determines whether data is rechunked to align chunks such that each chunk is a multiple of the largest downscale factor for that axis. 
+
+    preserve_dtype: boolean, defaults to True, determines whether lower levels of the pyramid are coerced to the same dtype as the input. This assumes that
+    the reduction function accepts a "dtype" kwarg, e.g. numpy.mean(x, dtype='int').
 
     Returns a list of DataArrays, one per level of downscaling. These DataArrays have `coords` properties that track the changing offset (if any)
     induced by the downsampling operation. Additionally, the scale factors are stored each DataArray's attrs propery under the key `scale_factors` 
@@ -132,9 +137,13 @@ def lazy_pyramid(array: Union[np.array, da.array],
     levels = range(1, get_downscale_depth(array, scale_factors))[:max_depth]
 
     if hasattr(array, 'coords'):
-        base_coords = tuple(map(np.array, array.coords.values()))
-        base_attrs = array.attrs
-        dims = array.dims
+        # if the input is a xarray.DataArray, assign a new variable to the DataArray and use the variable 
+        # array to refer to the data property of that array
+        dataArray = array
+        array = dataArray.data
+        base_coords = tuple(map(np.array, dataArray.coords.values()))
+        base_attrs = dataArray.attrs
+        dims = dataArray.dims
     else:
         base_coords=tuple(offset + np.arange(dim, dtype='float32')
                                 for dim, offset in zip(array.shape, get_downsampled_offset(scale)))
@@ -146,12 +155,13 @@ def lazy_pyramid(array: Union[np.array, da.array],
                         attrs={'scale_factors': scale, **base_attrs},
                         dims=dims)]
 
-
     for l in levels:
         scale = tuple(s ** l for s in scale_factors)
-        arr = downscale(array, reduction, scale)
         if preserve_dtype:
-            arr = arr.astype(array.dtype)
+            arr = downscale(array, reduction, scale, dtype=array.dtype)
+        else:
+            arr = downscale(array, reduction, scale)
+    
         new_coords = tuple(offset + bc[:dim] * sc
                                 for dim, bc, offset, sc in zip(arr.shape, base_coords, get_downsampled_offset(scale), scale))
                                 
