@@ -2,16 +2,14 @@ from .fibsem import read_fibsem
 from pathlib import Path
 from collections.abc import Sequence
 from typing import Union, Iterable, List, Optional, Callable, Dict
-import zarr
 from dask import delayed
 import os
-import h5py
 from shutil import rmtree
 from glob import glob
 from itertools import groupby
 from collections import defaultdict
 from dask.diagnostics import ProgressBar
-_formats = ('.dat', )
+_formats = ('.dat', '.mrc')
 _container_extensions = ('.zarr', '.n5', '.h5')
 _suffixes = (*_formats, *_container_extensions)
 
@@ -65,22 +63,30 @@ def access_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]], mode: s
 
 
 def access_n5(dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs):
+    import zarr
     return zarr.open(zarr.N5Store(dir_path),
                      path=container_path,
                      **kwargs)
 
 
 def access_zarr(dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs):
+    import zarr
     return zarr.open(dir_path,
                      path=container_path,
                      **kwargs)
 
 
 def access_h5(dir_path: Union[str, Path], container_path: Union[str, Path], mode: str, **kwargs):
+    import h5py
     result = h5py.File(dir_path, mode=mode, **kwargs)
     if container_path != '':
-        result = result[container_path]
+        result = result[str(container_path)]
     return result
+
+
+def access_mrc(path: Union[str, Path], mode:str, **kwargs):
+    from mrcfile.mrcmemmap import MrcMemmap
+    return MrcMemmap(path, mode=mode)
 
 
 accessors: Dict[str, Callable] = {}
@@ -88,7 +94,7 @@ accessors[".dat"] = access_fibsem
 accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
 accessors[".h5"] = access_h5
-
+accessors[".mrc"] = access_mrc
 
 def access(path: Union[str, Path, Iterable[str], Iterable[Path]], mode: str, lazy: bool = False, **kwargs):
     """
