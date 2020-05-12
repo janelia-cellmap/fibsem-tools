@@ -54,12 +54,7 @@ def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str=
     pw = tuple((0, even_padding(ax, scale))
                for ax, scale in zip(array.shape, scale_factors))
 
-    result = None
-    mode = 'reflect'
-    if isinstance(array, dask.array.core.Array):
-        result = da.pad(array, pw, mode=mode)
-    else:
-        result = da.pad(da.from_array(array), pw, mode=mode)
+    result = da.pad(array, pw, mode=mode)       
 
     # rechunk so that small extra chunks added by padding are fused into larger chunks    
     if rechunk:
@@ -139,11 +134,9 @@ def lazy_pyramid(array: Union[np.array, da.array],
     if hasattr(array, 'coords'):
         # if the input is a xarray.DataArray, assign a new variable to the DataArray and use the variable 
         # array to refer to the data property of that array
-        dataArray = array
-        array = dataArray.data
-        base_coords = tuple(map(np.array, dataArray.coords.values()))
-        base_attrs = dataArray.attrs
-        dims = dataArray.dims
+        base_coords = tuple(map(np.array, array.coords.values()))
+        base_attrs = array.attrs
+        dims = array.dims
     else:
         base_coords=tuple(offset + np.arange(dim, dtype='float32')
                                 for dim, offset in zip(array.shape, get_downsampled_offset(scale)))
@@ -158,7 +151,7 @@ def lazy_pyramid(array: Union[np.array, da.array],
     for l in levels:
         scale = tuple(s ** l for s in scale_factors)
         if preserve_dtype:
-            arr = downscale(array, reduction, scale, dtype=array.dtype)
+            arr = downscale(array, reduction, scale).astype(array.dtype)
         else:
             arr = downscale(array, reduction, scale)
     
