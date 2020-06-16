@@ -36,7 +36,7 @@ def mrc_to_dask(fname: Pathlike, stride: int=1):
         else:
             raise ValueError('Could not infer whether array is C or F contiguous')
 
-    num_strides = shape[concat_axis] // stride
+    num_strides = shape[concat_axis] // stride    
     excess = shape[concat_axis] % stride
     if excess > 0:
         extra_chunk = (excess,)
@@ -48,9 +48,11 @@ def mrc_to_dask(fname: Pathlike, stride: int=1):
     else:
         chunks=(*shape[:-1], distributed_chunks)
         
-    def chunk_loader(fname, concat_axis, block_id): 
-        idx = block_id[0]
-        return np.expand_dims(np.asanyarray(read(fname).data[idx]).astype(dtype), concat_axis)
+    def chunk_loader(fname, concat_axis, block_info=None):         
+        idx = tuple(slice(*idcs) for idcs in block_info[None]['array-location'])
+        result = np.array(read(fname).data[idx]).astype(dtype)
+        return result
+        
     arr = da.map_blocks(chunk_loader, fname, concat_axis, chunks=chunks, dtype=dtype)
     
     return arr
