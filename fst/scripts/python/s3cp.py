@@ -22,7 +22,7 @@ def fwalk(source: str, endswith='') -> List[str]:
 
 def iterput(sources: Sequence[str], dests: Sequence[str], tags: Sequence[Optional[dict]], profile: Optional[str]=None):
     """
-    Given a sequence of (source, dest) pairs, copy the file at `source` to the target at `dest`.    
+    Given a sequence of sources, dests, and tags, save each source to dest with a tag.    
     """           
     fs = s3fs.S3FileSystem(profile=profile)
     for source, dest, tag in zip(sources, dests, tags):
