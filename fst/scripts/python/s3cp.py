@@ -1,15 +1,14 @@
 import s3fs
-from fst.io import fwalk
 from dask import bag
 import click 
 from pathlib import Path
 from dask.diagnostics import ProgressBar
-from typing import Sequence, Optional, Tuple
+from typing import Sequence, Optional, Tuple, List
 import os 
 
 STAGES = ('dev', 'prod', 'val')
 
-def fwalk(source: Pathlike, endswith='') -> List[str]:
+def fwalk(source: str, endswith='') -> List[str]:
     """
     Use os.walk to recursively parse a directory tree, returning a list containing the full paths
     to all files with filenames ending with `endswith`.
