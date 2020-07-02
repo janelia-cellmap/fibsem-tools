@@ -4,21 +4,10 @@ import click
 from pathlib import Path
 from dask.diagnostics import ProgressBar
 from typing import Sequence, Optional, Tuple, List
+from fst.io import fwalk
 import os 
 
 STAGES = ('dev', 'prod', 'val')
-
-def fwalk(source: str, endswith='') -> List[str]:
-    """
-    Use os.walk to recursively parse a directory tree, returning a list containing the full paths
-    to all files with filenames ending with `endswith`.
-    """
-    results = []
-    for p, d, f in os.walk(source):
-        for file in f:
-            if file.endswith(endswith):
-                results.append(os.path.join(p, file))
-    return results
 
 def iterput(sources: Sequence[str], dests: Sequence[str], tags: Sequence[Optional[dict]], profile: Optional[str]=None):
     """
@@ -42,23 +31,25 @@ def s3put(dest_root: str, source_path: str, endswith: Optional[str]='', profile=
     return bag.map_partitions(iterput, source_bag, dest_bag, tag_bag)
 
 @click.command()
+@click.argument('source_paths', required=True, nargs=-1)
 @click.option('-b', '--bucket', required=True, type=str)
-@click.option('-s', '--source-path', required=True, type=click.Path(exists=True, file_okay=False))
 @click.option('-ew', '--endswith', required=True, type=str)
 @click.option('-vt', '--version-tag', required=True, type=str)
 @click.option('-st', '--stage-tag', required=True, type=str)
 @click.option('-dvt', '--developer-tag', required=True, type=str)
 @click.option('-pt', '--project-tag', required=True, type=str)
 @click.option('-dt', '--description-tag', required=True, type=str)
-def s3put_cli(bucket, source_path, endswith, version_tag, stage_tag, developer_tag, project_tag, description_tag):
-    dest_root = Path(bucket) / Path(source_path).stem 
-    assert stage_tag in STAGES
-    tags = {'VERSION': version_tag, 
-            'DEVELOPER': developer_tag, 
-            'STAGE': stage_tag, 
-            'PROJECT': project_tag, 
-            'DESCRIPTION': description_tag}
-    return s3put(dest_root, source_path, endswith=endswith, tags=tags).compute()
+def s3put_cli(source_paths, bucket, endswith, version_tag, stage_tag, developer_tag, project_tag, description_tag):
+    for source_path in source_paths:
+        dest_root = Path(bucket) / Path(source_path).stem 
+        assert stage_tag in STAGES
+        tags = {'VERSION': version_tag, 
+                'DEVELOPER': developer_tag, 
+                'STAGE': stage_tag, 
+                'PROJECT': project_tag, 
+                'DESCRIPTION': description_tag}
+        s3put(dest_root, source_path, endswith=endswith, tags=tags).compute()
+    return 0
 
 
 if __name__ == '__main__':
