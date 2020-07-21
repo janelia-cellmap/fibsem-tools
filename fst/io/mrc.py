@@ -5,7 +5,7 @@ import numpy as np
 from typing import Union
 from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
-
+from dask.array.core import normalize_chunks
 Pathlike = Union[str, Path]
 
 def mrc_shape_dtype_inference(mem: MrcMemmap):
@@ -23,7 +23,7 @@ def mrc_shape_dtype_inference(mem: MrcMemmap):
     return shape, dtype
 
 
-def mrc_to_dask(fname: Pathlike, stride: int=1):
+def mrc_to_dask(fname: Pathlike, chunks: tuple):
     """
     Generate a dask array backed by a memory-mapped .mrc file
     """
@@ -35,24 +35,24 @@ def mrc_to_dask(fname: Pathlike, stride: int=1):
             concat_axis = len(shape) - 1
         else:
             raise ValueError('Could not infer whether array is C or F contiguous')
-
-    num_strides = shape[concat_axis] // stride    
-    excess = shape[concat_axis] % stride
-    if excess > 0:
-        extra_chunk = (excess,)
-    else:
-        extra_chunk = ()
-    distributed_chunks = (stride,) * num_strides + extra_chunk
-    if concat_axis == 0:
-        chunks=(distributed_chunks, *shape[1:])
-    else:
-        chunks=(*shape[:-1], distributed_chunks)
-        
-    def chunk_loader(fname, concat_axis, block_info=None):         
+    
+    #num_strides = shape[concat_axis] // stride    
+    #excess = shape[concat_axis] % stride
+    #if excess > 0:
+    #    extra_chunk = (excess,)
+    #else:
+    #    extra_chunk = ()
+    #distributed_chunks = (stride,) * num_strides + extra_chunk
+    #if concat_axis == 0:
+    #    chunks=(distributed_chunks, *shape[1:])
+    #else:
+    #    chunks=(*shape[:-1], distributed_chunks)
+    chunks_ = normalize_chunks(chunks, shape)   
+    def chunk_loader(fname, block_info=None):         
         idx = tuple(slice(*idcs) for idcs in block_info[None]['array-location'])
         result = np.array(read(fname).data[idx]).astype(dtype)
         return result
         
-    arr = da.map_blocks(chunk_loader, fname, concat_axis, chunks=chunks, dtype=dtype)
+    arr = da.map_blocks(chunk_loader, fname, chunks=chunks_, dtype=dtype)
     
     return arr
