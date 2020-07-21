@@ -3,8 +3,11 @@ import dask.array as da
 import dask
 from collections import namedtuple
 from xarray import DataArray
-from typing import List, Union, Sequence, Callable
-
+from typing import List, Union, Sequence, Callable, Tuple
+from scipy.interpolate import interp1d
+from dask.utils import SerializableLock
+from dask.array.core import slices_from_chunks
+from dask.array.core import normalize_chunks
 
 def even_padding(length: int, window: int) -> int:
     """
@@ -33,8 +36,12 @@ def logn(x: float, n: float) -> float:
     """
     return np.log(x) / np.log(n)
 
-
-def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str='reflect', rechunk: bool=True) -> da.array:
+def prepad(
+    array: Union[np.array, da.array],
+    scale_factors: Sequence,
+    mode: str = "reflect",
+    rechunk: bool = True,
+) -> da.array:
     """
     Pad an array such that its new dimensions are evenly divisible by some integer.
 
@@ -51,19 +58,39 @@ def prepad(array: Union[np.array, da.array], scale_factors: Sequence, mode: str=
     -------
 
     """
-    pw = tuple((0, even_padding(ax, scale))
-               for ax, scale in zip(array.shape, scale_factors))
+    pw = tuple(
+        (0, even_padding(ax, scale)) for ax, scale in zip(array.shape, scale_factors)
+    )
 
-    result = da.pad(array, pw, mode=mode)       
+    result = da.pad(array, pw, mode=mode)
 
-    # rechunk so that small extra chunks added by padding are fused into larger chunks    
+    # rechunk so that small extra chunks added by padding are fused into larger chunks
     if rechunk:
-        new_chunks = tuple(np.multiply(scale_factors, np.ceil(np.divide(result.chunksize, scale_factors))).astype('int'))
+        new_chunks = tuple(
+            np.multiply(
+                scale_factors, np.ceil(np.divide(result.chunksize, scale_factors))
+            ).astype("int")
+        )
         result = result.rechunk(new_chunks)
+    if hasattr(array, 'coords'):
+        new_coords = {}
+        for p,k in zip(pw, array.coords):
+            old_coord = array.coords[k]            
+            if np.diff(p) == 0:
+                new_coords[k] = old_coord
+            else:
+                extended_coords = interp1d(np.arange(len(old_coord.values)), old_coord.values, fill_value='extrapolate')(np.arange(len(old_coord.values) + p[-1])).astype(old_coord.dtype)                                                
+                new_coords[k] = DataArray(extended_coords, dims=k, attrs=old_coord.attrs)                
+        result = DataArray(result, coords=new_coords, dims=array.dims, attrs=array.attrs)
     return result
 
 
-def downscale(array: Union[np.array, da.array], reduction: Callable, scale_factors: Sequence, **kwargs) -> da.array:
+def downscale(
+    array: Union[np.array, da.array],
+    reduction: Callable,
+    scale_factors: Sequence[int],
+    **kwargs
+) -> DataArray:
     """
     Downscale an array using windowed aggregation. This function is a light wrapper for `dask.array.coarsen`.
 
@@ -82,26 +109,33 @@ def downscale(array: Union[np.array, da.array], reduction: Callable, scale_facto
 
     """
     from dask.array import coarsen
+
     padded = prepad(array, scale_factors)
-    return coarsen(reduction, padded, {d: s for d, s in enumerate(scale_factors)}, **kwargs)
+    return coarsen(
+        reduction, padded, {d: s for d, s in enumerate(scale_factors)}, **kwargs
+    )
 
 
-def get_downscale_depth(array: Union[np.array, da.array], scale_factors: Sequence) -> int:
+def get_downscale_depth(
+    array: Union[np.array, da.array], scale_factors: Sequence[int]
+) -> int:
     """
     For an array and a sequence of scale factors, calculate the maximum possible number of downscaling operations.
     """
     depths = {}
     for ax, s in enumerate(scale_factors):
         if s > 1:
-            depths[ax] = np.ceil(logn(array.shape[ax], s)).astype('int')
+            depths[ax] = np.ceil(logn(array.shape[ax], s)).astype("int")
     return min(depths.values())
 
 
-def lazy_pyramid(array: Union[np.array, da.array], 
-                 reduction: Callable, 
-                 scale_factors: Sequence, 
-                 preserve_dtype: bool=True, 
-                 max_depth: int=5) -> List[DataArray]:
+def lazy_pyramid(
+    array: Union[np.array, da.array],
+    reduction: Callable=np.mean,
+    scale_factors: Union[Sequence[int], int] = 2,
+    preserve_dtype: bool = True,
+    max_depth: int = 5,
+) -> List[DataArray]:
     """
     Lazily generate an image pyramid
 
@@ -111,57 +145,72 @@ def lazy_pyramid(array: Union[np.array, da.array],
 
     reduction: a function that aggregates data over windows.
 
-    scale_factors: an iterable of integers that specifies how much to downscale each axis of the array.
-
-    max_depth: int, sets the number of downscaling operations to perform.
-
-    rechunk: bool, defaults to True, determines whether data is rechunked to align chunks such that each chunk is a multiple of the largest downscale factor for that axis. 
+    scale_factors: an iterable of integers that specifies how much to downscale each axis of the array. 
 
     preserve_dtype: boolean, defaults to True, determines whether lower levels of the pyramid are coerced to the same dtype as the input. This assumes that
     the reduction function accepts a "dtype" kwarg, e.g. numpy.mean(x, dtype='int').
+
+    max_depth: int, The number of downscaling operations to perform.
 
     Returns a list of DataArrays, one per level of downscaling. These DataArrays have `coords` properties that track the changing offset (if any)
     induced by the downsampling operation. Additionally, the scale factors are stored each DataArray's attrs propery under the key `scale_factors` 
     -------
 
     """
-    assert len(scale_factors) == array.ndim
+    if isinstance(scale_factors, int):
+        scale_factors = (scale_factors,) * array.ndim
+    else:
+        assert len(scale_factors) == array.ndim
     scale = (1,) * array.ndim
 
     # figure out the maximum depth
-    levels = range(1, get_downscale_depth(array, scale_factors))[:max_depth]
+    levels = range(1, 1 + get_downscale_depth(array, scale_factors))[:max_depth]
 
-    if hasattr(array, 'coords'):
-        # if the input is a xarray.DataArray, assign a new variable to the DataArray and use the variable 
-        # array to refer to the data property of that array
-        base_coords = tuple(map(np.array, array.coords.values()))
-        base_attrs = array.attrs
+    if hasattr(array, "coords"):
+        # if the input is a xarray.DataArray, assign a new variable to the DataArray and use the variable
+        # `array` to refer to the data property of that array
+        data = array.data
         dims = array.dims
+        base_coords = array.coords
+        base_attrs = array.attrs
     else:
-        base_coords=tuple(offset + np.arange(dim, dtype='float32')
-                                for dim, offset in zip(array.shape, get_downsampled_offset(scale)))
-        dims = None
+        data = array
+        dims = [str(x) for x in range(data.ndim)]
+        base_coords = {dim: DataArray(offset + np.arange(s, dtype="float32"), dims=dim) for dim, s, offset in zip(dims, array.shape, get_downsampled_offset(scale))}        
         base_attrs = {}
 
-    result = [DataArray(data=da.asarray(array),
-                        coords=base_coords,
-                        attrs={'scale_factors': scale, **base_attrs},
-                        dims=dims)]
+    result = [
+        DataArray(
+            data=da.asarray(data),
+            coords=base_coords,
+            dims=dims, 
+            attrs={"scale_factors": scale, **base_attrs},
+        )
+    ]
 
     for l in levels:
-        scale = tuple(s ** l for s in scale_factors)
+        scale = tuple(s ** l for s in scale_factors)   
+            
         if preserve_dtype:
-            arr = downscale(array, reduction, scale).astype(array.dtype)
+            arr = downscale(data, reduction, scale).astype(array.dtype)
         else:
-            arr = downscale(array, reduction, scale)
-    
-        new_coords = tuple(offset + bc[:dim] * sc
-                                for dim, bc, offset, sc in zip(arr.shape, base_coords, get_downsampled_offset(scale), scale))
-                                
-        result.append(DataArray(data=arr,
-                                coords = new_coords,
-                                attrs={'scale_factors': scale, **base_attrs}, 
-                                dims=dims))
+            arr = downscale(data, reduction, scale)
+
+        # hideous
+        new_coords = tuple(
+            DataArray((offset * (base_coords[bc][1] - base_coords[bc][0]))+ base_coords[bc][:s] * sc, name=base_coords[bc].name, attrs=base_coords[bc].attrs)
+            for s, bc, offset, sc in zip(
+                arr.shape, base_coords, get_downsampled_offset(scale), scale
+            )
+        )
+
+        result.append(
+            DataArray(
+                data=arr,
+                coords=new_coords,
+                attrs={"scale_factors": scale, **base_attrs},
+            )
+        )
     return result
 
 
@@ -171,4 +220,53 @@ def get_downsampled_offset(scale_factors: Sequence) -> np.array:
     array in the units of the full-resolution data.
     """
     ndim = len(scale_factors)
-    return np.mgrid[tuple(slice(scale_factors[dim]) for dim in range(ndim))].mean(tuple(range(1, 1 + ndim)))
+    return np.mgrid[tuple(slice(scale_factors[dim]) for dim in range(ndim))].mean(
+        tuple(range(1, 1 + ndim))
+    )
+
+def downscale_slice(sl: slice, scale: int) -> slice:
+    """
+    Downscale the start, stop, and step of a slice by an integer factor. Ceiling division is used, i.e.
+    downscale_slice(Slice(0, 10, None), 3) returns Slice(0, 4, None).
+    """    
+    
+    start, stop, step = sl.start, sl.stop, sl.step
+    if start:
+        start = int(np.ceil(sl.start/scale))
+    if stop:
+        stop = int(np.ceil(sl.stop/scale))
+    if step:
+        step = int(np.ceil(sl.step/scale))
+    result = slice(start, stop, step)
+        
+    return result
+
+def slice_span(sl: slice) -> int:
+    """
+    Measure the length of a slice
+    """
+    return sl.stop - sl.start
+
+def blocked_pyramid(arr, block_size: Sequence, scale_factors: Sequence=(2,2,2), **kwargs):
+    full_pyr = lazy_pyramid(arr, scale_factors=scale_factors, **kwargs)    
+    slices = slices_from_chunks(normalize_chunks(block_size, arr.shape))
+    absolute_block_size = tuple(map(slice_span, slices[0]))
+    
+    results = []
+    for idx,sl in enumerate(slices):        
+        regions = [tuple(map(downscale_slice, sl, tuple(np.power(scale_factors, exp)))) for exp in range(len(full_pyr))]
+        if tuple(map(slice_span, sl)) == absolute_block_size:
+            pyr = lazy_pyramid(arr[sl], scale_factors=scale_factors, **kwargs)
+        else:
+            pyr = [full_pyr[l][r] for l,r in enumerate(regions)]
+        assert len(pyr) == len(regions)
+        results.append((regions, pyr))
+    return results
+
+
+def blocked_store(sources, targets):
+    stores = []
+    for slices, source in sources:
+        rechunked_sources = [s.data.rechunk(z.chunks) for s,z in zip(source, targets)]
+        stores.append(da.store(rechunked_sources, targets, lock=SerializableLock(), regions=slices, compute=False))
+    return stores
