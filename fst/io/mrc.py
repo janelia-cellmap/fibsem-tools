@@ -6,7 +6,9 @@ from typing import Union
 from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
 from dask.array.core import normalize_chunks
+
 Pathlike = Union[str, Path]
+
 
 def mrc_shape_dtype_inference(mem: MrcMemmap):
     """
@@ -17,9 +19,9 @@ def mrc_shape_dtype_inference(mem: MrcMemmap):
     """
     shape = mem.data.shape
     dtype = mem.data.dtype
-    if dtype == 'int8':
+    if dtype == "int8":
         if mem.header.dmax > 127:
-            dtype = 'uint8'
+            dtype = "uint8"
     return shape, dtype
 
 
@@ -27,32 +29,22 @@ def mrc_to_dask(fname: Pathlike, chunks: tuple):
     """
     Generate a dask array backed by a memory-mapped .mrc file
     """
-    with read(fname) as mem:        
-        shape, dtype = mrc_shape_dtype_inference(mem)        
-        if mem.data.flags['C_CONTIGUOUS']:            
+    with read(fname) as mem:
+        shape, dtype = mrc_shape_dtype_inference(mem)
+        if mem.data.flags["C_CONTIGUOUS"]:
             concat_axis = 0
-        elif mem.data.flags['F_CONTIGUOUS']:
+        elif mem.data.flags["F_CONTIGUOUS"]:
             concat_axis = len(shape) - 1
         else:
-            raise ValueError('Could not infer whether array is C or F contiguous')
-    
-    #num_strides = shape[concat_axis] // stride    
-    #excess = shape[concat_axis] % stride
-    #if excess > 0:
-    #    extra_chunk = (excess,)
-    #else:
-    #    extra_chunk = ()
-    #distributed_chunks = (stride,) * num_strides + extra_chunk
-    #if concat_axis == 0:
-    #    chunks=(distributed_chunks, *shape[1:])
-    #else:
-    #    chunks=(*shape[:-1], distributed_chunks)
-    chunks_ = normalize_chunks(chunks, shape)   
-    def chunk_loader(fname, block_info=None):         
-        idx = tuple(slice(*idcs) for idcs in block_info[None]['array-location'])
+            raise ValueError("Could not infer whether array is C or F contiguous")
+
+    chunks_ = normalize_chunks(chunks, shape)
+
+    def chunk_loader(fname, block_info=None):
+        idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
         result = np.array(read(fname).data[idx]).astype(dtype)
         return result
-        
+
     arr = da.map_blocks(chunk_loader, fname, chunks=chunks_, dtype=dtype)
-    
+
     return arr
