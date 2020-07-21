@@ -2,6 +2,8 @@ import dask
 import numpy as np
 from xarray import DataArray
 import dask.array as da
+from fst.attrs import array_attrs, group_attrs, n5v_multiscale_group_attrs 
+from fst.attrs import neuroglancer_multiscale_group_attrs, cosem_multiscale_group_attrs
 from fst.io import read, access
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,14 +14,17 @@ from fst.io import create_arrays
 from typing import List, Tuple, Union, Dict
 from dask.array.core import slices_from_chunks
 from dask import delayed
+from dask.utils import SerializableLock
+from typing import Sequence
+import os
+import zarr
+Pathlike = Union[str, Path]
 
 output_chunks = (128,128,128)
 output_dtype = 'uint8'
 output_multiscale_format = 'neuroglancer_n5'
 n5_attr_axes = {'z': 2, 'y': 1, 'x': 0}
 zr_axes = {'z': 0, 'y': 1, 'x': 2}
-# output_downscale = {'z': 2, 'y': 2, 'x': 2}
-# output_path = Path('/nrs/cosem/davis/s3_testing/')
 
 def name_prediction_array(path: Union[str, Path]):
     from fst.io.io import split_path_at_suffix
@@ -31,60 +36,6 @@ def name_prediction_array(path: Union[str, Path]):
         raise ValueError(f'could not find an instance of "setup" in {setup}')
     result = f'{name}_{setup}_it{iterations}'
     return result
-
-def group_attrs(pyramids: list) -> dict:
-    scales = [list(s.scale_factors) for s in pyramids]
-    units = list(pyramids[0].units.values())
-    axes = list(pyramids[0].dims)
-    arr_attrs = [array_attrs(p) for p in pyramids]
-    pixelResolution = {'pixelResolution': arr_attrs[0]['pixelResolution']}
-    
-    n5v_attrs = n5v_multiscale_group_attrs(scales, pixelResolution=pixelResolution)
-    neuroglancer_attrs = neuroglancer_multiscale_group_attrs(axes=axes, units = units)    
-    cosem_attrs = cosem_multiscale_group_attrs(transforms=[a['transform'] for a in arr_attrs], name=arr_attrs[0]['name'])
-    
-    return {**n5v_attrs, **neuroglancer_attrs, **cosem_attrs}
-
-def array_attrs(arr) -> dict:
-    translate = [float(k.data[0]) for k in arr.coords.values()]
-    scale = list(map(float, np.subtract([k.data[1] for k in arr.coords.values()], translate).tolist()))
-    units = list(arr.attrs['units'].values())
-    name = str(Path(arr.attrs['path']).parts[-1])
-    cosem_attrs = cosem_array_attrs(translate=translate, scale=scale, units=units, name=name)
-    n5v_attrs = n5v_array_attrs(dimensions=scale, unit=units[0])
-    return {**cosem_attrs, **n5v_attrs}
-
-def neuroglancer_multiscale_group_attrs(axes: List, units: List) -> dict:
-    # see https://github.com/google/neuroglancer/issues/176#issuecomment-553027775
-    return {'axes': axes, 'units': units}
-
-def cosem_array_attrs(translate: List, scale: List, units: List, name: str) -> dict:
-    return {'name': name,'transform': {'translate': translate, 'scale': scale, 'units': units}}
-
-def cosem_multiscale_group_attrs(transforms: List, name: str) -> dict:
-    return {'name': name, 'multiscale': [{'path': f'./s{idx}', 'transform': t} for idx,t in enumerate(transforms)]}
-
-def n5v_array_attrs(dimensions: List, unit: str) -> dict:
-    return {'pixelResolution': {'dimensions' : dimensions, 'unit': unit}}
-
-def n5v_multiscale_group_attrs(scales: List[List], pixelResolution: dict) -> dict:
-    return {'scales': scales, **pixelResolution}
-
-def DataArrayFactory(source_path: Union[str, Path], dest_path: Union[str, Path], chunks: Tuple[int]):
-    arr = read(source_path) 
-    try:
-        n5_scale = arr.attrs['pixelResolution']['dimensions']
-        n5_unit = arr.attrs['pixelResolution']['unit']
-    except KeyError:
-        n5_scale = arr.attrs['resolution']
-        n5_unit='nm'
-    scale = {k:n5_scale[v] for k,v in n5_attr_axes.items()}
-    coords = {k: np.arange(arr.shape[v]) * scale[k] for k,v in zr_axes.items()}
-    units = {k: n5_unit for k in n5_attr_axes}
-    data = DataArray(da.from_array(arr, chunks=chunks), coords=tuple(coords.values()), dims=coords.keys())
-    data.attrs.update({'units': units, 'source': str(source_path), 'path': str(dest_path)})
-    
-    return data
 
 def save_blockwise(arr, path: Union[str, Path], block_info=None, array_location=None):
     from fst.io import access    
@@ -114,48 +65,43 @@ def save_blockwise(arr, path: Union[str, Path], block_info=None, array_location=
             time.sleep(sleepdur)
         
     return np.expand_dims(retval, tuple(range(arr.ndim))).astype(arr.dtype)
+    
+def prepare_multiscale_store(root_container_path: Pathlike,
+                    group_path: Pathlike,
+                    arrays: List,
+                    array_names,
+                    output_chunks: Sequence,                                        
+                    root_attrs=None,
+                    extra_group_attrs=None,
+                    compressor = GZip(-1)) -> Tuple[zarr.hierarchy.group, zarr.Array]:
 
+    root = access(root_container_path, mode='a')
+    if root_attrs is not None:
+        root.attrs.put(root_attrs)
+    grp_attrs = group_attrs(arrays, axis_order='F')
+    if extra_group_attrs is not None:
+        grp_attrs = {**group_attrs(arrays), **extra_group_attrs}
+    shapes, dtypes, compressors, chunks, arr_attrs = [],[],[],[],[]
+    for ind_p, p in enumerate(arrays):            
+        shapes.append(p.shape) 
+        dtypes.append(p.dtype)
+        compressors.append(compressor)
+        chunks.append(output_chunks) 
+        arr_attrs.append(array_attrs(p, axis_order='F'))
+    # instead of a function with sequential arguments, what about calling a function in a loop? I find the current 
+    # pattern pretty ugly
+    zgrp, zarrays = create_arrays(Path(root_container_path) / group_path, 
+                    names=array_names, 
+                    shapes=shapes,
+                    dtypes=dtypes,
+                    compressors=compressors,
+                    chunks=chunks,
+                    group_attrs=grp_attrs,
+                    array_attrs=arr_attrs)
+    
+    return zgrp, zarrays
 
-@dataclass
-class dataset:
-    name: str
-    sources: Dict[str, DataArray]    
-
-def prepare_store(dataset: dataset, output_path: Union[str, Path], output_downscale: dict):
-    paths = list(dataset.sources.keys())
-    to_store = []
-    root_attrs = {'multiscale_data': paths}
-    root_container_path = Path(output_path) / f'{dataset.name}.n5'
-    access(root_container_path, mode='a').attrs.put(root_attrs)
-    for group_path, array in dataset.sources.items():
-        pyr = lazy_pyramid(array, np.mean, list(output_downscale.values()))
-        grp_attrs = group_attrs(pyr)
-        names, shapes, dtypes, compressors, chunks, arr_attrs = [],[],[],[],[],[]
-        for ind_p, p in enumerate(pyr):           
-            names.append(f's{ind_p}') 
-            shapes.append(p.shape) 
-            dtypes.append(p.dtype)
-            compressors.append(GZip(-1))
-            chunks.append(output_chunks) 
-            arr_attrs.append(array_attrs(p))
-        
-        multiscale_grp = root_container_path / group_path
-        grp = create_arrays(multiscale_grp, 
-                        names=names, 
-                        shapes=shapes,
-                        dtypes=dtypes,
-                        compressors=compressors,
-                        chunks=chunks,
-                        group_attrs=grp_attrs,
-                        array_attrs=arr_attrs)
-
-        pyr_save = []
-        for idx, p in enumerate(pyr):
-            level_path = multiscale_grp / names[idx]                
-            o_chunks = np.maximum(read(level_path).chunks, p.data.chunksize)
-            rechunked = p.data.rechunk(o_chunks)
-            sliced_save = [delayed(save_blockwise)(rechunked[sl], path=level_path, array_location=sl) for sl in slices_from_chunks(rechunked.chunks)]            
-            pyr_save.append(sliced_save)
-        to_store.append(pyr_save)
-
-    return pyr, to_store
+def save_multiscale(arrays, zarrays) -> List[dask.delayed]:
+    sources = [p.data.rechunk(za.chunks) for p,za in zip(arrays, zarrays)]
+    to_store = da.store(sources, zarrays, lock=SerializableLock(), compute=False)
+    return to_store
