@@ -20,16 +20,16 @@ def iterput(sources: Sequence[str], dests: Sequence[str], tags: Sequence[Optiona
             fs.put_tags(dest, tag)
     return True        
 
-def s3put(dest_root: str, source_path: str, endswith: Optional[str]='', profile=None, tags: Optional[dict]=None, **kwargs):    
-    sources = fwalk(source_path, endswith)
-    dests = tuple(dest_root / Path(f).relative_to(source_path) for f in sources)
+def s3put(dest_root: str, source_path: str, endswith: Optional[str]='', profile=None, tags: Optional[dict]=None, partition_size=None):    
+    sources = tuple(map(str, fwalk(source_path, endswith)))
+    dests = tuple(str(Path(dest_root) / Path(f).relative_to(source_path)) for f in sources)
     
-    source_bag = bag.from_sequence(sources)
-    dest_bag = bag.from_sequence(dests)
-    tag_bag = bag.from_sequence((tags,) * len(sources))
+    source_bag = bag.from_sequence(sources, partition_size=partition_size)
+    dest_bag = bag.from_sequence(dests, partition_size=partition_size)
+    tag_bag = bag.from_sequence((tags,) * len(sources), partition_size=partition_size)
 
     return bag.map_partitions(iterput, source_bag, dest_bag, tag_bag)
-
+    
 @click.command()
 @click.argument('source_paths', required=True, nargs=-1)
 @click.option('-b', '--bucket', required=True, type=str)
