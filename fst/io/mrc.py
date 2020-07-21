@@ -31,13 +31,7 @@ def mrc_to_dask(fname: Pathlike, chunks: tuple):
     """
     with read(fname) as mem:
         shape, dtype = mrc_shape_dtype_inference(mem)
-        if mem.data.flags["C_CONTIGUOUS"]:
-            concat_axis = 0
-        elif mem.data.flags["F_CONTIGUOUS"]:
-            concat_axis = len(shape) - 1
-        else:
-            raise ValueError("Could not infer whether array is C or F contiguous")
-
+        
     chunks_ = normalize_chunks(chunks, shape)
 
     def chunk_loader(fname, block_info=None):
