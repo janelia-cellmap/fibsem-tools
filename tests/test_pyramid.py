@@ -1,7 +1,12 @@
-from fst.pyramid import downscale, prepad, lazy_pyramid
+from fst.pyramid import downscale, prepad, lazy_pyramid, even_padding
 import dask.array as da
 import numpy as np
 
+def test_even_padding():
+    sizes = (10,11,12,13)
+    scale = 2
+    for size in sizes:
+        assert (size + even_padding(size, scale)) % scale == 0
 
 def test_prepad():
     dims = (1,2,3,4)
