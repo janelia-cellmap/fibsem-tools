@@ -6,8 +6,8 @@ from xarray import DataArray
 from typing import List, Union, Sequence, Callable, Tuple
 from scipy.interpolate import interp1d
 from dask.utils import SerializableLock
-from dask.array.core import slices_from_chunks
-from dask.array.core import normalize_chunks
+from dask.array.core import slices_from_chunks, normalize_chunks
+
 
 def even_padding(length: int, window: int) -> int:
     """
@@ -35,6 +35,7 @@ def logn(x: float, n: float) -> float:
 
     """
     return np.log(x) / np.log(n)
+
 
 def prepad(
     array: Union[np.array, da.array],
@@ -72,16 +73,24 @@ def prepad(
             ).astype("int")
         )
         result = result.rechunk(new_chunks)
-    if hasattr(array, 'coords'):
+    if hasattr(array, "coords"):
         new_coords = {}
-        for p,k in zip(pw, array.coords):
-            old_coord = array.coords[k]            
+        for p, k in zip(pw, array.coords):
+            old_coord = array.coords[k]
             if np.diff(p) == 0:
                 new_coords[k] = old_coord
             else:
-                extended_coords = interp1d(np.arange(len(old_coord.values)), old_coord.values, fill_value='extrapolate')(np.arange(len(old_coord.values) + p[-1])).astype(old_coord.dtype)                                                
-                new_coords[k] = DataArray(extended_coords, dims=k, attrs=old_coord.attrs)                
-        result = DataArray(result, coords=new_coords, dims=array.dims, attrs=array.attrs)
+                extended_coords = interp1d(
+                    np.arange(len(old_coord.values)),
+                    old_coord.values,
+                    fill_value="extrapolate",
+                )(np.arange(len(old_coord.values) + p[-1])).astype(old_coord.dtype)
+                new_coords[k] = DataArray(
+                    extended_coords, dims=k, attrs=old_coord.attrs
+                )
+        result = DataArray(
+            result, coords=new_coords, dims=array.dims, attrs=array.attrs
+        )
     return result
 
 
@@ -131,7 +140,7 @@ def get_downscale_depth(
 
 def lazy_pyramid(
     array: Union[np.array, da.array],
-    reduction: Callable=np.mean,
+    reduction: Callable = np.mean,
     scale_factors: Union[Sequence[int], int] = 2,
     preserve_dtype: bool = True,
     max_depth: int = 5,
@@ -171,26 +180,30 @@ def lazy_pyramid(
         # `array` to refer to the data property of that array
         data = array.data
         dims = array.dims
-        base_coords = array.coords
+        # ensure that key order matches dimension order
+        base_coords = {d: array.coords[d] for d in dims}
         base_attrs = array.attrs
     else:
         data = array
         dims = [str(x) for x in range(data.ndim)]
-        base_coords = {dim: DataArray(offset + np.arange(s, dtype="float32"), dims=dim) for dim, s, offset in zip(dims, array.shape, get_downsampled_offset(scale))}        
+        base_coords = {
+            dim: DataArray(offset + np.arange(s, dtype="float32"), dims=dim)
+            for dim, s, offset in zip(dims, array.shape, get_downsampled_offset(scale))
+        }
         base_attrs = {}
 
     result = [
         DataArray(
             data=da.asarray(data),
             coords=base_coords,
-            dims=dims, 
+            dims=dims,
             attrs={"scale_factors": scale, **base_attrs},
         )
     ]
 
     for l in levels:
-        scale = tuple(s ** l for s in scale_factors)   
-            
+        scale = tuple(s ** l for s in scale_factors)
+
         if preserve_dtype:
             arr = downscale(data, reduction, scale).astype(array.dtype)
         else:
@@ -198,7 +211,12 @@ def lazy_pyramid(
 
         # hideous
         new_coords = tuple(
-            DataArray((offset * (base_coords[bc][1] - base_coords[bc][0]))+ base_coords[bc][:s] * sc, name=base_coords[bc].name, attrs=base_coords[bc].attrs)
+            DataArray(
+                (offset * (base_coords[bc][1] - base_coords[bc][0]))
+                + base_coords[bc][:s] * sc,
+                name=base_coords[bc].name,
+                attrs=base_coords[bc].attrs,
+            )
             for s, bc, offset, sc in zip(
                 arr.shape, base_coords, get_downsampled_offset(scale), scale
             )
@@ -224,22 +242,24 @@ def get_downsampled_offset(scale_factors: Sequence) -> np.array:
         tuple(range(1, 1 + ndim))
     )
 
+
 def downscale_slice(sl: slice, scale: int) -> slice:
     """
     Downscale the start, stop, and step of a slice by an integer factor. Ceiling division is used, i.e.
     downscale_slice(Slice(0, 10, None), 3) returns Slice(0, 4, None).
-    """    
-    
+    """
+
     start, stop, step = sl.start, sl.stop, sl.step
     if start:
-        start = int(np.ceil(sl.start/scale))
+        start = int(np.ceil(sl.start / scale))
     if stop:
-        stop = int(np.ceil(sl.stop/scale))
+        stop = int(np.ceil(sl.stop / scale))
     if step:
-        step = int(np.ceil(sl.step/scale))
+        step = int(np.ceil(sl.step / scale))
     result = slice(start, stop, step)
-        
+
     return result
+
 
 def slice_span(sl: slice) -> int:
     """
@@ -247,26 +267,50 @@ def slice_span(sl: slice) -> int:
     """
     return sl.stop - sl.start
 
-def blocked_pyramid(arr, block_size: Sequence, scale_factors: Sequence=(2,2,2), **kwargs):
-    full_pyr = lazy_pyramid(arr, scale_factors=scale_factors, **kwargs)    
+
+def blocked_pyramid(
+    arr, block_size: Sequence, scale_factors: Sequence = (2, 2, 2), **kwargs
+):
+    full_pyr = lazy_pyramid(arr, scale_factors=scale_factors, **kwargs)
     slices = slices_from_chunks(normalize_chunks(block_size, arr.shape))
     absolute_block_size = tuple(map(slice_span, slices[0]))
-    
+
     results = []
-    for idx,sl in enumerate(slices):        
-        regions = [tuple(map(downscale_slice, sl, tuple(np.power(scale_factors, exp)))) for exp in range(len(full_pyr))]
+    for idx, sl in enumerate(slices):
+        regions = [
+            tuple(map(downscale_slice, sl, tuple(np.power(scale_factors, exp))))
+            for exp in range(len(full_pyr))
+        ]
         if tuple(map(slice_span, sl)) == absolute_block_size:
             pyr = lazy_pyramid(arr[sl], scale_factors=scale_factors, **kwargs)
         else:
-            pyr = [full_pyr[l][r] for l,r in enumerate(regions)]
+            pyr = [full_pyr[l][r] for l, r in enumerate(regions)]
         assert len(pyr) == len(regions)
         results.append((regions, pyr))
     return results
 
 
-def blocked_store(sources, targets):
+def blocked_store(sources, targets, chunks=None):
     stores = []
     for slices, source in sources:
-        rechunked_sources = [s.data.rechunk(z.chunks) for s,z in zip(source, targets)]
-        stores.append(da.store(rechunked_sources, targets, lock=SerializableLock(), regions=slices, compute=False))
+        if chunks is not None:
+            rechunked_sources = [
+                s.data.rechunk(chunks) for s, z in zip(source, targets)
+            ]
+        elif hasattr(targets[0], "chunks"):
+            rechunked_sources = [
+                s.data.rechunk(z.chunks) for s, z in zip(source, targets)
+            ]
+        else:
+            rechunked_sources = [s.data for s in source]
+
+        stores.append(
+            da.store(
+                rechunked_sources,
+                targets,
+                lock=SerializableLock(),
+                regions=slices,
+                compute=False,
+            )
+        )
     return stores
