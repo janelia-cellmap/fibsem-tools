@@ -10,7 +10,7 @@ from typing import (
     Tuple,
     MutableMapping,
     Sequence,
-    Any
+    Any,
 )
 from dask import delayed
 import dask.array as da
@@ -27,23 +27,27 @@ from mrcfile.mrcmemmap import MrcMemmap
 from xarray import DataArray
 from xarray.core.coordinates import DataArrayCoordinates
 import numpy as np
-from dask import bag 
-from zarr.core import Array as zArray
-from zarr.hierarchy import Group as zGroup
+from dask import bag
+from zarr.core import Array as ZarrArray
+from zarr.hierarchy import Group as ZarrGroup
+from fst.io.mrc import mrc_shape_dtype_inference
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
 # encode the fact that the first axis in n5 is the x axis
 _n5_axes = {"z": 2, "y": 1, "x": 0}
 _formats = (".dat", ".mrc")
-_container_extensions = (".zarr", ".n5", ".h5")
+_container_extensions = (".zarr", ".n5", ".h5", ".precomputed")
 _suffixes = (*_formats, *_container_extensions)
 
 Pathlike = Union[str, Path]
-Arraylike = Union[zArray, da.Array, DataArray, np.array]
-ArraySources = Union[List[dask.delayed], zArray, zGroup, h5py.Dataset, h5py.Group, np.array]
+Arraylike = Union[zarr.core.Array, da.Array, DataArray, np.array]
+ArraySources = Union[
+    List[dask.delayed], zarr.core.Array, zarr.hierarchy.Group, h5py.Dataset, h5py.Group, np.array
+]
 
-defaultUnit = 'nm'
+defaultUnit = "nm"
+
 
 def broadcast_kwargs(**kwargs) -> Dict:
     """
@@ -108,11 +112,15 @@ def access_n5(
     return zarr.open(zarr.N5Store(dir_path), path=container_path, **kwargs)
 
 
-def access_zarr(dir_path: Pathlike, container_path: Pathlike, **kwargs) -> Union[zArray, zGroup]:
+def access_zarr(
+    dir_path: Pathlike, container_path: Pathlike, **kwargs
+) -> Union[zarr.core.Array, zarr.hierarchy.Group]:
     return zarr.open(str(dir_path), path=str(container_path), **kwargs)
 
 
-def access_h5(dir_path: Pathlike, container_path: Pathlike, mode: str, **kwargs) -> Union[h5py.Dataset, h5py.Group]:
+def access_h5(
+    dir_path: Pathlike, container_path: Pathlike, mode: str, **kwargs
+) -> Union[h5py.Dataset, h5py.Group]:
     result = h5py.File(dir_path, mode=mode, **kwargs)
     if container_path != "":
         result = result[str(container_path)]
@@ -120,8 +128,41 @@ def access_h5(dir_path: Pathlike, container_path: Pathlike, mode: str, **kwargs)
 
 
 def access_mrc(path: Pathlike, mode: str, **kwargs):
-    return MrcMemmap(path, mode=mode)
+    return MrcMemmap(path, mode=mode, **kwargs)
 
+
+def access_precomputed(outer_path: Pathlike, 
+                       inner_path: Pathlike, 
+                       mode: str):
+
+    from .tensorstore import TensorStoreSpec, KVStore, parse_info
+    import tensorstore as ts
+
+    parent_dir = str(Path(outer_path).parent)
+    container_dir = Path(outer_path).parts[-1]    
+    kvstore = KVStore(driver='file', path=parent_dir)
+    
+    if mode == 'r':
+        # figure out what arrays already exist within the container
+        info = parse_info((Path(outer_path) / 'info').read_text())        
+        scale_keys = [s.key for s in info.scales]
+        if len(str(inner_path)) > 0:          
+            # find the scale index corresponding to the inner path
+            scale_index = scale_keys.index(str(inner_path))
+        else:
+            scale_index = 0
+
+        spec = TensorStoreSpec(driver='neuroglancer_precomputed', 
+                                kvstore=kvstore,
+                                path=str(container_dir), 
+                                scale_index=scale_index)
+
+        result = ts.open(spec=spec.asdict(), read=True).result()
+    
+    elif mode == 'w':
+        result = None
+    
+    return result
 
 accessors: Dict[str, Callable] = {}
 accessors[".dat"] = access_fibsem
@@ -129,6 +170,7 @@ accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
 accessors[".h5"] = access_h5
 accessors[".mrc"] = access_mrc
+accessors['.precomputed'] = access_precomputed
 
 
 def access(
@@ -139,7 +181,7 @@ def access(
 ) -> ArraySources:
     """
 
-    Access data on disk from a variety of array storage formats.
+    Access data from a variety of array storage formats.
 
     Parameters
     ----------
@@ -210,7 +252,7 @@ def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], lazy=False, **kwa
     return access(path, mode="r", lazy=lazy, **kwargs)
 
 
-def infer_coordinates_3d(arr: Arraylike, default_unit='nm') -> List[DataArray]:
+def infer_coordinates_3d(arr: Arraylike, default_unit="nm") -> List[DataArray]:
     """
     Infer the coordinates and units from a 3D volume.
 
@@ -225,7 +267,7 @@ def infer_coordinates_3d(arr: Arraylike, default_unit='nm') -> List[DataArray]:
     # DataArray: get coords attribute directly from the data
     if hasattr(arr, "coords"):
         coords = arr.coords
-        
+
     # zarr array or hdf5 array: get coords from attrs
     elif hasattr(arr, "attrs"):
         if arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
@@ -236,19 +278,27 @@ def infer_coordinates_3d(arr: Arraylike, default_unit='nm') -> List[DataArray]:
                 unit = default_unit
 
             scaleDict = {k: scale[v] for k, v in _n5_axes.items()}
-        else:            
+        else:
             scaleDict = {k: 1 for k, v in _n5_axes.items()}
             unit = default_unit
 
-        coords = [DataArray(np.arange(arr.shape[v]) * scaleDict[k], dims=k, attrs={'units': unit}) for k, v in _zarr_axes.items()]        
-        
-    else:        
+        coords = [
+            DataArray(
+                np.arange(arr.shape[v]) * scaleDict[k], dims=k, attrs={"units": unit}
+            )
+            for k, v in _zarr_axes.items()
+        ]
+
+    else:
         # check if this is a dask array constructed from a zarr array
-        if isinstance(arr, da.Array) and isinstance(get_array_original(arr), zArray):
-            arr_source: zArray = get_array_original(arr)
+        if isinstance(arr, da.Array) and isinstance(get_array_original(arr), zarr.core.Array):
+            arr_source: zarr.core.Array = get_array_original(arr)
             coords = infer_coordinates_3d(arr_source)
         else:
-            coords = [DataArray(np.arange(arr.shape[v]), dims=k, attrs={'units': defaultUnit}) for k, v in _zarr_axes.items()]
+            coords = [
+                DataArray(np.arange(arr.shape[v]), dims=k, attrs={"units": defaultUnit})
+                for k, v in _zarr_axes.items()
+            ]
 
     return coords
 
@@ -263,7 +313,7 @@ def DataArrayFromFile(source_path: Pathlike):
     data = DataArrayFactory(
         da.from_array(arr, chunks=arr.chunks),
         attrs={"source": str(source_path)},
-        coords=coords,        
+        coords=coords,
     )
     return data
 
@@ -283,31 +333,31 @@ def DataArrayFactory(arr: Arraylike, **kwargs):
     """
     attrs: Optional[Dict]
     extra_attrs = {}
-    
+
     # if we pass in a zarr array, daskify it first
     # maybe later add hdf5 support here
-    if isinstance(arr, zArray):
+    if isinstance(arr, zarr.core.Array):
         source = str(Path(arr.store.path) / arr.path)
         # save the full path to the array as an attribute
-        extra_attrs['source'] = source
+        extra_attrs["source"] = source
         arr = da.from_array(arr, chunks=arr.chunks)
-        
-    coords = infer_coordinates_3d(arr)    
+
+    coords = infer_coordinates_3d(arr)
     if "coords" not in kwargs:
-        kwargs.update({'coords': coords})        
-        
-    if attrs := kwargs.get('attrs'):
+        kwargs.update({"coords": coords})
+
+    if attrs := kwargs.get("attrs"):
         out_attrs = attrs.copy()
         out_attrs.update(extra_attrs)
-        kwargs['attrs'] = out_attrs
-    else:        
-        kwargs['attrs'] = extra_attrs
-    
+        kwargs["attrs"] = out_attrs
+    else:
+        kwargs["attrs"] = extra_attrs
+
     data = DataArray(arr, **kwargs)
     return data
 
 
-def create_array(group, attrs=None, **kwargs) -> zarr.Array:
+def create_array(group, attrs=None, **kwargs) -> zarr.core.Array:
     name = kwargs["name"]
     overwrite = kwargs.get("overwrite", False)
     if name not in group:
@@ -339,11 +389,11 @@ def create_arrays(
     dtypes: Sequence,
     compressors: Sequence,
     chunks: Sequence,
-    group_attrs: dict={},
-    array_attrs: Optional[Sequence]=None,
+    group_attrs: dict = {},
+    array_attrs: Optional[Sequence] = None,
     overwrite: bool = True,
     parallel: bool = True,
-) -> Tuple[zGroup, List[zArray]]:
+) -> Tuple[zarr.hierarchy.Group, List[zarr.core.Array]]:
     """
     Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). If overwrite==True,
     these arrays will be created as needed and filled with 0s. Otherwise, new arrays will be created, existing arrays with matching properties
@@ -422,7 +472,7 @@ def rmtree_parallel(path: Pathlike) -> int:
     files = fwalk(path)
     if len(files) > 0:
         bg = bag.from_sequence(files)
-        bg.map(lambda v: os.remove(v)).compute(scheduler='processes')
+        bg.map(lambda v: os.remove(v)).compute(scheduler="processes")
     rmtree(path)
     return 0
 
@@ -471,7 +521,7 @@ def get_array_original(arr: da.Array) -> Any:
     return arr.dask[keys[-1]]
 
 
-def fwalk(source: Pathlike, endswith: Union[str, Sequence[str]]='') -> List[str]:
+def fwalk(source: Pathlike, endswith: Union[str, Tuple[str, ...]] = "") -> List[str]:
     """
     Use os.walk to recursively parse a directory tree, returning a list containing the full paths
     to all files with filenames ending with `endswith`.
@@ -482,3 +532,14 @@ def fwalk(source: Pathlike, endswith: Union[str, Sequence[str]]='') -> List[str]
             if file.endswith(endswith):
                 results.append(os.path.join(p, file))
     return results
+
+def infer_dtype(path: str) -> str:
+    fd = read(path)
+    if hasattr(fd, "dtype"):
+        dtype = str(fd.dtype)
+    elif hasattr(fd, "data"):
+        _, dtype = mrc_shape_dtype_inference(fd)
+        dtype=str(dtype)
+    else:
+        raise ValueError(f"Cannot infer dtype of data located at {path}")
+    return dtype
