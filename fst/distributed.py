@@ -26,7 +26,13 @@ from pathlib import Path
 
 
 def get_jobqueue_cluster(
-    walltime="1:00", ncpus=1, cores=1, memory="16GB", threads_per_worker=1, death_timeout="600s", **kwargs
+    walltime="1:00",
+    ncpus=1,
+    cores=1,
+    memory="16GB",
+    threads_per_worker=1,
+    death_timeout="600s",
+    **kwargs,
 ):
     """
     Instantiate a dask_jobqueue cluster using the LSF scheduler on the Janelia Research Campus compute cluster.

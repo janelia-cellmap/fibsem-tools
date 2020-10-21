@@ -1,13 +1,10 @@
 import numpy as np
 import dask.array as da
-import dask
-from collections import namedtuple
 from xarray import DataArray
-from typing import List, Union, Sequence, Callable, Tuple
+from typing import Any, List, Optional, Union, Sequence, Callable
 from scipy.interpolate import interp1d
-from dask.utils import SerializableLock
 from dask.array.core import slices_from_chunks, normalize_chunks
-
+from dask.utils import SerializableLock
 
 def even_padding(length: int, window: int) -> int:
     """
@@ -65,8 +62,8 @@ def prepad(
 
     result = da.pad(array, pw, mode=mode)
 
-    # rechunk so that small extra chunks added by padding are fused into larger chunks
-    if rechunk:
+    # rechunk so that small extra chunks added by padding are fused into larger chunks, but only if we had to add chunks after padding
+    if rechunk and np.any(pw):
         new_chunks = tuple(
             np.multiply(
                 scale_factors, np.ceil(np.divide(result.chunksize, scale_factors))
@@ -314,3 +311,43 @@ def blocked_store(sources, targets, chunks=None):
             )
         )
     return stores
+
+
+def subsample_reduce(a, axis=None):
+    """
+    Coarsening by subsampling, compatible with da.coarsen
+    """
+    if axis is None:
+        return a
+    else:
+        samples = []
+        for ind,s in enumerate(a.shape):
+            if ind in axis:
+                samples.append(slice(0, 1, None))
+            else:
+                samples.append(slice(None))        
+
+        return a[tuple(samples)].squeeze()
+
+
+def mode_reduce(a: Any, axis: Optional[int]=None) -> Any:
+    """
+    Coarsening by computing the n-dimensional mode, compatible with da.coarsen. If input is all 0s, the mode is not computed.
+    """
+    from scipy.stats import mode
+    if axis is None:
+         return a
+    elif a.max() == 0:
+        return np.min(a, axis)
+    else:
+        transposed = a.transpose(*range(0, a.ndim, 2), *range(1, a.ndim, 2))
+        reshaped = transposed.reshape(*transposed.shape[:a.ndim//2], -1)
+        modes = mode(reshaped, axis=reshaped.ndim-1).mode
+        result = modes.squeeze(axis=-1)
+        # sometimes we get a chunk with a single element along an axis, but we want to keep it
+        # squeeze would remove that axis by default, which screws up the dimensionality of the result
+        # this check ensures that we pad the dimensions after over-zealous squeezing
+        # if result.ndim < a.ndim // 2:
+        #    result = np.expand_dims(result, result.ndim)
+        return result
+

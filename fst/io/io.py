@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from .fibsem import read_fibsem
 from pathlib import Path
 from typing import (
@@ -8,7 +9,6 @@ from typing import (
     Callable,
     Dict,
     Tuple,
-    MutableMapping,
     Sequence,
     Any,
 )
@@ -30,7 +30,8 @@ import numpy as np
 from dask import bag
 from zarr.core import Array as ZarrArray
 from zarr.hierarchy import Group as ZarrGroup
-from fst.io.mrc import mrc_shape_dtype_inference
+from .mrc import mrc_shape_dtype_inference, access_mrc, mrc_to_dask
+from numcodecs import GZip
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -125,10 +126,6 @@ def access_h5(
     if container_path != "":
         result = result[str(container_path)]
     return result
-
-
-def access_mrc(path: Pathlike, mode: str, **kwargs):
-    return MrcMemmap(path, mode=mode, **kwargs)
 
 
 def access_precomputed(outer_path: Pathlike, 
@@ -304,14 +301,18 @@ def infer_coordinates_3d(arr: Arraylike, default_unit="nm") -> List[DataArray]:
 
 
 def DataArrayFromFile(source_path: Pathlike):
-    arr = read(source_path)
-    if not hasattr(arr, "chunks"):
-        raise ValueError(
-            f'{arr} does not have a "chunks" attribute. Is it really a distributed array-like?'
-        )
+    if Path(source_path).suffix == '.mrc':
+        arr = mrc_to_dask(source_path, chunks=(1,-1,-1)) 
+    else:
+        arr = read(source_path)
+        arr = da.from_array(arr, chunks=arr.chunks)
+        if not hasattr(arr, "chunks"):
+            raise ValueError(
+                f'{arr} does not have a "chunks" attribute. Is it really a distributed array-like?'
+            )
     coords = infer_coordinates_3d(arr)
     data = DataArrayFactory(
-        da.from_array(arr, chunks=arr.chunks),
+        arr,
         attrs={"source": str(source_path)},
         coords=coords,
     )
@@ -384,78 +385,87 @@ def create_array(group, attrs=None, **kwargs) -> zarr.core.Array:
 
 def create_arrays(
     path: Union[str, Path],
-    names: Sequence,
-    shapes: Sequence,
-    dtypes: Sequence,
-    compressors: Sequence,
-    chunks: Sequence,
-    group_attrs: dict = {},
-    array_attrs: Optional[Sequence] = None,
+    names: Sequence[str],
+    shapes: Sequence[Sequence[int]],
+    dtypes: Sequence[str],
+    compressors: Sequence[Any],
+    chunks: Sequence[Sequence[int]],
+    group_attrs: Dict[str, Any] = {},
+    attrs: Optional[Sequence[Optional[Dict[str, Any]]]] = None,
     overwrite: bool = True,
-    parallel: bool = True,
-) -> Tuple[zarr.hierarchy.Group, List[zarr.core.Array]]:
+) -> Tuple[zarr.hierarchy.Group, Tuple[zarr.core.Array]]:
     """
     Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). If overwrite==True,
     these arrays will be created as needed and filled with 0s. Otherwise, new arrays will be created, existing arrays with matching properties
     will be kept as-is, and existing arrays with mismatched properties will be removed and replaced with an array of 0s.      
     """
 
-    # todo: check that all sequential arguments are the same length
-    group = access(path, mode="a")
-    if group_attrs is not None:
-        group.attrs.put(group_attrs)
+    group: zarr.hierarchy.Group = access(path, mode="a")
+    group.attrs.put(group_attrs)
 
-    if array_attrs is None:
-        array_attrs = [None] * len(names)
+    if attrs is None:
+        attrs = [None] * len(names)
 
-    argdicts = tuple(
-        {k: v for k, v in zip(("name", "shape", "dtype", "compressor", "chunks"), vals)}
-        for vals in zip(names, shapes, dtypes, compressors, chunks)
-    )
+    delayed_creator = delayed(create_array)
 
-    if parallel:
-        arrsDelayed = [
-            delayed(create_array)(
-                group, array_attrs[ind], **argdict, overwrite=overwrite
-            )
-            for ind, argdict in enumerate(argdicts)
-        ]
-        with ProgressBar():
-            arrs = delayed(arrsDelayed).compute(scheduler="threads")
-    else:
-        arrs = [
-            create_array(group, array_attrs[ind], **argdict, overwrite=overwrite)
-            for ind, argdict in enumerate(argdicts)
-        ]
+    arrs_delayed: List[Any] = []
+    for ind in range(len(names)):
+        arrs_delayed.append(
+            delayed_creator(
+                group=group, 
+                attrs=attrs[ind], 
+                name=names[ind], 
+                shape=shapes[ind],
+                dtype=dtypes[ind],
+                compressor=compressors[ind],
+                chunks=chunks[ind],
+                overwrite=overwrite))
+
+    with ProgressBar():
+        arrs: Tuple[zarr.core.Array] = delayed(arrs_delayed).compute(scheduler="threads")
 
     return group, arrs
 
 
-def get_array_paths(root_path) -> List[str]:
-    if root_path[-1] != os.path.sep:
-        root_path += os.path.sep
-    root = read(root_path)
-    if isinstance(root, zarr.hierarchy.array):
-        arrays = [root]
-    else:
-        arrays = get_arrays(root)
+def access_multiscale(
+    container_path: Pathlike,
+    group_path: Pathlike,
+    arrays: Sequence[DataArray],
+    array_paths: Sequence[str], 
+    array_chunks: Sequence[int],
+    root_attrs: Optional[Dict[str, Any]]=None,
+    group_attrs: Dict[str, Any] = {},
+    compressor: Any=GZip(-1),
+    attr_factory: Optional[Callable[[DataArray], Dict[str, Any]]] = None
+) -> Tuple[zarr.hierarchy.group, zarr.Array]:
 
-    result = [g for r in arrays for g in glob(root_path + r.path + "/*")]
+    root: zarr.hierarchy.Group = access(container_path, mode="a")
+    if root_attrs is not None:
+        root.attrs.put(root_attrs)
+    
+    if attr_factory is None:
+        attr_factory = lambda v: {}
 
-    return result
+    shapes, dtypes, compressors, chunks, arr_attrs = [], [], [], [], []
+    for p in arrays:
+        shapes.append(p.shape)
+        dtypes.append(p.dtype)
+        compressors.append(compressor)
+        chunks.append(array_chunks)
+        arr_attrs.append(attr_factory(p))
 
+    zgrp, zarrays = create_arrays(
+        Path(container_path) / group_path,
+        names=array_paths,
+        shapes=shapes,
+        dtypes=dtypes,
+        compressors=compressors,
+        chunks=chunks,
+        group_attrs=group_attrs,
+        attrs=arr_attrs,
+    )
 
-def get_arrays(g):
-    result = []
-    groups, arrays = list(g.groups()), list(g.arrays())
-
-    if len(arrays) >= 1:
-        [result.append(a[1]) for a in arrays]
-
-    if len(groups) >= 1:
-        [result.extend(get_arrays(g[1])) for g in groups]
-
-    return result
+    return zgrp, zarrays
 
 
 def rmtree_parallel(path: Pathlike) -> int:
@@ -492,7 +502,7 @@ def same_compressor(arr: zarr.Array, compressor) -> bool:
 
 
 def same_array_props(
-    arr: zarr.Array, shape: Tuple, dtype: str, compressor, chunks: Tuple
+    arr: zarr.Array, shape: Tuple[int], dtype: str, compressor: Any, chunks: Tuple[int]
 ) -> bool:
     """
 
@@ -532,6 +542,7 @@ def fwalk(source: Pathlike, endswith: Union[str, Tuple[str, ...]] = "") -> List[
             if file.endswith(endswith):
                 results.append(os.path.join(p, file))
     return results
+
 
 def infer_dtype(path: str) -> str:
     fd = read(path)

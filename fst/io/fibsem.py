@@ -18,6 +18,7 @@ MAGIC_NUMBER = 3555587570
 # This is the size of the header, in bytes. Everything beyond this number of bytes is data.
 OFFSET = 1024
 
+
 class FIBSEMHeader(object):
     """Structure to hold header info"""
 
@@ -114,9 +115,11 @@ def _read_header(path):
         [0, 4, 6, 8, 24, 32, 33],
     )
     # read initial header
-    with open(path, mode='rb') as fobj:
+    with open(path, mode="rb") as fobj:
         base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
-        fibsem_header = FIBSEMHeader(**dict(zip(base_header.dtype.names, base_header[0])))
+        fibsem_header = FIBSEMHeader(
+            **dict(zip(base_header.dtype.names, base_header[0]))
+        )
         # now fobj is at position 34, return to 0
         fobj.seek(0, os.SEEK_SET)
         if fibsem_header.FileMagicNum != MAGIC_NUMBER:
@@ -591,6 +594,7 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
     del raw_data
     return result
 
+
 def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
     """
 
@@ -684,45 +688,59 @@ def _convert_data(fibsem):
     return detector_a, detector_b, scaled
 
 
-def _chunked_fibsem_loader(filenames, channel_axis, pad_values=None, concat_axis=0, block_info=None):
+def _chunked_fibsem_loader(
+    filenames, channel_axis, pad_values=None, concat_axis=0, block_info=None
+):
     """
     Load fibsem data and pad if needed. Designed to work with da.map_blocks.
     """
-    idx = block_info[None]['chunk-location']
-    output_shape = block_info[None]['chunk-shape']
-    filedata = np.expand_dims(np.asanyarray(read_fibsem(filenames[idx[0]])), concat_axis)
-    pad_width = np.subtract(output_shape, filedata.shape)    
+    idx = block_info[None]["chunk-location"]
+    output_shape = block_info[None]["chunk-shape"]
+    filedata = np.expand_dims(
+        np.asanyarray(read_fibsem(filenames[idx[0]])), concat_axis
+    )
+    pad_width = np.subtract(output_shape, filedata.shape)
     if np.any(pad_width):
         if not pad_values:
-            raise ValueError('Data must be padded but no pad values were supplied!')
-        padded =[]
+            raise ValueError("Data must be padded but no pad values were supplied!")
+        padded = []
         pw = np.take(pad_width, [x for x in range(len(pad_width)) if x != channel_axis])
         for ind, channel in enumerate(np.swapaxes(filedata, 0, channel_axis)):
-            padded.append(np.pad(channel, list(zip(pw * 0, pw)), mode='constant', constant_values=pad_values[ind]))         
+            padded.append(
+                np.pad(
+                    channel,
+                    list(zip(pw * 0, pw)),
+                    mode="constant",
+                    constant_values=pad_values[ind],
+                )
+            )
 
         result = np.stack(padded, channel_axis)
     else:
         result = filedata
     return result
 
+
 def minmax(filenames, block_info):
-    idx = block_info[None]['chunk-location'][0]
+    idx = block_info[None]["chunk-location"][0]
     filedata = read_fibsem(filenames[idx])
-    return np.expand_dims(np.array([[f.min(), f.max()] for f in filedata]),0)
+    return np.expand_dims(np.array([[f.min(), f.max()] for f in filedata]), 0)
+
 
 def aggregate_fibsem_metadata(fnames):
-        headers = [_read_header(f) for f in fnames]
-        meta, shapes, dtypes = [], [], []
-        # build lists of metadata for each image
-        for d in headers:
-            if d.EightBit == 1: 
-                dtype=">u1" 
-            else: 
-                dtype=">i2"
-            meta.append(d.__dict__)
-            shapes.append((d.ChanNum, d.YResolution, d.XResolution))
-            dtypes.append(dtype) 
-        return meta, shapes, dtypes
+    headers = [_read_header(f) for f in fnames]
+    meta, shapes, dtypes = [], [], []
+    # build lists of metadata for each image
+    for d in headers:
+        if d.EightBit == 1:
+            dtype = ">u1"
+        else:
+            dtype = ">i2"
+        meta.append(d.__dict__)
+        shapes.append((d.ChanNum, d.YResolution, d.XResolution))
+        dtypes.append(dtype)
+    return meta, shapes, dtypes
+
 
 class FibsemDataset:
     def __init__(self, filenames: Sequence):
@@ -730,38 +748,66 @@ class FibsemDataset:
         Create a representation of a collection of .dat files as a single dataset.
         """
         self.filenames = filenames
-        self.metadata, self.shapes, self.dtypes = aggregate_fibsem_metadata(self.filenames)
-        self.axes = {'z': 0,'c': 1, 'y': 2,'x': 3}        
-        self.bounding_shape = {k: v for k,v in zip(self.axes, (len(self.filenames), *np.array(self.shapes).max(0)))}    
+        self.metadata, self.shapes, self.dtypes = aggregate_fibsem_metadata(
+            self.filenames
+        )
+        self.axes = {"z": 0, "c": 1, "y": 2, "x": 3}
+        self.bounding_shape = {
+            k: v
+            for k, v in zip(
+                self.axes, (len(self.filenames), *np.array(self.shapes).max(0))
+            )
+        }
         self.extrema = self._get_extrema()
         self.needs_padding = len(set(self.shapes)) > 1
-        self.grid_spacing, self.coords = self._get_grid_spacing_and_coords()        
-        
+        self.grid_spacing, self.coords = self._get_grid_spacing_and_coords()
+
     def _get_grid_spacing_and_coords(self):
         lateral = self.metadata[0]["PixelSize"]
-        axial = abs((self.metadata[0]["WD"] - self.metadata[-1]["WD"]) / len(self.metadata)) / 1e-6
-        grid_spacing = {'z': axial, 'c': 1, 'y': lateral, 'x': lateral}
-        coords = {k: np.arange(0, grid_spacing[k] * self.bounding_shape[k], grid_spacing[k]) for k in grid_spacing}
+        axial = (
+            abs((self.metadata[0]["WD"] - self.metadata[-1]["WD"]) / len(self.metadata))
+            / 1e-6
+        )
+        grid_spacing = {"z": axial, "c": 1, "y": lateral, "x": lateral}
+        coords = {
+            k: np.arange(0, grid_spacing[k] * self.bounding_shape[k], grid_spacing[k])
+            for k in grid_spacing
+        }
         return grid_spacing, coords
-    
+
     def _get_extrema(self):
-        all_extrema = da.map_blocks(minmax, 
-                             self.filenames, 
-                             chunks=((1,) * len(self.filenames), self.bounding_shape['c'], 2), 
-                             dtype=self.dtypes[0])
-        result_data = da.stack([all_extrema.min(0)[:,0], all_extrema.max(0)[:,1]])
-        result = DataArray(result_data, dims=('stat', 'c'), coords={'stat':['min','max']})
+        all_extrema = da.map_blocks(
+            minmax,
+            self.filenames,
+            chunks=((1,) * len(self.filenames), self.bounding_shape["c"], 2),
+            dtype=self.dtypes[0],
+        )
+        result_data = da.stack([all_extrema.min(0)[:, 0], all_extrema.max(0)[:, 1]])
+        result = DataArray(
+            result_data, dims=("stat", "c"), coords={"stat": ["min", "max"]}
+        )
         return result
-    
+
     def to_dask(self, pad_values=None):
-        num_channels = self.bounding_shape['c']
+        num_channels = self.bounding_shape["c"]
         if self.needs_padding:
             if pad_values is None:
-                raise ValueError('Data must be padded but no pad values were supplied!')
-            elif len(pad_values) != num_channels:                
-                raise ValueError(f'Length of pad values {pad_values} does not match the length of the channel axis ({num_channels})')
-            
-        chunks = ((1,) * self.bounding_shape['z'], *[self.bounding_shape[k] for k in ('c','y','x')])
-        darr = da.map_blocks(_chunked_fibsem_loader, self.filenames, self.axes['c'], pad_values, chunks=chunks, dtype=self.dtypes[0])
+                raise ValueError("Data must be padded but no pad values were supplied!")
+            elif len(pad_values) != num_channels:
+                raise ValueError(
+                    f"Length of pad values {pad_values} does not match the length of the channel axis ({num_channels})"
+                )
+
+        chunks = (
+            (1,) * self.bounding_shape["z"],
+            *[self.bounding_shape[k] for k in ("c", "y", "x")],
+        )
+        darr = da.map_blocks(
+            _chunked_fibsem_loader,
+            self.filenames,
+            self.axes["c"],
+            pad_values,
+            chunks=chunks,
+            dtype=self.dtypes[0],
+        )
         return darr
-    
