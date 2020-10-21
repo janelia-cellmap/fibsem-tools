@@ -1,126 +1,280 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Union, Tuple, Literal, Sequence, Any
 import numpy as np
+from pandas.core.arrays import string_
 from xarray import DataArray
+from dataclasses import asdict, dataclass
+import json
+from fst.io.mrc import mrc_to_dask
+from fst.io import read
+import dask.array as da
+import dacite
+
+CONTAINER_TYPES ={'mrc', 'n5', 'precomputed'}
+DTYPE_FORMATS = {"uint16": "n5", "uint8": "precomputed", "uint64": "n5"}
+CONTENT_TYPES = {"em", "lm", "prediction", "segmentation", "analysis"}
+ContainerTypes = Literal['n5', 'precomputed', 'mrc']
+
+@dataclass
+class VolumeStorageSpec:
+    kvStore: str
+    containerType: ContainerTypes
+    containerPath: str
+    dataPath: str
+
+    def toURI(self):
+        return f'{self.kvStore}://{Path(self.containerPath).with_suffix("." + self.containerType).joinpath(self.dataPath)}'
+
+    def __post_init__(self):
+        if self.containerType not in CONTAINER_TYPES:
+            raise ValueError(
+                f"containerType must be one of {CONTAINER_TYPES}"
+            )
+
+@dataclass
+class ContrastLimits:
+    min: float
+    max: float
+
+    def __post_init__(self):
+        if not self.min <= self.max:
+            raise ValueError('min must be less than or equal to max.')
 
 
-def display_attrs(
-    contrast_min: float = 0,
-    contrast_max: float = 1,
-    gamma: float = 1,
-    color: str = "white",
+@dataclass
+class DisplaySettings:
+    contrastLimits: ContrastLimits
+    color: str = 'white'
     invertColormap: bool = False
-):
-    assert (contrast_min >= 0) & (contrast_min <= 1)
-    assert (contrast_max >= 0) & (contrast_max <= 1)
-    assert gamma > 0
-    return {
-        "displaySettings": {
-            "contrastMin": contrast_min,
-            "contrastMax": contrast_max,
-            "gamma": gamma,
-            "color": color,
-            "invertColormap": invertColormap,
-        }
-    }
+
+    @classmethod
+    def fromDict(cls, d: Dict[str, Any]):
+        return dacite.from_dict(cls, d)
 
 
-def neuroglancer_multiscale_group_attrs(axes: List, units: List) -> dict:
-    # see https://github.com/google/neuroglancer/issues/176#issuecomment-553027775
-    return {"axes": axes, "units": units}
+@dataclass
+class SpatialTransform:
+    axes: Sequence[str]
+    units: Sequence[str]
+    translate: Sequence[float]
+    scale: Sequence[float]
+
+    def __post_init__(self):
+        assert len(self.axes) == len(self.units) == len(self.translate) == len(self.scale)
+
+    @classmethod
+    def fromDataArray(cls, dataarray: DataArray):
+        axes = [str(d) for d in dataarray.dims]
+        units = [dataarray.coords[ax].units for ax in axes]
+        translate = [float(dataarray.coords[ax][0]) for ax in axes]
+        scale = [abs(float(dataarray.coords[ax][1]) - float(dataarray.coords[ax][0])) for ax in axes]
+
+        return cls(axes=axes, units=units, translate=translate, scale=scale)
+
+    @classmethod
+    def fromDict(cls, d: Dict[str, Any]):
+        return dacite.from_dict(cls, d)
 
 
-def cosem_array_attrs(
-    translate: List, scale: List, units: List, axes: List, name: str
-) -> dict:
-    return {
-        "name": name,
-        "transform": {
-            "translate": translate,
-            "scale": scale,
-            "units": units,
-            "axes": axes,
-        },
-    }
+@dataclass
+class VolumeMeta:
+    name: str
+    dataType: str
+    dimensions: Sequence[float]
+    transform: SpatialTransform
+    contentType: str
+    displaySettings: DisplaySettings
+    containerType: ContainerTypes
+    description: str = ''
+    version: str = '0'
+    tags: Sequence[str] = ()
+
+    def __post_init__(self):
+        assert self.contentType in CONTENT_TYPES
 
 
-def cosem_multiscale_group_attrs(
-    transforms: List, array_paths: List, name: str
-) -> dict:
-    return {
-        "name": name,
-        "multiscales": [
-            {
-                "datasets": [
-                    {"path": p, "transform": t} for p, t in zip(array_paths, transforms)
-                ]
-            }
-        ],
-    }
+@dataclass 
+class DatasetView:
+    name: str
+    description: str
+    position: Optional[Sequence[float]]
+    scale: Optional[float]
+    volumeKeys: Sequence[str]
 
 
-def n5v_array_attrs(dimensions: List, unit: str) -> dict:
-    return {"pixelResolution": {"dimensions": dimensions, "unit": unit}}
+@dataclass
+class MultiscaleSpec:
+    reduction: str
+    depth: int
+    factors: Union[int, Sequence[int]]
 
 
-def n5v_multiscale_group_attrs(scales: List[List], pixelResolution: dict) -> dict:
-    return {"scales": scales, **pixelResolution}
+@dataclass
+class VolumeSource:
+    path: str
+    name: str
+    datasetName: str
+    dataType: str
+    dimensions: Sequence[float]
+    transform: SpatialTransform
+    contentType: str
+    containerType: Optional[ContainerTypes]
+    displaySettings: DisplaySettings
+    description: str = ''
+    version: str="0"
+    tags: Optional[Sequence[str]] = None
+
+    def __post_init__(self):
+        assert self.contentType in CONTENT_TYPES
+        assert len(self.version) > 0
+
+    def toDataArray(self):
+        if Path(self.path).suffix == ".mrc":
+            array = mrc_to_dask(self.path, chunks=(1, -1, -1))
+        else:
+            r = read(self.path)
+            array = da.from_array(r, chunks=r.chunks)
+        coords = [
+            DataArray(
+                self.transform.translate[idx] + np.arange(array.shape[idx]) * self.transform.scale[idx],
+                dims=ax,
+                attrs= {'units': self.transform.units[idx]}
+                )
+            for idx, ax in enumerate(self.transform.axes)
+        ]
+        return DataArray(array, coords=coords, name=self.name)
 
 
-def group_attrs(pyramids: List, array_paths: Optional[List] = None, axis_order='C') -> dict:
-    if not array_paths:
-        array_paths = [f"s{idx}" for idx in range(len(pyramids))]
-    assert len(pyramids) == len(array_paths)
+    @classmethod
+    def fromDict(cls, d: Dict[str, Any]):
+        return dacite.from_dict(cls, d)
 
-    if axis_order == 'F':
-        axes = pyramids[0].dims[::-1]
-        scales = [list(s.scale_factors)[::-1] for s in pyramids]        
-    else:
-        axes = pyramids[0].dims
-        scales = [list(s.scale_factors) for s in pyramids]        
-    coords_reordered = [pyramids[0].coords[k] for k in axes]
-    units = list(d.units for d in coords_reordered)
-    arr_attrs = [array_attrs(p, axis_order=axis_order) for p in pyramids]
+
+
+@dataclass
+class DatasetIndex:
+    name: str
+    volumes: Dict[str, VolumeSource]
+    views: Sequence[DatasetView]
     
-    # we need this for n5-view... I think
-    pixelResolution = {"pixelResolution": arr_attrs[0]["pixelResolution"]}
-    # these settings determine downstream visualization of the data
-    displaySettings = {"displaySettings": arr_attrs[0]["displaySettings"]}
-    n5v_attrs = n5v_multiscale_group_attrs(scales, pixelResolution=pixelResolution)
-    neuroglancer_attrs = neuroglancer_multiscale_group_attrs(
-        axes=axes, units=units
-    )
-    transforms = [a["transform"] for a in arr_attrs]
-    cosem_attrs = cosem_multiscale_group_attrs(
-        transforms=transforms, array_paths=array_paths, name=arr_attrs[0]["name"]
-    )
-    return {**n5v_attrs, **neuroglancer_attrs, **cosem_attrs, **displaySettings}
+    @classmethod
+    def from_json(cls, fname: Union[str, Path]):
+        return cls(**json.loads(Path(fname).read_text()))
+    
+    def to_json(self, fname: str) -> int:
+        pth = Path(fname)
+        if not pth.exists():
+            pth.touch()
+        return pth.write_text(json.dumps(asdict(self)))            
 
 
-def array_attrs(arr: DataArray, axis_order='C') -> dict:    
-    if axis_order == 'F':
-        axes = arr.dims[::-1]
-    else:
-        axes = arr.dims
-    coords_reordered = [arr.coords[k] for k in axes]
-    translate = [float(c.data[0]) for c in coords_reordered]
-    scale = list(
-        map(
-            float,
-            np.subtract([k.data[1] for k in coords_reordered], translate).tolist(),
-        )
-    )
-    units = list(d.units for d in coords_reordered)
-    name = arr.attrs["name"]
-    display = arr.attrs.get("displaySettings")
-    if not display:
-        display = display_attrs()
-        print("displaySettings not found in dataset attrs. Using defaults!")
-    else:
-        display = {'displaySettings': display}
+@dataclass
+class VolumeIngest:
+    source: VolumeSource
+    multiscaleSpec: MultiscaleSpec
+    storageSpec: VolumeStorageSpec
+    mutation: Optional[str] = None
+
+
+@dataclass
+class COSEMArrayAttrs:
+    name: str
+    transform: SpatialTransform
+
+    @classmethod
+    def fromDataArray(cls, data: DataArray) -> "COSEMArrayAttrs":
+        name = data.name
+        if name is not None:
+            return cls(str(name), SpatialTransform.fromDataArray((data)))
+        else: 
+            raise ValueError('DataArray argument must have a valid name')
+
+
+@dataclass
+class OMEScaleAttrs:
+    path: str 
+    transform: SpatialTransform
+
+
+@dataclass
+class OMEMultiscaleAttrs:
+    datasets: Sequence[OMEScaleAttrs]
+
+
+@dataclass
+class COSEMGroupAttrs:
+    name: str
+    multiscales: Sequence[OMEMultiscaleAttrs]
+
+
+@dataclass
+class N5PixelResolution:
+    dimensions: Sequence[float]
+    unit: str
+
+
+@dataclass
+class NeuroglancerGroupAttrs:
+    # see https://github.com/google/neuroglancer/issues/176#issuecomment-553027775
+    axes: Sequence[str]
+    units: Sequence[str]
+    scales: Sequence[Sequence[int]]
+    pixelResolution: N5PixelResolution
+
+
+@dataclass
+class MultiscaleGroupAttrs:
+    name: str
+    multiscales: Sequence[OMEMultiscaleAttrs]
+    axes: Sequence[str]
+    units: Sequence[str]
+    scales: Sequence[Sequence[int]]
+    pixelResolution: N5PixelResolution
+
+
+def makeN5ArrayAttrs(dimensions: Sequence[float], unit: str) -> Dict[str, N5PixelResolution]:
+    return {'pixelResolution': N5PixelResolution(dimensions, unit)}
+
+
+def makeMultiscaleGroupAttrs(name: str,
+                            arrays: Sequence[DataArray], 
+                            array_paths: Sequence[str], 
+                            axis_order: str="F") -> MultiscaleGroupAttrs:
+    
+    assert len(arrays) == len(array_paths)
+    cosemArrayAttrs = tuple(COSEMArrayAttrs.fromDataArray(a) for a in arrays)
+    
+    axis_indexer = slice(None)
+    # neuroglancer wants the axes reported in fortran order
+    if axis_order == "F":
+        axis_indexer = slice(-1, None, -1)
         
-    cosem_attrs = cosem_array_attrs(
-        translate=translate, scale=scale, units=units, axes=axes, name=name
-    )
-    n5v_attrs = n5v_array_attrs(dimensions=scale, unit=units[0])
-    return {**cosem_attrs, **n5v_attrs, **display}
+    axes: Tuple[str] = arrays[0].dims[axis_indexer]
+    scales = tuple(tuple(s.scale_factors)[axis_indexer] for s in arrays)
+    coords_reordered = tuple(arrays[0].coords[k] for k in axes)
+    units = tuple(d.units for d in coords_reordered)
+
+    # we need this for neuroglancer
+    pixelResolution = N5PixelResolution(dimensions=cosemArrayAttrs[0].transform.scale[axis_indexer], unit=units[0])
+    multiscales = OMEMultiscaleAttrs(datasets=[OMEScaleAttrs(path=ap, transform=attr.transform) for ap, attr in zip(array_paths, cosemArrayAttrs)])
+
+    result = MultiscaleGroupAttrs(name=name,
+                                  multiscales=[multiscales], 
+                                  axes=axes,
+                                  units=units,
+                                  scales=scales,
+                                  pixelResolution=pixelResolution)
+    return result
+
+
+@dataclass
+class CompositeArrayAttrs:
+    name: str
+    transform: SpatialTransform
+    pixelResolution: N5PixelResolution
+
+    @classmethod
+    def fromDataArray(cls, data: DataArray):
+        cosemAttrs = COSEMArrayAttrs.fromDataArray(data)
+        pixelResolution = N5PixelResolution(cosemAttrs.transform.scale[::-1], unit=cosemAttrs.transform.units[0])
+        return cls(cosemAttrs.name, cosemAttrs.transform, pixelResolution)
