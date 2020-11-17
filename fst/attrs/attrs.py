@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Optional, Dict, Union, Tuple, Literal, Sequence, Any
+import fsspec
 import numpy as np
 from pandas.core.arrays import string_
 from xarray import DataArray
@@ -14,6 +15,7 @@ CONTAINER_TYPES ={'mrc', 'n5', 'precomputed'}
 DTYPE_FORMATS = {"uint16": "n5", "uint8": "precomputed", "uint64": "n5"}
 CONTENT_TYPES = {"em", "lm", "prediction", "segmentation", "analysis"}
 ContainerTypes = Literal['n5', 'precomputed', 'mrc']
+
 
 @dataclass
 class VolumeStorageSpec:
@@ -76,30 +78,18 @@ class SpatialTransform:
         return dacite.from_dict(cls, d)
 
 
-@dataclass
-class VolumeMeta:
-    name: str
-    dataType: str
-    dimensions: Sequence[float]
-    transform: SpatialTransform
-    contentType: str
-    displaySettings: DisplaySettings
-    containerType: ContainerTypes
-    description: str = ''
-    version: str = '0'
-    tags: Sequence[str] = ()
-
-    def __post_init__(self):
-        assert self.contentType in CONTENT_TYPES
-
-
 @dataclass 
 class DatasetView:
+    datasetName: str
     name: str
     description: str
     position: Optional[Sequence[float]]
     scale: Optional[float]
     volumeKeys: Sequence[str]
+ 
+    @classmethod
+    def fromDict(cls, d: Dict[str, Any]):
+        return dacite.from_dict(cls, d)
 
 
 @dataclass
@@ -107,6 +97,14 @@ class MultiscaleSpec:
     reduction: str
     depth: int
     factors: Union[int, Sequence[int]]
+
+
+@dataclass
+class MeshSource:
+    path: str
+    name: str
+    datasetName: str
+    format: str
 
 
 @dataclass
@@ -154,18 +152,20 @@ class VolumeSource:
 @dataclass
 class DatasetIndex:
     name: str
-    volumes: Dict[str, VolumeSource]
+    volumes: Sequence[VolumeSource]
     views: Sequence[DatasetView]
     
     @classmethod
-    def from_json(cls, fname: Union[str, Path]):
-        return cls(**json.loads(Path(fname).read_text()))
+    def from_json(cls, fname: Union[str, Path], open_kwargs: dict = {}):
+        with fsspec.open(str(fname), mode='rt', **open_kwargs) as fh:
+            jblob = json.loads(fh.read())
+        return cls(**jblob)
     
-    def to_json(self, fname: str) -> int:
-        pth = Path(fname)
-        if not pth.exists():
-            pth.touch()
-        return pth.write_text(json.dumps(asdict(self)))            
+    def to_json(self, fname: Union[str, Path], open_kwargs: dict = {}) -> int:
+        jblob = json.dumps(asdict(self))
+        with fsspec.open(str(fname), mode='wt', **open_kwargs) as fh:
+            result = fh.write(jblob)
+        return result
 
 
 @dataclass
