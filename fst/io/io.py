@@ -16,8 +16,7 @@ from dask import delayed
 import dask.array as da
 import os
 from shutil import rmtree
-from glob import glob
-from itertools import groupby
+from itertools import groupby, chain
 from collections import defaultdict
 from dask.diagnostics import ProgressBar
 import zarr
@@ -542,6 +541,20 @@ def fwalk(source: Pathlike, endswith: Union[str, Tuple[str, ...]] = "") -> List[
             if file.endswith(endswith):
                 results.append(os.path.join(p, file))
     return results
+
+
+def fwalk_parallel(elements: Sequence[Path]):
+    """
+    Given a sequence containing either files or directories, separate the input files, walk the directories,
+    in parallel, and return the all files found + input files 
+    """
+    files, dirs = [], []
+    for k,v in groupby(sorted(elements, key=Path.is_dir), key=Path.is_dir):
+        if k: dirs.extend([delayed(fwalk)(val) for val in list(v)])
+        else: files.extend(list(map(str, v)))
+    dirs_computed = delayed(dirs).compute()
+    files.extend(list(chain(*dirs_computed)))
+    return  files
 
 
 def infer_dtype(path: str) -> str:

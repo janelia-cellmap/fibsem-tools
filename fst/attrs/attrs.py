@@ -153,6 +153,7 @@ class VolumeSource:
 class DatasetIndex:
     name: str
     volumes: Sequence[VolumeSource]
+    meshes: Sequence[MeshSource]
     views: Sequence[DatasetView]
     
     @classmethod

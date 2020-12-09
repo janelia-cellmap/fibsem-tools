@@ -111,10 +111,10 @@ def prepare_pyramids(
 
 def change_dtype(data: list, output_dtype: str, offset: np.array) -> list:
     """
-    Lazy histogram-preserving datatype adjustment of a collection of array-likes. 
-    Signed datatypes (int8, int16) are converted to their unsigned counterparts (uint8, uint16) by upcasting to signed type with 
-    higher precision, shifting all values by a constant, then downcasting to the final unsigned datatype. The resulting arrays 
-    have a global minimum of 0, with the original min-max distance.  
+    Lazy histogram-preserving datatype adjustment of a collection of array-likes.
+    Signed datatypes (int8, int16) are converted to their unsigned counterparts (uint8, uint16) by upcasting to signed type with
+    higher precision, shifting all values by a constant, then downcasting to the final unsigned datatype. The resulting arrays
+    have a global minimum of 0, with the original min-max distance.
     """
 
     @dask.delayed

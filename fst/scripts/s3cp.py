@@ -3,9 +3,10 @@ from dask import bag
 import click
 from pathlib import Path
 from dask.diagnostics import ProgressBar
-from typing import Sequence, Optional, Tuple, List
+from typing import Sequence, Optional, Dict
+from dataclasses import dataclass
 from fst.io import fwalk
-import os
+from functools import partial
 
 STAGES = ("dev", "prod", "val")
 
@@ -13,17 +14,30 @@ STAGES = ("dev", "prod", "val")
 def iterput(
     sources: Sequence[str],
     dests: Sequence[str],
-    tags: Sequence[Optional[dict]],
+    tags: Optional[Sequence[Optional[Dict]]] = None,
     profile: Optional[str] = None,
+    overwrite: bool = True,
 ):
     """
     Given a sequence of sources, dests, and tags, save each source to dest with a tag.    
     """
     fs = s3fs.S3FileSystem(profile=profile)
+    if tags == None:
+        tags = (None,) * len(sources)
     for source, dest, tag in zip(sources, dests, tags):
-        fs.put(source, dest)
-        if tag is not None:
-            fs.put_tags(dest, tag)
+        wrote = False
+        try:
+            if overwrite:
+                fs.put(source, dest)
+                wrote = True
+            else:
+                if not fs.exists(dest):
+                    fs.put(source, dest)
+                    wrote = True
+            if tag is not None and wrote:
+                fs.put_tags(dest, tag)
+        except OSError as err:
+            print(f'Something went wrong copying {source} to {dest}: {err}')
     return True
 
 
@@ -31,8 +45,8 @@ def s3put(
     dest_root: str,
     source_path: str,
     endswith: Optional[str] = "",
-    tags: Optional[dict] = None,
-    partition_size=None,
+    tags: Optional[Dict] = None,
+    partition_size: int=None,
 ):
     sources = tuple(map(str, fwalk(source_path, endswith)))
     dests = tuple(
@@ -77,6 +91,24 @@ def s3put_cli(
         }
         s3put(dest_root, source_path, endswith=endswith, tags=tags).compute()
     return 0
+
+
+@dataclass
+class TransferPlan:
+    destination: str
+    source_root: str
+    profile: str
+    partition_size: int = 1000
+    
+    def prepare_source(self, source_file: str):
+        return f'{self.destination}/{Path(source_file).relative_to(self.source_root)}'
+    
+    def prepare_transfer(self, sources: Sequence[str],  overwrite: bool):
+        source_bag = bag.from_sequence(sources, partition_size=self.partition_size)
+        dest_bag = source_bag.map(self.prepare_source)
+        result = bag.map_partitions(partial(iterput, profile=self.profile, overwrite=overwrite), source_bag, dest_bag)
+        return result
+   
 
 
 if __name__ == "__main__":
