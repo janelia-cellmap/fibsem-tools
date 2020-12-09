@@ -6,17 +6,17 @@ import xarray
 import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple, Union, Mapping
-from fst.io.io import infer_dtype
-from fst.io import read, DataArrayFromFile
+from ..io.io import infer_dtype
+from ..io import read, DataArrayFromFile
 from dataclasses import asdict
-from fst.attrs import (
+from ..attrs import (
     VolumeSource,
     DisplaySettings,
     ContrastLimits,
-    SpatialTransform,
     DatasetView,
     MeshSource,
 )
+from xarray_multiscale.metadata.util import SpatialTransform
 from pymongo import MongoClient, ReplaceOne
 from sheetscrape.scraper import GoogleSheetScraper
 import pandas as pd
@@ -249,6 +249,7 @@ class RawSources:
     pred: Optional[Tuple[str, ...]] = None
     groundTruth: Optional[str] = None
     meshes: Tuple[str, ...] = ()
+    lm: Optional[Tuple[str, ...]] = None
 
 
 hess_raw_dir = "/groups/hess/hesslab/HighResPaper_rawdata"
@@ -400,6 +401,7 @@ raw_sources = (
             f"/nrs/cosem/bennettd/COS7_Cell11_8x8x8nm/SIFTalignTrans-invert.n5/volumes/raw/",
             DisplaySettings(ContrastLimits(0, 1)),
         ),
+        lm=('/nrs/saalfeld/john/projects/cosem/COS7_Cell11/LoadID277_Cell11_light.n5/PALM_488', '/nrs/saalfeld/john/projects/cosem/COS7_Cell11/LoadID277_Cell11_light.n5/PALM_532')
     ),
 )
 

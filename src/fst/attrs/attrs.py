@@ -10,6 +10,7 @@ from fst.io.mrc import mrc_to_dask
 from fst.io import read
 import dask.array as da
 import dacite
+from xarray_multiscale.metadata.util import SpatialTransform
 
 CONTAINER_TYPES ={'mrc', 'n5', 'precomputed'}
 DTYPE_FORMATS = {"uint16": "n5", "uint8": "precomputed", "uint64": "n5"}
@@ -48,30 +49,6 @@ class DisplaySettings:
     contrastLimits: ContrastLimits
     color: str = 'white'
     invertColormap: bool = False
-
-    @classmethod
-    def fromDict(cls, d: Dict[str, Any]):
-        return dacite.from_dict(cls, d)
-
-
-@dataclass
-class SpatialTransform:
-    axes: Sequence[str]
-    units: Sequence[str]
-    translate: Sequence[float]
-    scale: Sequence[float]
-
-    def __post_init__(self):
-        assert len(self.axes) == len(self.units) == len(self.translate) == len(self.scale)
-
-    @classmethod
-    def fromDataArray(cls, dataarray: DataArray):
-        axes = [str(d) for d in dataarray.dims]
-        units = [dataarray.coords[ax].units for ax in axes]
-        translate = [float(dataarray.coords[ax][0]) for ax in axes]
-        scale = [abs(float(dataarray.coords[ax][1]) - float(dataarray.coords[ax][0])) for ax in axes]
-
-        return cls(axes=axes, units=units, translate=translate, scale=scale)
 
     @classmethod
     def fromDict(cls, d: Dict[str, Any]):
