@@ -5,7 +5,7 @@ from pathlib import Path
 from dask.diagnostics import ProgressBar
 from typing import Sequence, Optional, Dict
 from dataclasses import dataclass
-from fst.io import fwalk
+from ..io import fwalk
 from functools import partial
 
 STAGES = ("dev", "prod", "val")
