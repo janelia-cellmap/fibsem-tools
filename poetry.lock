@@ -276,6 +276,17 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "mrcfile"
+version = "1.2.0"
+description = "MRC file I/O library"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+numpy = ">=1.12.0"
+
+[[package]]
 name = "msgpack"
 version = "1.0.0"
 description = "MessagePack (de)serializer."
@@ -534,7 +545,7 @@ heapdict = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "d2fe6d29d86fc82df19345b4d7ee6191b930bd2fe9893ef56bf5ac7b917be441"
+content-hash = "32da6df19d5da1484b8cbada1e98fccd0261d6fb0daaa9cdc956f1cc910fee3f"
 
 [metadata.files]
 aiobotocore = [
@@ -669,6 +680,10 @@ jmespath = [
 monotonic = [
     {file = "monotonic-1.5-py2.py3-none-any.whl", hash = "sha256:552a91f381532e33cbd07c6a2655a21908088962bb8fa7239ecbcc6ad1140cc7"},
     {file = "monotonic-1.5.tar.gz", hash = "sha256:23953d55076df038541e648a53676fb24980f7a1be290cdda21300b3bc21dfb0"},
+]
+mrcfile = [
+    {file = "mrcfile-1.2.0-py2.py3-none-any.whl", hash = "sha256:bb9accb62529f3f9a64abbf3961cf410a3d3e4c8d625f3d28175da20dab74257"},
+    {file = "mrcfile-1.2.0.tar.gz", hash = "sha256:9afaa76f52e84b127abefdbf819ac195b8898e802f9a2be37b10305b4c521f9c"},
 ]
 msgpack = [
     {file = "msgpack-1.0.0-cp35-cp35m-manylinux1_i686.whl", hash = "sha256:cec8bf10981ed70998d98431cd814db0ecf3384e6b113366e7f36af71a0fca08"},
