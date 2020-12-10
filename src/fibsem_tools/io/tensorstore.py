@@ -1,5 +1,5 @@
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, Optional, List, Sequence
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Sequence
 import tensorstore as ts
 import numpy as np
 import json

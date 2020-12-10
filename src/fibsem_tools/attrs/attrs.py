@@ -2,12 +2,11 @@ from pathlib import Path
 from typing import List, Optional, Dict, Union, Tuple, Literal, Sequence, Any
 import fsspec
 import numpy as np
-from pandas.core.arrays import string_
 from xarray import DataArray
 from dataclasses import asdict, dataclass
 import json
-from fst.io.mrc import mrc_to_dask
-from fst.io import read
+from ..io.mrc import mrc_to_dask
+from ..io import read
 import dask.array as da
 import dacite
 from xarray_multiscale.metadata.util import SpatialTransform
