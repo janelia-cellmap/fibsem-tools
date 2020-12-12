@@ -527,7 +527,7 @@ def get_array_original(arr: da.Array) -> Any:
 def fwalk(source: Pathlike) -> List[str]:
     """
     Use os.walk to recursively parse a directory tree, returning a list containing the full paths
-    to all files with filenames ending with `endswith`.
+    to all files with filenames.
     """
     results = []
     fs = fsspec.filesystem(protocol='file')
@@ -536,11 +536,11 @@ def fwalk(source: Pathlike) -> List[str]:
     if isinstance(fs, fsspec.implementations.local.LocalFileSystem):
         for p, _, f in os.walk(source):
             for file in f:
-                results.append(os.path.join(p, file))
+                results.append(os.path.join(os.path.abspath(p), file))
     else:
         for p, f, _ in fs.walk(source):
             for file in f:
-                results.append(os.path.join(p, file))
+                results.append(os.path.join(os.path.abspath(p), file))
 
     return results
 
@@ -557,7 +557,7 @@ def fwalk_parallel(elements: Sequence[str]):
         else: files.extend(list(map(str, v)))
     dirs_computed = delayed(dirs).compute()
     files.extend(list(chain(*dirs_computed)))
-    return  files
+    return files
 
 
 def infer_dtype(path: str) -> str:

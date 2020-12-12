@@ -9,7 +9,7 @@ from pathlib import Path
 def _make_local_files(files):
     result = []
     for f in files:
-        Path(f).mkdir(parents=True, exist_ok=True)
+        Path(f).parent.mkdir(parents=True, exist_ok=True)
         Path(f).touch(exist_ok=True)    
         result.append(str(Path(f).absolute()))
     return result
@@ -57,7 +57,7 @@ def test_fwalk():
     files_found = fwalk('./foo')
     assert set(files_found) == set(files_made)
 
-    #shutil.rmtree('foo')
+    shutil.rmtree('foo')
 
 def test_fwalk_parellel():
     from pathlib import Path
@@ -68,4 +68,4 @@ def test_fwalk_parellel():
     files_found = fwalk_parallel(['./foo'])
     assert set(files_found) == set(files_made)
 
-    #shutil.rmtree('foo')
+    shutil.rmtree('foo')
