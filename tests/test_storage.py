@@ -3,7 +3,7 @@ import zarr
 from fibsem_tools.io import read, access
 import numpy as np
 import shutil
-from fibsem_tools.io import fwalk, fwalk_parallel
+from fibsem_tools.io import list_files, list_files_parallel
 from pathlib import Path
 
 def _make_local_files(files):
@@ -48,24 +48,18 @@ def test_open_group_zarr_n5():
     shutil.rmtree(store)
 
 
-def test_fwalk():
-    from pathlib import Path
-    import shutil
-
+def test_list_files():
     fnames = ['./foo/foo.txt', './foo/bar/bar.txt', './foo/bar/baz/baz.txt']
     files_made = _make_local_files(fnames)    
-    files_found = fwalk('./foo')
+    files_found = list_files('./foo')
     assert set(files_found) == set(files_made)
 
     shutil.rmtree('foo')
 
-def test_fwalk_parellel():
-    from pathlib import Path
-    import shutil
-
+def test_list_files_parellel():
     fnames = ['foo/foo.txt', 'foo/bar/bar.txt', 'foo/bar/baz/baz.txt']
     files_made = _make_local_files(fnames) 
-    files_found = fwalk_parallel(['./foo'])
+    files_found = list_files_parallel(['./foo'])
     assert set(files_found) == set(files_made)
 
     shutil.rmtree('foo')

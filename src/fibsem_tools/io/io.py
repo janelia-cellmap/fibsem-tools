@@ -524,7 +524,7 @@ def get_array_original(arr: da.Array) -> Any:
     return arr.dask[keys[-1]]
 
 
-def fwalk(source: Pathlike) -> List[str]:
+def list_files(source: Pathlike) -> List[str]:
     """
     Use os.walk to recursively parse a directory tree, returning a list containing the full paths
     to all files with filenames.
@@ -545,15 +545,16 @@ def fwalk(source: Pathlike) -> List[str]:
     return results
 
 
-def fwalk_parallel(elements: Sequence[str]):
+def list_files_parallel(elements: Sequence[str]):
     """
     Given a sequence containing either files or directories, separate the input files, walk the directories,
     in parallel, and return the all files found + input files 
     """
     fs: Any = fsspec.filesystem(protocol='file')
+    
     files, dirs = [], []
     for k,v in groupby(sorted(elements, key=fs.isdir), key=fs.isdir):
-        if k: dirs.extend([delayed(fwalk)(val) for val in list(v)])
+        if k: dirs.extend([delayed(list_files)(val) for val in list(v)])
         else: files.extend(list(map(str, v)))
     dirs_computed = delayed(dirs).compute()
     files.extend(list(chain(*dirs_computed)))
