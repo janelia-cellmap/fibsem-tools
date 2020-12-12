@@ -31,6 +31,7 @@ from zarr.core import Array as ZarrArray
 from zarr.hierarchy import Group as ZarrGroup
 from .mrc import mrc_shape_dtype_inference, access_mrc, mrc_to_dask
 from numcodecs import GZip
+import fsspec
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -390,7 +391,7 @@ def create_arrays(
     compressors: Sequence[Any],
     chunks: Sequence[Sequence[int]],
     group_attrs: Dict[str, Any] = {},
-    attrs: Optional[Sequence[Optional[Dict[str, Any]]]] = None,
+    array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
     overwrite: bool = True,
 ) -> Tuple[zarr.hierarchy.Group, Tuple[zarr.core.Array]]:
     """
@@ -402,8 +403,8 @@ def create_arrays(
     group: zarr.hierarchy.Group = access(path, mode="a")
     group.attrs.put(group_attrs)
 
-    if attrs is None:
-        attrs = [None] * len(names)
+    if array_attrs is None:
+        array_attrs = [{}] * len(names)
 
     delayed_creator = delayed(create_array)
 
@@ -412,7 +413,7 @@ def create_arrays(
         arrs_delayed.append(
             delayed_creator(
                 group=group, 
-                attrs=attrs[ind], 
+                attrs=array_attrs[ind], 
                 name=names[ind], 
                 shape=shapes[ind],
                 dtype=dtypes[ind],
@@ -426,24 +427,17 @@ def create_arrays(
     return group, arrs
 
 
-def access_multiscale(
+def populate_group(
     container_path: Pathlike,
     group_path: Pathlike,
     arrays: Sequence[DataArray],
     array_paths: Sequence[str], 
-    array_chunks: Sequence[int],
-    root_attrs: Optional[Dict[str, Any]]=None,
-    group_attrs: Dict[str, Any] = {},
+    chunks: Sequence[int],
+    group_attrs: Optional[Dict[str, Any]] = None,
     compressor: Any=GZip(-1),
-    attr_factory: Optional[Callable[[DataArray], Dict[str, Any]]] = None
+    array_attrs: Optional[Sequence[Dict[str, Any]]] = None
 ) -> Tuple[zarr.hierarchy.group, zarr.Array]:
 
-    root: zarr.hierarchy.Group = access(container_path, mode="a")
-    if root_attrs is not None:
-        root.attrs.put(root_attrs)
-    
-    if attr_factory is None:
-        attr_factory = lambda v: {}
 
     shapes, dtypes, compressors, chunks, arr_attrs = [], [], [], [], []
     for p in arrays:
@@ -467,7 +461,7 @@ def access_multiscale(
     return zgrp, zarrays
 
 
-def rmtree_parallel(path: Pathlike) -> int:
+def rmtree_parallel(path: Pathlike, ) -> int:
     """
     Recursively remove the contents of a directory in parallel. All files are found using os.path.walk, then dask 
     is used to delete the files in parallel. Finally, the (empty) directories are removed.
@@ -481,7 +475,7 @@ def rmtree_parallel(path: Pathlike) -> int:
     files = fwalk(path)
     if len(files) > 0:
         bg = bag.from_sequence(files)
-        bg.map(lambda v: os.remove(v)).compute(scheduler="processes")
+        bg.map(lambda v: os.remove(v))
     rmtree(path)
     return 0
 
@@ -530,26 +524,35 @@ def get_array_original(arr: da.Array) -> Any:
     return arr.dask[keys[-1]]
 
 
-def fwalk(source: Pathlike, endswith: Union[str, Tuple[str, ...]] = "") -> List[str]:
+def fwalk(source: Pathlike) -> List[str]:
     """
     Use os.walk to recursively parse a directory tree, returning a list containing the full paths
     to all files with filenames ending with `endswith`.
     """
     results = []
-    for p, d, f in os.walk(source):
-        for file in f:
-            if file.endswith(endswith):
+    fs = fsspec.filesystem(protocol='file')
+
+    # use os.walk for the local filesystem because it is way faster than fsspec
+    if isinstance(fs, fsspec.implementations.local.LocalFileSystem):
+        for p, _, f in os.walk(source):
+            for file in f:
                 results.append(os.path.join(p, file))
+    else:
+        for p, f, _ in fs.walk(source):
+            for file in f:
+                results.append(os.path.join(p, file))
+
     return results
 
 
-def fwalk_parallel(elements: Sequence[Path]):
+def fwalk_parallel(elements: Sequence[str]):
     """
     Given a sequence containing either files or directories, separate the input files, walk the directories,
     in parallel, and return the all files found + input files 
     """
+    fs: Any = fsspec.filesystem(protocol='file')
     files, dirs = [], []
-    for k,v in groupby(sorted(elements, key=Path.is_dir), key=Path.is_dir):
+    for k,v in groupby(sorted(elements, key=fs.isdir), key=fs.isdir):
         if k: dirs.extend([delayed(fwalk)(val) for val in list(v)])
         else: files.extend(list(map(str, v)))
     dirs_computed = delayed(dirs).compute()
@@ -567,3 +570,5 @@ def infer_dtype(path: str) -> str:
     else:
         raise ValueError(f"Cannot infer dtype of data located at {path}")
     return dtype
+
+    
