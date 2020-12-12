@@ -109,13 +109,19 @@ def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: st
 
 def access_n5(
     dir_path: Pathlike, container_path: Pathlike, **kwargs
-) -> Union[zarr.core.Array, zarr.hierarchy.Group]:
-    return zarr.open(zarr.N5Store(dir_path), path=container_path, **kwargs)
+) -> Any:
+    # zarr is extremely slow to delete existing directories, so we do it ourselves
+    if kwargs.get('mode') == 'w':
+        rmtree_parallel(os.path.join(dir_path, container_path))
+    return zarr.open(zarr.N5Store(dir_path), path=str(container_path), **kwargs)
 
 
 def access_zarr(
     dir_path: Pathlike, container_path: Pathlike, **kwargs
-) -> Union[zarr.core.Array, zarr.hierarchy.Group]:
+) -> Any:
+    # zarr is extremely slow to delete existing directories, so we do it ourselves
+    if kwargs.get('mode') == 'w':
+        rmtree_parallel(os.path.join(dir_path, container_path))
     return zarr.open(str(dir_path), path=str(container_path), **kwargs)
 
 
@@ -227,7 +233,7 @@ def access(
         raise ValueError("`path` must be a string or iterable of strings")
 
 
-def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], lazy=False, **kwargs):
+def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], lazy: bool=False, **kwargs):
     """
 
     Access data on disk with read-only permissions
@@ -461,7 +467,14 @@ def populate_group(
     return zgrp, zarrays
 
 
-def rmtree_parallel(path: Pathlike, ) -> int:
+def delete_zarr_branch_parallel(path: Pathlike):
+    """
+    Recursively delete a branch (group or array) of a zarr hierarchy. 
+    """
+
+
+
+def rmtree_parallel(path: Pathlike) -> int:
     """
     Recursively remove the contents of a directory in parallel. All files are found using os.path.walk, then dask 
     is used to delete the files in parallel. Finally, the (empty) directories are removed.
@@ -472,7 +485,7 @@ def rmtree_parallel(path: Pathlike, ) -> int:
 
     """
     # find all the files using os.walk
-    files = fwalk(path)
+    files = list_files(path)
     if len(files) > 0:
         bg = bag.from_sequence(files)
         bg.map(lambda v: os.remove(v))
