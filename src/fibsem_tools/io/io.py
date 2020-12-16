@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from .fibsem import read_fibsem
 from pathlib import Path
 from typing import (
@@ -15,23 +14,22 @@ from typing import (
 from dask import delayed
 import dask.array as da
 import os
-from shutil import rmtree
-from itertools import groupby, chain
+from itertools import groupby
 from collections import defaultdict
 from dask.diagnostics import ProgressBar
 import zarr
 import h5py
-import dask
 from mrcfile.mrcmemmap import MrcMemmap
 from xarray import DataArray
-from xarray.core.coordinates import DataArrayCoordinates
 import numpy as np
 from dask import bag
-from zarr.core import Array as ZarrArray
-from zarr.hierarchy import Group as ZarrGroup
 from .mrc import mrc_shape_dtype_inference, access_mrc, mrc_to_dask
+from .util import split_path_at_suffix
+from .zarr import delete_zbranch, zarr_array_from_dask
 from numcodecs import GZip
 import fsspec
+import toolz as tz
+from glob import glob
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -42,11 +40,6 @@ _container_extensions = (".zarr", ".n5", ".h5", ".precomputed")
 _suffixes = (*_formats, *_container_extensions)
 
 Pathlike = Union[str, Path]
-Arraylike = Union[zarr.core.Array, da.Array, DataArray, np.array]
-ArraySources = Union[
-    List[dask.delayed], zarr.core.Array, zarr.hierarchy.Group, h5py.Dataset, h5py.Group, np.array
-]
-
 defaultUnit = "nm"
 
 
@@ -75,30 +68,6 @@ def broadcast_kwargs(**kwargs) -> Dict:
     return result
 
 
-def split_path_at_suffix(
-    upper_path: Pathlike, lower_path: Pathlike = "", suffixes: tuple = _suffixes
-) -> List[Path]:
-    """
-    Recursively climb a path, checking at each level of the path whether the tail of the path represents a directory
-    with a container extension. Returns the path broken at the level where a container is found.  
-    """
-    upper, lower = Path(upper_path), Path(lower_path)
-
-    if upper.suffix in suffixes:
-        result = [upper, lower]
-    else:
-        if len(upper.parts) >= 2:
-            result = split_path_at_suffix(
-                Path(*upper.parts[:-1]), Path(upper.parts[-1], lower), suffixes
-            )
-        else:
-            raise ValueError(
-                f"Could not find any suffixes matching {suffixes} in {upper / lower}"
-            )
-
-    return result
-
-
 def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: str):
     if mode != "r":
         raise ValueError(
@@ -107,22 +76,43 @@ def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: st
     return read_fibsem(path)
 
 
+# love the duplicated code here
 def access_n5(
     dir_path: Pathlike, container_path: Pathlike, **kwargs
 ) -> Any:
+    attrs = {}
+    if 'attrs' in kwargs:
+        attrs = kwargs.pop('attrs')
+        
     # zarr is extremely slow to delete existing directories, so we do it ourselves
     if kwargs.get('mode') == 'w':
-        rmtree_parallel(os.path.join(dir_path, container_path))
-    return zarr.open(zarr.N5Store(dir_path), path=str(container_path), **kwargs)
+        tmp_kwargs = kwargs.copy()
+        tmp_kwargs['mode'] = 'a'
+        tmp = zarr.open(zarr.N5Store(str(dir_path)), path=str(container_path), **tmp_kwargs)
+        delete_zbranch(tmp)    
+    array_or_group = zarr.open(str(dir_path), path=str(container_path), **kwargs)
+    if kwargs.get('mode') != 'r':
+        array_or_group.attrs.update(attrs)
+    return array_or_group
 
 
 def access_zarr(
     dir_path: Pathlike, container_path: Pathlike, **kwargs
 ) -> Any:
+    attrs = {}
+    if 'attrs' in kwargs:
+        attrs = kwargs.pop('attrs')
+
     # zarr is extremely slow to delete existing directories, so we do it ourselves
     if kwargs.get('mode') == 'w':
-        rmtree_parallel(os.path.join(dir_path, container_path))
-    return zarr.open(str(dir_path), path=str(container_path), **kwargs)
+        tmp_kwargs = kwargs.copy()
+        tmp_kwargs['mode'] = 'a'
+        tmp = zarr.open(str(dir_path), path=str(container_path), **tmp_kwargs)
+        delete_zbranch(tmp)
+    array_or_group = zarr.open(str(dir_path), path=str(container_path), **kwargs)
+    if kwargs.get('mode') != 'r':
+        array_or_group.attrs.update(attrs)
+    return array_or_group
 
 
 def access_h5(
@@ -136,7 +126,7 @@ def access_h5(
 
 def access_precomputed(outer_path: Pathlike, 
                        inner_path: Pathlike, 
-                       mode: str):
+                       mode: str) -> Any:
 
     from .tensorstore import TensorStoreSpec, KVStore, parse_info
     import tensorstore as ts
@@ -179,9 +169,8 @@ accessors['.precomputed'] = access_precomputed
 def access(
     path: Union[Pathlike, Iterable[str], Iterable[Path]],
     mode: str,
-    lazy: bool = False,
     **kwargs,
-) -> ArraySources:
+) -> Any:
     """
 
     Access data from a variety of array storage formats.
@@ -203,8 +192,7 @@ def access(
 
     """
     if isinstance(path, (str, Path)):
-        path_inner: Pathlike
-        path_outer, path_inner = split_path_at_suffix(path)
+        path_outer, path_inner = split_path_at_suffix(_suffixes, path)
 
         # str(Path('')) => '.', which we don't want for an empty trailing path
         if str(path_inner) == ".":
@@ -220,20 +208,18 @@ def access(
                 f"Cannot access images with extension {fmt}. Try one of {list(accessors.keys())}"
             )
 
-        if lazy:
-            accessor = delayed(accessor)
         if is_container:
             return accessor(path_outer, path_inner, mode=mode, **kwargs)
         else:
             return accessor(path_outer, mode=mode, **kwargs)
 
     elif isinstance(path, Iterable):
-        return [access(p, mode, lazy, **kwargs) for p in path]
+        return [access(p, mode, **kwargs) for p in path]
     else:
         raise ValueError("`path` must be a string or iterable of strings")
 
 
-def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], lazy: bool=False, **kwargs):
+def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     """
 
     Access data on disk with read-only permissions
@@ -252,10 +238,10 @@ def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], lazy: bool=False,
     -------
 
     """
-    return access(path, mode="r", lazy=lazy, **kwargs)
+    return access(path, mode="r", **kwargs)
 
 
-def infer_coordinates_3d(arr: Arraylike, default_unit="nm") -> List[DataArray]:
+def infer_coordinates_3d(arr: Any, default_unit="nm") -> List[DataArray]:
     """
     Infer the coordinates and units from a 3D volume.
 
@@ -294,8 +280,8 @@ def infer_coordinates_3d(arr: Arraylike, default_unit="nm") -> List[DataArray]:
 
     else:
         # check if this is a dask array constructed from a zarr array
-        if isinstance(arr, da.Array) and isinstance(get_array_original(arr), zarr.core.Array):
-            arr_source: zarr.core.Array = get_array_original(arr)
+        if isinstance(arr, da.Array) and isinstance(zarr_array_from_dask(arr), zarr.core.Array):
+            arr_source: zarr.core.Array = zarr_array_from_dask(arr)
             coords = infer_coordinates_3d(arr_source)
         else:
             coords = [
@@ -306,7 +292,7 @@ def infer_coordinates_3d(arr: Arraylike, default_unit="nm") -> List[DataArray]:
     return coords
 
 
-def DataArrayFromFile(source_path: Pathlike):
+def DataArrayFromFile(source_path: Pathlike) -> DataArray:
     if Path(source_path).suffix == '.mrc':
         arr = mrc_to_dask(source_path, chunks=(1,-1,-1)) 
     else:
@@ -325,7 +311,7 @@ def DataArrayFromFile(source_path: Pathlike):
     return data
 
 
-def DataArrayFactory(arr: Arraylike, **kwargs):
+def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
     """
     Create an xarray.DataArray from an array-like input (e.g., zarr array, dask array). This is a very light 
     wrapper around the xarray.DataArray constructor that checks for cosem/n5 metadata attributes and uses those to
@@ -364,214 +350,37 @@ def DataArrayFactory(arr: Arraylike, **kwargs):
     return data
 
 
-def create_array(group, attrs=None, **kwargs) -> zarr.core.Array:
-    name = kwargs["name"]
-    overwrite = kwargs.get("overwrite", False)
-    if name not in group:
-        arr = group.zeros(**kwargs)
-    else:
-        arr = group[name]
-        if not same_array_props(
-            arr,
-            shape=kwargs["shape"],
-            dtype=kwargs["dtype"],
-            compressor=kwargs["compressor"],
-            chunks=kwargs["chunks"],
-        ):
-            arr = group.zeros(**kwargs)
-        else:
-            if overwrite == False:
-                raise FileExistsError(
-                    f"{group.path}/{name} already exists as an array. Call this function with overwrite=True to delete this array."
-                )
-    if attrs is not None:
-        arr.attrs.put(attrs)
-    return arr
-
-
-def create_arrays(
-    path: Union[str, Path],
-    names: Sequence[str],
-    shapes: Sequence[Sequence[int]],
-    dtypes: Sequence[str],
-    compressors: Sequence[Any],
-    chunks: Sequence[Sequence[int]],
-    group_attrs: Dict[str, Any] = {},
-    array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
-    overwrite: bool = True,
-) -> Tuple[zarr.hierarchy.Group, Tuple[zarr.core.Array]]:
-    """
-    Use Zarr / N5 to create a collection of arrays within a group (the group will also be created, if needed). If overwrite==True,
-    these arrays will be created as needed and filled with 0s. Otherwise, new arrays will be created, existing arrays with matching properties
-    will be kept as-is, and existing arrays with mismatched properties will be removed and replaced with an array of 0s.      
-    """
-
-    group: zarr.hierarchy.Group = access(path, mode="a")
-    group.attrs.put(group_attrs)
-
-    if array_attrs is None:
-        array_attrs = [{}] * len(names)
-
-    delayed_creator = delayed(create_array)
-
-    arrs_delayed: List[Any] = []
-    for ind in range(len(names)):
-        arrs_delayed.append(
-            delayed_creator(
-                group=group, 
-                attrs=array_attrs[ind], 
-                name=names[ind], 
-                shape=shapes[ind],
-                dtype=dtypes[ind],
-                compressor=compressors[ind],
-                chunks=chunks[ind],
-                overwrite=overwrite))
-
-    with ProgressBar():
-        arrs: Tuple[zarr.core.Array] = delayed(arrs_delayed).compute(scheduler="threads")
-
-    return group, arrs
-
-
 def populate_group(
     container_path: Pathlike,
     group_path: Pathlike,
     arrays: Sequence[DataArray],
     array_paths: Sequence[str], 
     chunks: Sequence[int],
-    group_attrs: Optional[Dict[str, Any]] = None,
+    group_attrs: Dict[str, Any] = {},
     compressor: Any=GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None
-) -> Tuple[zarr.hierarchy.group, zarr.Array]:
+) -> Tuple[zarr.hierarchy.group, Tuple[zarr.core.Array]]:
 
-
-    shapes, dtypes, compressors, chunks, arr_attrs = [], [], [], [], []
-    for p in arrays:
-        shapes.append(p.shape)
-        dtypes.append(p.dtype)
-        compressors.append(compressor)
-        chunks.append(array_chunks)
-        arr_attrs.append(attr_factory(p))
-
-    zgrp, zarrays = create_arrays(
-        Path(container_path) / group_path,
-        names=array_paths,
-        shapes=shapes,
-        dtypes=dtypes,
-        compressors=compressors,
-        chunks=chunks,
-        group_attrs=group_attrs,
-        attrs=arr_attrs,
-    )
-
-    return zgrp, zarrays
-
-
-def delete_zarr_branch_parallel(path: Pathlike):
-    """
-    Recursively delete a branch (group or array) of a zarr hierarchy. 
-    """
-
-
-
-def rmtree_parallel(path: Pathlike) -> int:
-    """
-    Recursively remove the contents of a directory in parallel. All files are found using os.path.walk, then dask 
-    is used to delete the files in parallel. Finally, the (empty) directories are removed.
-
-    path: String, a path to the container folder, e.g. /home/user/tmp/
-
-    return: 0
-
-    """
-    # find all the files using os.walk
-    files = list_files(path)
-    if len(files) > 0:
-        bg = bag.from_sequence(files)
-        bg.map(lambda v: os.remove(v))
-    rmtree(path)
-    return 0
-
-
-def same_compressor(arr: zarr.Array, compressor) -> bool:
-    """
-
-    Determine if the compressor associated with an array is the same as a different compressor.
-
-    arr: A zarr array
-    compressor: a Numcodecs compressor, e.g. GZip(-1)
-    return: True or False, depending on whether the zarr array's compressor matches the parameters (name, level) of the
-    compressor.
-    """
-    comp = arr.compressor.compressor_config
-    return comp["id"] == compressor.codec_id and comp["level"] == compressor.level
-
-
-def same_array_props(
-    arr: zarr.Array, shape: Tuple[int], dtype: str, compressor: Any, chunks: Tuple[int]
-) -> bool:
-    """
-
-    Determine if a zarr array has properties that match the input properties.
-
-    arr: A zarr array
-    shape: A tuple. This will be compared with arr.shape.
-    dtype: A numpy dtype. This will be compared with arr.dtype.
-    compressor: A numcodecs compressor, e.g. GZip(-1). This will be compared with the compressor of arr.
-    chunks: A tuple. This will be compared with arr.chunks
-    return: True if all the properties of arr match the kwargs, False otherwise.
-    """
-    return (
-        (arr.shape == shape)
-        & (arr.dtype == dtype)
-        & same_compressor(arr, compressor)
-        & (arr.chunks == chunks)
-    )
-
-
-def get_array_original(arr: da.Array) -> Any:
-    """
-    Return the zarr array that was used to create a dask array using `da.from_array(zarr_array)`
-    """
-    keys = tuple(arr.dask.keys())
-    return arr.dask[keys[-1]]
-
-
-def list_files(source: Pathlike) -> List[str]:
-    """
-    Use os.walk to recursively parse a directory tree, returning a list containing the full paths
-    to all files with filenames.
-    """
-    results = []
-    fs = fsspec.filesystem(protocol='file')
-
-    # use os.walk for the local filesystem because it is way faster than fsspec
-    if isinstance(fs, fsspec.implementations.local.LocalFileSystem):
-        for p, _, f in os.walk(source):
-            for file in f:
-                results.append(os.path.join(os.path.abspath(p), file))
+    zgroup = access(os.path.join(container_path, group_path), mode='w', attrs=group_attrs)
+    zarrays = []
+    if array_attrs == None:
+        _array_attrs = ({},) * len(arrays)
     else:
-        for p, f, _ in fs.walk(source):
-            for file in f:
-                results.append(os.path.join(os.path.abspath(p), file))
-
-    return results
-
-
-def list_files_parallel(elements: Sequence[str]):
-    """
-    Given a sequence containing either files or directories, separate the input files, walk the directories,
-    in parallel, and return the all files found + input files 
-    """
-    fs: Any = fsspec.filesystem(protocol='file')
+        _array_attrs = array_attrs
     
-    files, dirs = [], []
-    for k,v in groupby(sorted(elements, key=fs.isdir), key=fs.isdir):
-        if k: dirs.extend([delayed(list_files)(val) for val in list(v)])
-        else: files.extend(list(map(str, v)))
-    dirs_computed = delayed(dirs).compute()
-    files.extend(list(chain(*dirs_computed)))
-    return files
+    for idx, arr in enumerate(arrays):
+        path = os.path.join(container_path, group_path, array_paths[idx])
+        chunking = chunks[idx]
+        compressor = compressor
+        attrs = _array_attrs[idx]
+        zarrays.append(access(path, 
+                              shape=arr.shape, 
+                              dtype=arr.dtype, 
+                              chunks=chunking, 
+                              compressor=compressor, 
+                              attrs=attrs, 
+                              mode='w'))
+    return zgroup, zarrays
 
 
 def infer_dtype(path: str) -> str:

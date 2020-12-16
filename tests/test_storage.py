@@ -3,7 +3,7 @@ import zarr
 from fibsem_tools.io import read, access
 import numpy as np
 import shutil
-from fibsem_tools.io import list_files, list_files_parallel
+from fibsem_tools.io.util import list_files, list_files_parallel
 from pathlib import Path
 
 def _make_local_files(files):
@@ -32,19 +32,30 @@ def test_open_array_zarr_n5():
     shutil.rmtree(store)
 
 
-def test_open_group_zarr():
+def test_group_creation_zarr():
     store = '/data/group.zarr'
+    data = np.zeros(100, dtype='uint8') + 42
+
     zg = zarr.open(store, mode='w')
-    zg['foo'] = np.zeros(100, dtype='uint8') + 42
-    assert access(store, mode='w') == zg
+    zg['foo'] = data
+    assert access(store, mode='a') == zg
+    
+    zg = access(store, mode='w')
+    zg['foo'] = data
+    assert zarr.open(store, mode='a') == zg
     shutil.rmtree(store)
 
-
-def test_open_group_zarr_n5():
+def test_group_creation_zarr_n5():
     store = '/data/group.n5'
+    data = np.zeros(100, dtype='uint8') + 42
     zg = zarr.open(store, mode='w')
-    zg['foo'] = np.zeros(100, dtype='uint8') + 42
-    assert access(store, mode='w') == zg
+    zg['foo'] = data
+    assert access(store, mode='a') == zg
+
+    zg = access(store, mode='w')
+    zg['foo'] = data
+    assert zarr.open(store, mode='a') == zg
+
     shutil.rmtree(store)
 
 
@@ -52,14 +63,14 @@ def test_list_files():
     fnames = ['./foo/foo.txt', './foo/bar/bar.txt', './foo/bar/baz/baz.txt']
     files_made = _make_local_files(fnames)    
     files_found = list_files('./foo')
-    assert set(files_found) == set(files_made)
+    assert set(files_found) == set(fnames)
 
     shutil.rmtree('foo')
 
 def test_list_files_parellel():
-    fnames = ['foo/foo.txt', 'foo/bar/bar.txt', 'foo/bar/baz/baz.txt']
+    fnames = ['./foo/foo.txt', './foo/bar/bar.txt', './foo/bar/baz/baz.txt']
     files_made = _make_local_files(fnames) 
-    files_found = list_files_parallel(['./foo'])
-    assert set(files_found) == set(files_made)
+    files_found = list_files_parallel('./foo')
+    assert set(files_found) == set(fnames)
 
     shutil.rmtree('foo')
