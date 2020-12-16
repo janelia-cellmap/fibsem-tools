@@ -76,29 +76,20 @@ def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: st
     return read_fibsem(path)
 
 
-# love the duplicated code here
 def access_n5(
     dir_path: Pathlike, container_path: Pathlike, **kwargs
 ) -> Any:
-    attrs = {}
-    if 'attrs' in kwargs:
-        attrs = kwargs.pop('attrs')
-        
-    # zarr is extremely slow to delete existing directories, so we do it ourselves
-    if kwargs.get('mode') == 'w':
-        tmp_kwargs = kwargs.copy()
-        tmp_kwargs['mode'] = 'a'
-        tmp = zarr.open(zarr.N5Store(str(dir_path)), path=str(container_path), **tmp_kwargs)
-        delete_zbranch(tmp)    
-    array_or_group = zarr.open(str(dir_path), path=str(container_path), **kwargs)
-    if kwargs.get('mode') != 'r':
-        array_or_group.attrs.update(attrs)
-    return array_or_group
-
+    dir_path = zarr.N5Store(dir_path)
+    return access_zarr(dir_path, container_path, **kwargs)
 
 def access_zarr(
     dir_path: Pathlike, container_path: Pathlike, **kwargs
 ) -> Any:
+    if isinstance(dir_path, Path): 
+        dir_path = str(dir_path)
+    if isinstance(container_path, Path): 
+        dir_path = str(dir_path)
+
     attrs = {}
     if 'attrs' in kwargs:
         attrs = kwargs.pop('attrs')
@@ -107,9 +98,9 @@ def access_zarr(
     if kwargs.get('mode') == 'w':
         tmp_kwargs = kwargs.copy()
         tmp_kwargs['mode'] = 'a'
-        tmp = zarr.open(str(dir_path), path=str(container_path), **tmp_kwargs)
+        tmp = zarr.open(dir_path, path=str(container_path), **tmp_kwargs)
         delete_zbranch(tmp)
-    array_or_group = zarr.open(str(dir_path), path=str(container_path), **kwargs)
+    array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
     if kwargs.get('mode') != 'r':
         array_or_group.attrs.update(attrs)
     return array_or_group
