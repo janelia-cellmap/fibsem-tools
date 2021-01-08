@@ -11,25 +11,18 @@ from typing import (
     Sequence,
     Any,
 )
-from dask import delayed
 import dask.array as da
 import os
 from itertools import groupby
 from collections import defaultdict
-from dask.diagnostics import ProgressBar
 import zarr
 import h5py
-from mrcfile.mrcmemmap import MrcMemmap
 from xarray import DataArray
 import numpy as np
-from dask import bag
 from .mrc import mrc_shape_dtype_inference, access_mrc, mrc_to_dask
 from .util import split_path_at_suffix
 from .zarr import delete_zbranch, zarr_array_from_dask
 from numcodecs import GZip
-import fsspec
-import toolz as tz
-from glob import glob
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}

@@ -2,7 +2,7 @@ from dask import delayed, bag
 from shutil import rmtree
 from glob import glob
 import os
-from typing import Sequence, List
+from typing import List
 import toolz as tz
 from typing import Sequence, Union, Any, Tuple
 from pathlib import Path

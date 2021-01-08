@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 import tensorstore as ts
-import numpy as np
 import json
 from pathlib import Path
 from xarray.core.dataarray import DataArray 

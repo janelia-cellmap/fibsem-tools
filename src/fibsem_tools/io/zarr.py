@@ -1,6 +1,6 @@
+import warnings
 from typing import Tuple, Any
 from dask import delayed
-from dask.bag import from_sequence
 import zarr
 import os 
 from .util import rmtree_parallel
