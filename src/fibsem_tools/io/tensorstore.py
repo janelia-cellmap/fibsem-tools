@@ -263,6 +263,7 @@ def access_precomputed(
     chunks=None,
     jpeg_quality=None,
     voxel_offset=None,
+    scale_index=None,
 ) -> TensorStoreArray:
     driver = "neuroglancer_precomputed"
     
@@ -302,7 +303,6 @@ def access_precomputed(
             voxel_offset=voxel_offset,
             jpeg_quality=jpeg_quality,
         )
-        scale_index = 0
         precomputed_metadata = PrecomputedMetadata(
             type=array_type, data_type=dtype, num_channels=num_channels, scales=[scale_meta]
         )
@@ -313,6 +313,11 @@ def access_precomputed(
         write = None
         create = None
         delete_existing = None
+    elif mode == 'a':
+        read=True
+        write=True
+        create=True
+        delete_existing=False
     elif mode == "rw":
         read = True
         write = True
@@ -329,7 +334,7 @@ def access_precomputed(
         create = True
         delete_existing = False
     else:
-        raise ValueError('Mode must be "r", "rw", "w", or "w-"')
+        raise ValueError('Mode must be "r", "rw", "a", "w", or "w-"')
 
     tsa = TensorStoreArray(
         driver=driver,
@@ -345,26 +350,23 @@ def access_precomputed(
         resolution=scale_meta.resolution,
         size=scale_meta.size,
         chunk_size=scale_meta.chunk_size,
+        jpeg_quality=jpeg_quality
     )
     return tsa.open(
         read=read, write=write, create=create, delete_existing=delete_existing
     ).result()
 
 
-def precomputed_to_dask(store_path, key, chunks: Union[Sequence[int], str]):
-    tsa = access_precomputed(store_path, key, mode='r')
+def precomputed_to_dask(store_path: str, key: str, chunks: Union[Sequence[int], str], channel: int=0):
+    tsa = access_precomputed(store_path, key, mode='r')[ts.d[ts.d["channel"][channel]]
     shape = tuple(tsa.shape)
     dtype = tsa.dtype.numpy_dtype
     if chunks == "auto":
         chunks = tsa.spec().to_json()["scale_metadata"]["chunk_size"]
-        # tensorstore treats data saved in the precomputed format as 4D, but the chunk_size
-        # property in the spec is only 3D, so we extend the chunk_size paramter by 1. Great stuff.
-        chunks.append(1)
-
     _chunks = normalize_chunks(chunks, shape)
     def chunk_loader(store_path,key, block_info=None):
         idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
-        tsa = access_precomputed(store_path, key, mode='r')
+        tsa = access_precomputed(store_path, key, mode='r')[ts.d["channel"][channel]]
         result = tsa[idx].read().result()
         return result
 
