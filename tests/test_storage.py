@@ -81,7 +81,7 @@ def test_accessing_precomputed():
     arr_in = access_precomputed(store, key, mode='r')
     assert np.all(np.array(arr_in[:]) == data.reshape(*data.shape, 1))
     
-    darr = precomputed_to_dask(store, key, chunks=(2,2,2,1))
+    darr = precomputed_to_dask(store, key, chunks=(2,2,2))
     assert (darr.compute() ==  data).all
     shutil.rmtree('data/array.precomputed')
 

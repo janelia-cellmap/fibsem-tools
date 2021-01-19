@@ -358,7 +358,7 @@ def access_precomputed(
 
 
 def precomputed_to_dask(store_path: str, key: str, chunks: Union[Sequence[int], str], channel: int=0):
-    tsa = access_precomputed(store_path, key, mode='r')[ts.d[ts.d["channel"][channel]]
+    tsa = access_precomputed(store_path, key, mode='r')[ts.d["channel"][channel]]
     shape = tuple(tsa.shape)
     dtype = tsa.dtype.numpy_dtype
     if chunks == "auto":
