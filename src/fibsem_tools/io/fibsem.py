@@ -608,7 +608,13 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
         dtype = ">i2"
 
     try:
-        raw_data = np.memmap(path, dtype=dtype, mode="r", offset=OFFSET, shape=shape,)
+        raw_data = np.memmap(
+            path,
+            dtype=dtype,
+            mode="r",
+            offset=OFFSET,
+            shape=shape,
+        )
     except ValueError:
         # todo: read what data is available
         raw_data = np.zeros(dtype=dtype, shape=shape)
