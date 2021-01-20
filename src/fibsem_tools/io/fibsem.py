@@ -117,6 +117,12 @@ def _read_header(path):
     # read initial header
     with open(path, mode="rb") as fobj:
         base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
+
+        if len(base_header) == 0:
+            raise RuntimeError(
+                f"Base header is missing for {fobj.name}"
+            )
+
         fibsem_header = FIBSEMHeader(
             **dict(zip(base_header.dtype.names, base_header[0]))
         )
@@ -139,6 +145,13 @@ def _read_header(path):
         else:
             # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain, 2nd order, 3rd order)
             header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
+
+        if fibsem_header.FileVersion >= 9:
+            header_dtype.update(
+                ["Restart", "StageMove", "FirstX", "FirstY"],
+                [">u1", ">u1", ">i4", ">i4"],
+                [68, 69, 70, 74],
+            )
 
         header_dtype.update(
             ["XResolution", "YResolution"],  # X Resolution  # Y Resolution
@@ -190,10 +203,22 @@ def _read_header(path):
                 "AI2",  # AI Ch2
                 "AI3",  # AI Ch3
                 "AI4",  # AI Ch4
-                "Notes",  # Read in notes
             ],
-            [">u1", ">u1", ">u1", ">u1", ">S200"],
-            [151, 152, 153, 154, 180],
+            [">u1", ">u1", ">u1", ">u1"],
+            [151, 152, 153, 154],
+        )
+
+        if fibsem_header.FileVersion >= 9:
+            header_dtype.update(
+                ["SampleID"],
+                ["S25"],
+                [155],
+            )
+
+        header_dtype.update(
+            ["Notes"],
+            [">S200"],
+            [180],
         )
 
         if fibsem_header.FileVersion in {1, 2}:
@@ -619,7 +644,7 @@ def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
         return [_read(p) for p in path]
     else:
         raise ValueError(
-            "Path must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths"
+            f"Path '{path}' must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths"
         )
 
 

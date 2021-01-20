@@ -1,4 +1,3 @@
-from itertools import product
 import dask.array as da
 import numpy as np
 from typing import Union, Tuple
