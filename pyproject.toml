@@ -14,6 +14,7 @@ s3fs = "^0.5.1"
 fsspec = "^0.8.4"
 zarr = "^2.6.1"
 mrcfile = "^1.2.0"
+dacite = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
