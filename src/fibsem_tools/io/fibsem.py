@@ -1,7 +1,6 @@
 """
 Functions for reading FIB-SEM data from Harald Hess' proprietary format
 Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem.py
-Copyright (c) 2017, David Hoffman, Davis Bennett
 """
 
 import os
@@ -774,7 +773,7 @@ def aggregate_fibsem_metadata(fnames):
 
 
 class FibsemDataset:
-    def __init__(self, filenames: Sequence):
+    def __init__(self, filenames: Sequence[str]):
         """
         Create a representation of a collection of .dat files as a single dataset.
         """
@@ -815,7 +814,7 @@ class FibsemDataset:
         )
         result_data = da.stack([all_extrema.min(0)[:, 0], all_extrema.max(0)[:, 1]])
         result = DataArray(
-            result_data, dims=("stat", "c"), coords={"stat": ["min", "max"]}
+            result_data, dims=("statistic", "channel"), coords={"statistic": ["min", "max"], 'channel': [0,1]}
         )
         return result
 

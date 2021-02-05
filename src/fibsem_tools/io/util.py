@@ -67,13 +67,15 @@ def list_files_parallel(
         return result
 
 
-def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]):
+def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     """
     Given a string representing a path on a filesystem and a collection of suffixes, return
     the path split at the last instance of any element of the path containing one of the
     suffixes, as well as the suffix. If the last element of the path bears a suffix, return the path,
     the empty string, and the suffix.
     """
+    protocol: str 
+    subpath: str
     protocol, subpath = fsspec.core.split_protocol(urlpath)
     parts = Path(subpath).parts
     suffixed = [Path(part).suffix in suffixes for part in parts]

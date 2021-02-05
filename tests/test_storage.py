@@ -3,10 +3,11 @@ import zarr
 from fibsem_tools.io import read, access
 import numpy as np
 import shutil
-from fibsem_tools.io.io import daskify
+from fibsem_tools.io.io import read_dask
 from fibsem_tools.io.tensorstore import access_precomputed, precomputed_to_dask
 from fibsem_tools.io.util import list_files, list_files_parallel, split_path_at_suffix
 from pathlib import Path
+import os
 
 def _make_local_files(files):
     result = []
@@ -24,7 +25,7 @@ def test_accessing_array_zarr():
     z[:] = data
     assert np.array_equal(read(store)[:], data)
 
-    darr = daskify(store, chunks=(10,))
+    darr = read_dask(store, chunks=(10,))
     assert (darr.compute() == data).all
     shutil.rmtree(store)
 
@@ -36,7 +37,7 @@ def test_accessing_array_zarr_n5():
     z[:] = data
     assert np.array_equal(read(store)[:], data)
 
-    darr = daskify(store, chunks=(10,))
+    darr = read_dask(store, chunks=(10,))
     assert (darr.compute() == data).all
     shutil.rmtree(store)
 
@@ -81,7 +82,7 @@ def test_accessing_precomputed():
     arr_in = access_precomputed(store, key, mode='r')
     assert np.all(np.array(arr_in[:]) == data.reshape(*data.shape, 1))
     
-    darr = precomputed_to_dask(store, key, chunks=(2,2,2))
+    darr = precomputed_to_dask(os.path.join(store, key), chunks=(2,2,2))
     assert (darr.compute() ==  data).all
     shutil.rmtree('data/array.precomputed')
 

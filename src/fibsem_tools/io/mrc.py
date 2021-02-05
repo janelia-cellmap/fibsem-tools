@@ -1,6 +1,6 @@
 import dask.array as da
 import numpy as np
-from typing import Union, Tuple
+from typing import Union, Tuple, Sequence
 from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
 from dask.array.core import normalize_chunks
@@ -27,20 +27,24 @@ def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
     return shape, dtype
 
 
-def mrc_to_dask(fname: Pathlike, chunks: tuple):
+def mrc_chunk_loader(fname, block_info=None):
+    idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
+    result = np.array(access_mrc(fname, mode="r").data[idx]).astype(dtype)
+    return result
+
+
+def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]]):
     """
     Generate a dask array backed by a memory-mapped .mrc file
     """
-    with access_mrc(fname, mode="r") as mem:
+    with access_mrc(urlpath, mode="r") as mem:
         shape, dtype = mrc_shape_dtype_inference(mem)
 
-    chunks_ = normalize_chunks(chunks, shape)
+    if chunks=='auto':
+        _chunks = (1, *(-1,) * (len(shape) -1))
+            
+    _chunks = normalize_chunks(chunks, shape, dtype)
 
-    def chunk_loader(fname, block_info=None):
-        idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
-        result = np.array(access_mrc(fname, mode="r").data[idx]).astype(dtype)
-        return result
-
-    arr = da.map_blocks(chunk_loader, fname, chunks=chunks_, dtype=dtype)
+    arr = da.map_blocks(mrc_chunk_loader, urlpath, chunks=_chunks, dtype=dtype)
 
     return arr

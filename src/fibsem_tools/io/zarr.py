@@ -5,7 +5,7 @@ import dask.array as da
 from dask.bag import from_sequence
 import zarr
 import os
-from .util import rmtree_parallel
+from .util import rmtree_parallel, split_path_at_suffix
 from toolz import concat
 
 
@@ -154,17 +154,27 @@ def access_n5(
     return access_zarr(dir_path, container_path, **kwargs)
 
 
-def zarr_to_dask(store_path: str, key: str, chunks: Union[str, Sequence[int]]):
+def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]]):
+    store_path, key, _ = split_path_at_suffix(urlpath, ('.zarr',))
     arr = access_zarr(store_path, key, mode="r")
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not a zarr array")
-    darr = da.from_array(arr, chunks=chunks)
+    if chunks == 'original':
+        _chunks = arr.chunks
+    else:
+        _chunks = chunks
+    darr = da.from_array(arr, chunks=_chunks)
     return darr
 
 
-def n5_to_dask(store_path: str, key: str, chunks: Union[str, Sequence[int]]):
+def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]]):
+    store_path, key, _ = split_path_at_suffix(urlpath, ('.n5',))
     arr = access_n5(store_path, key, mode="r")
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not an n5 array")
-    darr = da.from_array(arr, chunks=chunks)
+    if chunks == 'original':
+        _chunks = arr.chunks
+    else:
+        _chunks = chunks
+    darr = da.from_array(arr, chunks=_chunks)
     return darr

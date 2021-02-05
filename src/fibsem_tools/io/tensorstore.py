@@ -356,13 +356,14 @@ def access_precomputed(
     ).result()
 
 
-def precomputed_to_dask(store_path: str, key: str, chunks: Union[Sequence[int], str], channel: int=0):
+def precomputed_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], channel: int=0):
+    store_path, key, _ = split_path_at_suffix(urlpath, ('.precomputed',))
     tsa = access_precomputed(store_path, key, mode='r')[ts.d["channel"][channel]]
     shape = tuple(tsa.shape)
     dtype = tsa.dtype.numpy_dtype
-    if chunks == "auto":
+    if chunks == "original":
         chunks = tsa.spec().to_json()["scale_metadata"]["chunk_size"]
-    _chunks = normalize_chunks(chunks, shape)
+    _chunks = normalize_chunks(chunks, shape, dtype=dtype)
     def chunk_loader(store_path,key, block_info=None):
         idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
         tsa = access_precomputed(store_path, key, mode='r')[ts.d["channel"][channel]]

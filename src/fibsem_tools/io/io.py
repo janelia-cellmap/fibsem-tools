@@ -87,7 +87,7 @@ def access_h5(
     return result
 
 
-accessors: Dict[str, Callable] = {}
+accessors: Dict[str, Callable[..., Any]] = {}
 accessors[".dat"] = access_fibsem
 accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
@@ -95,7 +95,7 @@ accessors[".h5"] = access_h5
 accessors[".mrc"] = access_mrc
 accessors[".precomputed"] = access_precomputed
 
-daskifiers: Dict[str, Callable] = {}
+daskifiers: Dict[str, Callable[..., da.core.Array]] = {}
 daskifiers[".mrc"] = mrc_to_dask
 daskifiers[".n5"] = n5_to_dask
 daskifiers[".zarr"] = zarr_to_dask
@@ -171,25 +171,40 @@ def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     return access(path, mode="r", **kwargs)
 
 
-def daskify(urlpath, chunks, **kwargs):
+def read_dask(urlpath: str, chunks='auto', **kwargs) -> da.core.Array:
     """
     Create a dask array from a path
     """
     path_outer, path_inner, suffix = split_path_at_suffix(urlpath, _suffixes)
-    return daskifiers[suffix](path_outer, path_inner, chunks, **kwargs)
+    return daskifiers[suffix](urlpath, chunks, **kwargs)
 
 
-def infer_coordinates_3d(arr: Any, default_unit="nm") -> List[DataArray]:
+def read_xarray(urlpath: str, chunks: Union[str, Tuple[int,...]]='auto', coords: Any='auto', **kwargs) -> DataArray:
     """
-    Infer the coordinates and units from a 3D volume.
+    Create an xarray.DataArray from data found at a path. 
+    """
+    raw_array = read(urlpath)
+    if hasattr(raw_array, 'attrs'):
+        if not kwargs.get('attrs'):
+            kwargs.update({'attrs': dict(raw_array.attrs)}) 
+    if kwargs.get('attrs'):
+        kwargs['attrs'].update({'urlpath': urlpath})
+    dask_array = read_dask(urlpath, chunks=chunks)
+    if coords == 'auto':
+        coords = infer_coordinates(dask_array)    
+    result = DataArray(dask_array, coords=coords, **kwargs)
+    return result
+
+
+def infer_coordinates(arr: Any, default_unit: str="nm") -> List[DataArray]:
+    """
+    Infer the coordinates and units from an array.
 
     """
 
-    units: Dict[str, str]
+    unit: str = default_unit
     coords: List[DataArray]
-    scaleDict: Dict[str, float]
-
-    assert arr.ndim == 3
+    scales: Dict[str, float] = {k: 1.0 for k, v in _n5_axes.items()}
 
     # DataArray: get coords attribute directly from the data
     if hasattr(arr, "coords"):
@@ -197,58 +212,43 @@ def infer_coordinates_3d(arr: Any, default_unit="nm") -> List[DataArray]:
 
     # zarr array or hdf5 array: get coords from attrs
     elif hasattr(arr, "attrs"):
-        if arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
+        if transform_meta := arr.attrs.get('transform'):
+            coords = [
+            DataArray(
+                np.arange(arr.shape[idx]) * transform_meta['scale'][idx], dims=val, attrs={"units": transform_meta['units'][idx]}
+            )
+            for idx, val in enumerate(transform_meta['axes'])
+        ]
+
+        elif arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
             if pixelResolution := arr.attrs.get("pixelResolution"):
                 scale: List[float] = pixelResolution["dimensions"]
                 unit: str = pixelResolution["unit"]
             elif scale := arr.attrs.get("resolution"):
                 unit = default_unit
 
-            scaleDict = {k: scale[v] for k, v in _n5_axes.items()}
-        else:
-            scaleDict = {k: 1 for k, v in _n5_axes.items()}
-            unit = default_unit
-
-        coords = [
-            DataArray(
-                np.arange(arr.shape[v]) * scaleDict[k], dims=k, attrs={"units": unit}
-            )
-            for k, v in _zarr_axes.items()
-        ]
-
+            scales = {k: scale[v] for k, v in _n5_axes.items()}
+        
+            coords = [
+                DataArray(
+                    np.arange(arr.shape[v]) * scales[k], dims=k, attrs={"units": unit}
+                )
+                for k, v in _zarr_axes.items()
+            ]
     else:
         # check if this is a dask array constructed from a zarr array
         if isinstance(arr, da.Array) and isinstance(
             zarr_array_from_dask(arr), zarr.core.Array
         ):
             arr_source: zarr.core.Array = zarr_array_from_dask(arr)
-            coords = infer_coordinates_3d(arr_source)
+            coords = infer_coordinates(arr_source)
         else:
             coords = [
-                DataArray(np.arange(arr.shape[v]), dims=k, attrs={"units": defaultUnit})
+                DataArray(np.arange(arr.shape[v]), dims=k, attrs={"units": unit})
                 for k, v in _zarr_axes.items()
             ]
 
     return coords
-
-
-def DataArrayFromFile(source_path: Pathlike) -> DataArray:
-    if Path(source_path).suffix == ".mrc":
-        arr = mrc_to_dask(source_path, chunks=(1, -1, -1))
-    else:
-        arr = read(source_path)
-        arr = da.from_array(arr, chunks=arr.chunks)
-        if not hasattr(arr, "chunks"):
-            raise ValueError(
-                f'{arr} does not have a "chunks" attribute. Is it really a distributed array-like?'
-            )
-    coords = infer_coordinates_3d(arr)
-    data = DataArrayFactory(
-        arr,
-        attrs={"source": str(source_path)},
-        coords=coords,
-    )
-    return data
 
 
 def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
@@ -274,10 +274,6 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
         # save the full path to the array as an attribute
         extra_attrs["source"] = source
         arr = da.from_array(arr, chunks=arr.chunks)
-
-    coords = infer_coordinates_3d(arr)
-    if "coords" not in kwargs:
-        kwargs.update({"coords": coords})
 
     if attrs := kwargs.get("attrs"):
         out_attrs = attrs.copy()
