@@ -41,10 +41,9 @@ def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]]):
         shape, dtype = mrc_shape_dtype_inference(mem)
 
     if chunks=='auto':
-        _chunks = (1, *(-1,) * (len(shape) -1))
-            
-    _chunks = normalize_chunks(chunks, shape, dtype)
+        _chunks = normalize_chunks((1, *(-1,) * (len(shape) -1)), shape, dtype=dtype)
+    else:
+        _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
     arr = da.map_blocks(mrc_chunk_loader, urlpath, chunks=_chunks, dtype=dtype)
-
     return arr
