@@ -1,9 +1,11 @@
 import dask.array as da
 import numpy as np
-from typing import Union, Tuple, Sequence
+from typing import Union, Tuple, List, Sequence
 from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
 from dask.array.core import normalize_chunks
+from numpy.typing import ArrayLike
+from xarray import DataArray
 
 Pathlike = Union[str, Path]
 
@@ -25,6 +27,24 @@ def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
         if mem.header.dmax > 127:
             dtype = "uint8"
     return shape, dtype
+
+
+def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
+    header = mem.header
+    grid_size_angstroms = header.cella
+    coords = []
+     
+    if mem.data.flags['C_CONTIGUOUS']:
+        # we reverse the keys from (x,y,z) to (z,y,x) so the order matches
+        # numpy indexing order
+        keys = reversed(header.cella.dtype.fields.keys())
+    else: 
+        keys = header.cella.dtype.fields.keys()
+    for key in keys:
+        axis = np.linspace(header[f'n{key}start'], (grid_size_angstroms[key] / 10), header[f'n{key}'])
+        coords.append(DataArray(data=axis, dims=(key,), attrs={'units': 'nm'}))
+    
+    return coords 
 
 
 def mrc_chunk_loader(fname, block_info=None):

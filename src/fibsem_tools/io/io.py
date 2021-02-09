@@ -16,16 +16,15 @@ import dask.array as da
 import os
 from itertools import groupby
 from collections import defaultdict
-from dask.diagnostics import ProgressBar
 import zarr
 import h5py
-from mrcfile.mrcmemmap import MrcMemmap
+import mrcfile
 from xarray import DataArray
 import numpy as np
 from dask import bag
-from .mrc import mrc_shape_dtype_inference, access_mrc, mrc_to_dask
+from .mrc import mrc_coordinate_inference, mrc_shape_dtype_inference, access_mrc, mrc_to_dask
 from .util import split_path_at_suffix
-from .zarr import zarr_array_from_dask, access_n5, access_zarr, n5_to_dask, zarr_to_dask
+from .zarr import zarr_array_from_dask, access_n5, access_zarr, n5_to_dask, zarr_n5_coordinate_inference, zarr_to_dask
 from .tensorstore import access_precomputed, precomputed_to_dask
 from numcodecs import GZip
 import fsspec
@@ -191,63 +190,18 @@ def read_xarray(urlpath: str, chunks: Union[str, Tuple[int,...]]='auto', coords:
         kwargs['attrs'].update({'urlpath': urlpath})
     dask_array = read_dask(urlpath, chunks=chunks)
     if coords == 'auto':
-        coords = infer_coordinates(dask_array)    
+        coords = infer_coordinates(raw_array)    
     result = DataArray(dask_array, coords=coords, **kwargs)
     return result
 
 
 def infer_coordinates(arr: Any, default_unit: str="nm") -> List[DataArray]:
-    """
-    Infer the coordinates and units from an array.
-
-    """
-
-    unit: str = default_unit
-    coords: List[DataArray]
-    scales: Dict[str, float] = {k: 1.0 for k, v in _n5_axes.items()}
-
-    # DataArray: get coords attribute directly from the data
-    if hasattr(arr, "coords"):
-        coords = arr.coords
-
-    # zarr array or hdf5 array: get coords from attrs
-    elif hasattr(arr, "attrs"):
-        if transform_meta := arr.attrs.get('transform'):
-            coords = [
-            DataArray(
-                np.arange(arr.shape[idx]) * transform_meta['scale'][idx], dims=val, attrs={"units": transform_meta['units'][idx]}
-            )
-            for idx, val in enumerate(transform_meta['axes'])
-        ]
-
-        elif arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
-            if pixelResolution := arr.attrs.get("pixelResolution"):
-                scale: List[float] = pixelResolution["dimensions"]
-                unit: str = pixelResolution["unit"]
-            elif scale := arr.attrs.get("resolution"):
-                unit = default_unit
-
-            scales = {k: scale[v] for k, v in _n5_axes.items()}
-        
-            coords = [
-                DataArray(
-                    np.arange(arr.shape[v]) * scales[k], dims=k, attrs={"units": unit}
-                )
-                for k, v in _zarr_axes.items()
-            ]
+    if isinstance(arr, zarr.core.Array):
+        coords = zarr_n5_coordinate_inference(arr)
+    elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
+        coords = mrc_coordinate_inference(arr)
     else:
-        # check if this is a dask array constructed from a zarr array
-        if isinstance(arr, da.Array) and isinstance(
-            zarr_array_from_dask(arr), zarr.core.Array
-        ):
-            arr_source: zarr.core.Array = zarr_array_from_dask(arr)
-            coords = infer_coordinates(arr_source)
-        else:
-            coords = [
-                DataArray(np.arange(arr.shape[v]), dims=k, attrs={"units": unit})
-                for k, v in _zarr_axes.items()
-            ]
-
+        raise ValueError(f'No coordinate inference possible for array of type {type(arr)}')
     return coords
 
 

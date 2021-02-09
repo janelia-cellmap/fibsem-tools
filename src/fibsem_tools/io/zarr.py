@@ -1,4 +1,5 @@
-from typing import Tuple, Any, Union, Sequence
+from collections import defaultdict
+from typing import Dict, List, Tuple, Any, Union, Sequence
 from pathlib import Path
 from dask import delayed
 import dask.array as da
@@ -7,6 +8,16 @@ import zarr
 import os
 from .util import rmtree_parallel, split_path_at_suffix
 from toolz import concat
+from xarray import DataArray
+import numpy as np
+
+# default axis order of zarr spatial metadata
+# is z,y,x
+ZARR_AXES_3D = ['z','y','x']
+
+# default axis order of raw n5 spatial metadata
+# is x,y,z
+N5_AXES_3D = ZARR_AXES_3D[::-1]
 
 
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
@@ -178,3 +189,35 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]]):
         _chunks = chunks
     darr = da.from_array(arr, chunks=_chunks)
     return darr
+
+
+def zarr_n5_coordinate_inference(arr: zarr.core.Array, default_unit='nm') -> List[DataArray]:
+    axes: List[str] = [f'dim_{idx}' for idx in range(arr.ndim)]
+    units: Dict[str, str] = {ax: default_unit for ax in axes}
+    scales: Dict[str, float] = {ax: 1.0 for ax in axes}
+    translates: Dict[str, float] = {ax: 0.0 for ax in axes}
+
+    if transform_meta := arr.attrs.get('transform'):
+        axes = transform_meta['axes']
+        units = dict(zip(axes, transform_meta['units']))
+        scales = dict(zip(axes, transform_meta['scale']))
+        translates = dict(zip(axes, transform_meta['translate']))
+
+    elif arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
+        axes = N5_AXES_3D
+        translates = {ax: 0 for ax in axes}
+        units = {ax: default_unit for ax in axes}
+        
+        if pixelResolution := arr.attrs.get("pixelResolution"):
+            scales = dict(zip(axes, pixelResolution["dimensions"]))
+            units: str = {ax: pixelResolution["unit"] for ax in axes}
+            
+        elif _scales:= arr.attrs.get("resolution"):
+            scales = dict(zip(axes, _scales))
+    
+    coords = [
+            DataArray(translates[ax] + np.arange(arr.shape[idx]) * scales[ax], dims=ax, attrs={"units": units[ax]}
+            )
+            for idx, ax in enumerate(ZARR_AXES_3D)]
+    
+    return coords
