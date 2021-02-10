@@ -49,6 +49,8 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
 
 def mrc_chunk_loader(fname, block_info=None):
     idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
+    # block_info[None] contains the output specification 
+    dtype = block_info[None]['dtype']
     result = np.array(access_mrc(fname, mode="r").data[idx]).astype(dtype)
     return result
 
