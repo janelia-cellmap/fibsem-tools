@@ -27,6 +27,9 @@ class FSStore(MutableMapping):
     Requires that ``fsspec`` is installed, as well as any additional
     requirements for the protocol chosen.
 
+    This class is a modified version of `zarr.storage.FSStore` with changes that 
+    allow subclasses like `N5FSStore`.
+
     Parameters
     ----------
     url : str
@@ -41,6 +44,8 @@ class FSStore(MutableMapping):
     exceptions : list of Exception subclasses
         When accessing data, any of these exceptions will be treated
         as a missing key
+    meta_keys : list or tuple of keys that are reserved for metadata. 
+        Defaults to the zarr defaults, i.e. (".zarray", ".zgroup", ".zattrs").
     storage_options : passed to the fsspec implementation
     """
 
@@ -162,9 +167,10 @@ class FSStore(MutableMapping):
             raise ReadOnlyError()
         self.map.clear()
 
+
 class N5FSStore(FSStore):
-    """Storage class using directories and files on a standard file system,
-    following the N5 format (https://github.com/saalfeldlab/n5).
+    """Implentation of the N5 format (https://github.com/saalfeldlab/n5) using `fsspec`, 
+    which allows storage on a variety of filesystems. Based on `zarr.N5Store`. 
 
     Parameters
     ----------
@@ -181,13 +187,13 @@ class N5FSStore(FSStore):
     Store a single array::
 
         >>> import zarr
-        >>> store = zarr.N5Store('data/array.n5')
+        >>> store = zarr.N5FSStore('data/array.n5')
         >>> z = zarr.zeros((10, 10), chunks=(5, 5), store=store, overwrite=True)
         >>> z[...] = 42
 
     Store a group::
 
-        >>> store = zarr.N5Store('data/group.n5')
+        >>> store = zarr.N5FSStore('data/group.n5')
         >>> root = zarr.group(store=store, overwrite=True)
         >>> foo = root.create_group('foo')
         >>> bar = foo.zeros('bar', shape=(10, 10), chunks=(5, 5))
