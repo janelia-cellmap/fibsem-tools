@@ -289,21 +289,3 @@ def infer_dtype(path: str) -> str:
     else:
         raise ValueError(f"Cannot infer dtype of data located at {path}")
     return dtype
-
-
-def sequential_rechunk(source: Any, target: Any, slab_size: Tuple[int], intermediate_chunks: Tuple[int], client: distributed.Client, num_workers: int) -> List[None]:
-    """
-    Load slabs of an array into local memory, then create a dask array and rechunk that dask array, then store into 
-    chunked array storage.
-    """
-    results = []
-    slices = da.core.slices_from_chunks(source.rechunk(slab_size).chunks)
-    
-    for sl in slices:
-        arr_in = source[sl].compute(scheduler='threads')
-        darr_in = da.from_array(arr_in, chunks=intermediate_chunks)
-        store_op = da.store(darr_in,target, regions=sl, compute=False, lock=None)
-        client.cluster.scale(num_workers)
-        results.extend(client.compute(store_op).result())
-        client.cluster.scale(0)
-    return results
