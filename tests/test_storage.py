@@ -3,11 +3,13 @@ import zarr
 from fibsem_tools.io import read, access
 import numpy as np
 import shutil
+from fibsem_tools.io.storage import N5FSStore
 from fibsem_tools.io.io import read_dask
 from fibsem_tools.io.tensorstore import access_precomputed, precomputed_to_dask
 from fibsem_tools.io.util import list_files, list_files_parallel, split_path_at_suffix
 from pathlib import Path
 import os
+import tempfile
 
 def _make_local_files(files):
     result = []
@@ -114,3 +116,24 @@ def test_path_splitting():
     path = '/0/1/2.n5'
     split = split_path_at_suffix(path, ('.n5',))
     assert(split == ('/0/1/2.n5', '', '.n5'))
+
+def test_n5fsstore():
+    with tempfile.TemporaryDirectory() as store_path:
+        store = zarr.N5Store(store_path)
+        group = zarr.open(store, mode='w')
+        arr = group.create_dataset(name='data', shape=(10,10), dtype='int')
+        arr[:] = 42
+
+        store2 = N5FSStore(store_path)
+        arr2 = zarr.open(store2, path='data', mode='r')
+        np.testing.assert_array_equal(arr[:], arr2[:])
+
+    with tempfile.TemporaryDirectory() as store_path:
+        store = N5FSStore(store_path)
+        group = zarr.open(store, mode='w')
+        arr = group.create_dataset(name='data', shape=(10,10), dtype='int')
+        arr[:] = 42
+
+        store2 = zarr.N5Store(store_path)
+        arr2 = zarr.open(store2, path='data', mode='r')
+        np.testing.assert_array_equal(arr[:], arr2[:]) 
