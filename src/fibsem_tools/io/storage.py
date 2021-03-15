@@ -15,11 +15,13 @@ from zarr.errors import (
     FSPathExistNotDir,
     ReadOnlyError,
 )
+import re
 
 from collections.abc import MutableMapping
 array_meta_key = '.zarray'
 group_meta_key = '.zgroup'
 attrs_key = '.zattrs'
+_prog_number = re.compile(r'^\d+$')
 
 class FSStore(MutableMapping):
     """Wraps an fsspec.FSMap to give access to arbitrary filesystems
@@ -49,7 +51,7 @@ class FSStore(MutableMapping):
     storage_options : passed to the fsspec implementation
     """
 
-    def __init__(self, url, normalize_keys=True, key_separator='.',
+    def __init__(self, url, normalize_keys=True, key_separator='/',
                  mode='w',
                  exceptions=(KeyError, PermissionError, IOError),
                  meta_keys = (attrs_key, group_meta_key, array_meta_key),
@@ -145,9 +147,26 @@ class FSStore(MutableMapping):
     def listdir(self, path=None):
         dir_path = self.dir_path(path)
         try:
-            out = sorted(p.rstrip('/').rsplit('/', 1)[-1]
-                         for p in self.fs.ls(dir_path, detail=False))
-            return out
+            children = sorted(p.rstrip('/').rsplit('/', 1)[-1]
+                              for p in self.fs.ls(dir_path, detail=False))
+            if self.key_separator == '/':
+                if array_meta_key in children:
+                    # special handling of directories containing an array to map nested chunk
+                    # keys back to standard chunk keys
+                    new_children = []
+                    root_path = self.dir_path(path)
+                    for entry in children:
+                        entry_path = os.path.join(root_path, entry)
+                        if _prog_number.match(entry) and self.fs.isdir(entry_path):
+                            for dir_path, _, file_names in self.fs.walk(entry_path):
+                                for file_name in file_names:
+                                    file_path = os.path.join(dir_path, file_name)
+                                    rel_path = file_path.split(root_path)[1]
+                                    new_children.append(rel_path.replace(os.path.sep, '.'))
+                        else:
+                            new_children.append(entry)
+                    return sorted(new_children)
+            return children
         except IOError:
             return []
 
@@ -306,7 +325,6 @@ class N5FSStore(FSStore):
         super().__delitem__(key)
 
     def __contains__(self, key):
-
         if key.endswith(zarr_group_meta_key):
 
             key = key.replace(zarr_group_meta_key, self.meta_keys[0])
@@ -325,8 +343,8 @@ class N5FSStore(FSStore):
 
             key = key.replace(zarr_attrs_key, self.meta_keys[0])
             return self._contains_attrs(key)
-
-        super().__contains__(key)
+        
+        return super().__contains__(key)
 
     def __eq__(self, other):
         return (
@@ -343,7 +361,6 @@ class N5FSStore(FSStore):
         # array_meta_key to be present in array directories, which this store
         # doesn't provide.
         children = super().listdir(path=path)
-
         if self._is_array(path):
 
             # replace n5 attribute file with respective zarr attribute files
@@ -358,10 +375,11 @@ class N5FSStore(FSStore):
             root_path = self.dir_path(path)
             for entry in children:
                 entry_path = os.path.join(root_path, entry)
-                if _prog_number.match(entry) and self.fs.path.isdir(entry_path):
+                if _prog_number.match(entry) and self.fs.isdir(entry_path):
                     for dir_path, _, file_names in self.fs.walk(entry_path):
                         for file_name in file_names:
                             file_path = os.path.join(dir_path, file_name)
+                            print(file_path.split(root_path))
                             rel_path = file_path.split(root_path + os.path.sep)[1]
                             new_child = rel_path.replace(os.path.sep, '.')
                             new_children.append(invert_chunk_coords(new_child))
