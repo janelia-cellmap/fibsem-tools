@@ -3,13 +3,13 @@ from typing import Dict, List, Tuple, Any, Union, Sequence
 from pathlib import Path
 from dask import delayed
 import dask.array as da
-from dask.bag import from_sequence
 import zarr
 import os
 from .util import rmtree_parallel, split_path_at_suffix
 from toolz import concat
 from xarray import DataArray
 import numpy as np
+from .storage import N5FSStore
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -151,7 +151,9 @@ def access_zarr(
         tmp_kwargs = kwargs.copy()
         tmp_kwargs["mode"] = "a"
         tmp = zarr.open(dir_path, path=str(container_path), **tmp_kwargs)
-        delete_zbranch(tmp)
+        #todo: move this logic to methods on the stores themselves
+        if isinstance(z.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)):
+            delete_zbranch(tmp)
     array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
     if kwargs.get("mode") != "r":
         array_or_group.attrs.update(attrs)
@@ -161,7 +163,7 @@ def access_zarr(
 def access_n5(
     dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs
 ) -> Any:
-    dir_path = zarr.N5Store(dir_path)
+    dir_path = N5FSStore(dir_path, **kwargs.get('storage_options', {}))
     return access_zarr(dir_path, container_path, **kwargs)
 
 
