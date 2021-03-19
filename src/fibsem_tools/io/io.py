@@ -174,15 +174,15 @@ def read_dask(urlpath: str, chunks='auto', **kwargs) -> da.core.Array:
     """
     Create a dask array from a path
     """
-    path_outer, path_inner, suffix = split_path_at_suffix(urlpath, _suffixes)
+    _, _, suffix = split_path_at_suffix(urlpath, _suffixes)
     return daskifiers[suffix](urlpath, chunks, **kwargs)
 
 
-def read_xarray(urlpath: str, chunks: Union[str, Tuple[int,...]]='auto', coords: Any='auto', **kwargs) -> DataArray:
+def read_xarray(urlpath: str, chunks: Union[str, Tuple[int,...]]='auto', coords: Any='auto', storage_options: Dict[str, Any] = {}, **kwargs) -> DataArray:
     """
     Create an xarray.DataArray from data found at a path. 
     """
-    raw_array = read(urlpath)
+    raw_array = read(urlpath, storage_options=storage_options)
     if hasattr(raw_array, 'attrs'):
         if not kwargs.get('attrs'):
             kwargs.update({'attrs': dict(raw_array.attrs)}) 
