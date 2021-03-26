@@ -152,7 +152,7 @@ def access_zarr(
         tmp_kwargs["mode"] = "a"
         tmp = zarr.open(dir_path, path=str(container_path), **tmp_kwargs)
         #todo: move this logic to methods on the stores themselves
-        if isinstance(z.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)):
+        if isinstance(tmp.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)):
             delete_zbranch(tmp)
     array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
     if kwargs.get("mode") != "r":
