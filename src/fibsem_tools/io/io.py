@@ -191,6 +191,7 @@ def read_xarray(urlpath: str, chunks: Union[str, Tuple[int,...]]='auto', coords:
     dask_array = read_dask(urlpath, chunks=chunks)
     if coords == 'auto':
         coords = infer_coordinates(raw_array)    
+       
     result = DataArray(dask_array, coords=coords, **kwargs)
     return result
 
@@ -249,11 +250,12 @@ def populate_group(
     group_attrs: Dict[str, Any] = {},
     compressor: Any = GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
+    mode='w',
+    **kwargs
 ) -> Tuple[zarr.hierarchy.group, Tuple[zarr.core.Array]]:
 
     zgroup = access(
-        os.path.join(container_path, group_path), mode="w", attrs=group_attrs
-    )
+        os.path.join(container_path, group_path), mode=mode, attrs=group_attrs, **kwargs)
     zarrays = []
     if array_attrs == None:
         _array_attrs = ({},) * len(arrays)
@@ -261,21 +263,17 @@ def populate_group(
         _array_attrs = array_attrs
 
     for idx, arr in enumerate(arrays):
-        path = os.path.join(container_path, group_path, array_paths[idx])
         chunking = chunks[idx]
         compressor = compressor
         attrs = _array_attrs[idx]
-        zarrays.append(
-            access(
-                path,
+        z_arr = zgroup.require_dataset(fill_value=0,
+                name=array_paths[idx],
                 shape=arr.shape,
                 dtype=arr.dtype,
                 chunks=chunking,
-                compressor=compressor,
-                attrs=attrs,
-                mode="w",
-            )
-        )
+                compressor=compressor)
+        z_arr.attrs.update(attrs)
+        zarrays.append(z_arr)
     return zgroup, zarrays
 
 
