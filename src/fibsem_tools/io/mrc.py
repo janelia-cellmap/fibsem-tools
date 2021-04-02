@@ -11,7 +11,8 @@ Pathlike = Union[str, Path]
 
 
 def access_mrc(path: Pathlike, mode: str, **kwargs):
-    return MrcMemmap(path, mode=mode, **kwargs)
+    # todo: add warning when kwargs are passed to this function
+    return MrcMemmap(path, mode=mode)
 
 
 def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
@@ -33,7 +34,9 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
     header = mem.header
     grid_size_angstroms = header.cella
     coords = []
-     
+    # round to this many decimal places when calculting the grid spacing, in nm
+    grid_spacing_decimals = 2
+
     if mem.data.flags['C_CONTIGUOUS']:
         # we reverse the keys from (x,y,z) to (z,y,x) so the order matches
         # numpy indexing order
@@ -41,7 +44,8 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
     else: 
         keys = header.cella.dtype.fields.keys()
     for key in keys:
-        axis = np.linspace(header[f'n{key}start'], (grid_size_angstroms[key] / 10), header[f'n{key}'])
+        grid_spacing = np.round((grid_size_angstroms[key] / 10) / header[f'n{key}'], 2)
+        axis = np.arange(header[f'n{key}start'], header[f'n{key}']) * grid_spacing
         coords.append(DataArray(data=axis, dims=(key,), attrs={'units': 'nm'}))
     
     return coords 
