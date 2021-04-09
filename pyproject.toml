@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "fibsem-tools"
-version = "0.1.12"
+version = "0.1.13"
 description = "Tools for processing FIBSEM datasets"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "~3.7"
 distributed = "^2021.1.1"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
