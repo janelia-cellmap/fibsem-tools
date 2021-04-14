@@ -199,7 +199,8 @@ def zarr_n5_coordinate_inference(arr: zarr.core.Array, default_unit='nm') -> Lis
     scales: Dict[str, float] = {ax: 1.0 for ax in axes}
     translates: Dict[str, float] = {ax: 0.0 for ax in axes}
 
-    if transform_meta := arr.attrs.get('transform'):
+    if  arr.attrs.get('transform'):
+        transform_meta = arr.attrs.get('transform')
         axes = transform_meta['axes']
         units = dict(zip(axes, transform_meta['units']))
         scales = dict(zip(axes, transform_meta['scale']))
@@ -210,11 +211,13 @@ def zarr_n5_coordinate_inference(arr: zarr.core.Array, default_unit='nm') -> Lis
         translates = {ax: 0 for ax in axes}
         units = {ax: default_unit for ax in axes}
         
-        if pixelResolution := arr.attrs.get("pixelResolution"):
+        if arr.attrs.get("pixelResolution"):
+            pixelResolution = arr.attrs.get("pixelResolution")
             scales = dict(zip(axes, pixelResolution["dimensions"]))
             units: str = {ax: pixelResolution["unit"] for ax in axes}
             
-        elif _scales:= arr.attrs.get("resolution"):
+        elif _arr.attrs.get("resolution"):
+            scales = _arr.attrs.get("resolution")
             scales = dict(zip(axes, _scales))
     
     coords = [

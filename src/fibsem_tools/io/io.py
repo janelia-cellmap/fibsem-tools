@@ -230,7 +230,8 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
         extra_attrs["source"] = source
         arr = da.from_array(arr, chunks=arr.chunks)
 
-    if attrs := kwargs.get("attrs"):
+    if kwargs.get("attrs"):
+        attrs = kwargs.get("attrs")
         out_attrs = attrs.copy()
         out_attrs.update(extra_attrs)
         kwargs["attrs"] = out_attrs
