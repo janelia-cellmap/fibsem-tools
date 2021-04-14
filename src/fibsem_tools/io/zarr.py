@@ -216,8 +216,8 @@ def zarr_n5_coordinate_inference(arr: zarr.core.Array, default_unit='nm') -> Lis
             scales = dict(zip(axes, pixelResolution["dimensions"]))
             units: str = {ax: pixelResolution["unit"] for ax in axes}
             
-        elif _arr.attrs.get("resolution"):
-            scales = _arr.attrs.get("resolution")
+        elif arr.attrs.get("resolution"):
+            _scales = arr.attrs.get("resolution")
             scales = dict(zip(axes, _scales))
     
     coords = [
