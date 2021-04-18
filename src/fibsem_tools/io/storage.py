@@ -1,4 +1,3 @@
-
 import os
 
 from zarr.meta import ZARR_FORMAT, json_dumps, json_loads
@@ -9,7 +8,16 @@ from zarr.storage import group_meta_key as zarr_group_meta_key
 
 from zarr.storage import FSStore
 from zarr.storage import normalize_storage_path
-from zarr.n5 import group_metadata_to_n5, group_metadata_to_zarr, array_metadata_to_n5, array_metadata_to_zarr, invert_chunk_coords, is_chunk_key, attrs_to_zarr, n5_keywords
+from zarr.n5 import (
+    group_metadata_to_n5,
+    group_metadata_to_zarr,
+    array_metadata_to_n5,
+    array_metadata_to_zarr,
+    invert_chunk_coords,
+    is_chunk_key,
+    attrs_to_zarr,
+    n5_keywords,
+)
 from zarr.meta import ZARR_FORMAT, json_dumps, json_loads
 from zarr.errors import (
     FSPathExistNotDir,
@@ -18,10 +26,12 @@ from zarr.errors import (
 import re
 
 from collections.abc import MutableMapping
-array_meta_key = '.zarray'
-group_meta_key = '.zgroup'
-attrs_key = '.zattrs'
-_prog_number = re.compile(r'^\d+$')
+
+array_meta_key = ".zarray"
+group_meta_key = ".zgroup"
+attrs_key = ".zattrs"
+_prog_number = re.compile(r"^\d+$")
+
 
 class FSStore(MutableMapping):
     """Wraps an fsspec.FSMap to give access to arbitrary filesystems
@@ -29,7 +39,7 @@ class FSStore(MutableMapping):
     Requires that ``fsspec`` is installed, as well as any additional
     requirements for the protocol chosen.
 
-    This class is a modified version of `zarr.storage.FSStore` with changes that 
+    This class is a modified version of `zarr.storage.FSStore` with changes that
     allow subclasses like `N5FSStore`.
 
     Parameters
@@ -46,46 +56,55 @@ class FSStore(MutableMapping):
     exceptions : list of Exception subclasses
         When accessing data, any of these exceptions will be treated
         as a missing key
-    meta_keys : list or tuple of keys that are reserved for metadata. 
+    meta_keys : list or tuple of keys that are reserved for metadata.
         Defaults to the zarr defaults, i.e. (".zarray", ".zgroup", ".zattrs").
     storage_options : passed to the fsspec implementation
     """
 
-    def __init__(self, url, normalize_keys=True, key_separator='/',
-                 mode='w',
-                 exceptions=(KeyError, PermissionError, IOError),
-                 meta_keys = (attrs_key, group_meta_key, array_meta_key),
-                 **storage_options):
+    def __init__(
+        self,
+        url,
+        normalize_keys=True,
+        key_separator="/",
+        mode="w",
+        exceptions=(KeyError, PermissionError, IOError),
+        meta_keys=(attrs_key, group_meta_key, array_meta_key),
+        **storage_options
+    ):
         import fsspec
+
         self.normalize_keys = normalize_keys
         self.key_separator = key_separator
         protocol, _ = fsspec.core.split_protocol(url)
         # set auto_mkdir to True for local file system
-        if protocol == None and not storage_options.get('auto_mkdir'):
-            storage_options['auto_mkdir'] = True
+        if protocol == None and not storage_options.get("auto_mkdir"):
+            storage_options["auto_mkdir"] = True
         self.map = fsspec.get_mapper(url, **storage_options)
         self.meta_keys = meta_keys
         self.fs = self.map.fs  # for direct operations
         self.path = self.fs._strip_protocol(url)
         self.mode = mode
         self.exceptions = exceptions
+        # the need for a specific check for links will disappear with the next FSSpec release
         if self.fs.exists(self.path) and not self.fs.isdir(self.path):
-            raise FSPathExistNotDir(url)
+            info = self.fs.info(self.path)
+            if not (info["type"] == "link" and self.fs.isdir(info["destination"])):
+                raise FSPathExistNotDir(url)
 
     def _normalize_key(self, key):
-        key = normalize_storage_path(key).lstrip('/')
+        key = normalize_storage_path(key).lstrip("/")
         if key:
-            *bits, end = key.split('/')
+            *bits, end = key.split("/")
             if end not in self.meta_keys:
-                end = end.replace('.', self.key_separator)
-                key = '/'.join(bits + [end])
+                end = end.replace(".", self.key_separator)
+                key = "/".join(bits + [end])
 
         return key.lower() if self.normalize_keys else key
 
     def getitems(self, keys, **kwargs):
         keys_transformed = [self._normalize_key(key) for key in keys]
         results = self.map.getitems(keys_transformed, on_error="omit")
-        return {k: v for k,v in zip(keys, results.values())}
+        return {k: v for k, v in zip(keys, results.values())}
 
     def __getitem__(self, key):
         key = self._normalize_key(key)
@@ -95,13 +114,13 @@ class FSStore(MutableMapping):
             raise KeyError(key) from e
 
     def setitems(self, values):
-        if self.mode == 'r':
+        if self.mode == "r":
             raise ReadOnlyError()
         values = {self._normalize_key(key): val for key, val in values.items()}
         self.map.setitems(values)
 
     def __setitem__(self, key, value):
-        if self.mode == 'r':
+        if self.mode == "r":
             raise ReadOnlyError()
         key = self._normalize_key(key)
         path = self.dir_path(key)
@@ -114,7 +133,7 @@ class FSStore(MutableMapping):
             raise KeyError(key) from e
 
     def __delitem__(self, key):
-        if self.mode == 'r':
+        if self.mode == "r":
             raise ReadOnlyError()
         key = self._normalize_key(key)
         path = self.dir_path(key)
@@ -128,8 +147,11 @@ class FSStore(MutableMapping):
         return key in self.map
 
     def __eq__(self, other):
-        return (type(self) == type(other) and self.map == other.map
-                and self.mode == other.mode)
+        return (
+            type(self) == type(other)
+            and self.map == other.map
+            and self.mode == other.mode
+        )
 
     def keys(self):
         return iter(self.map)
@@ -147,8 +169,10 @@ class FSStore(MutableMapping):
     def listdir(self, path=None):
         dir_path = self.dir_path(path)
         try:
-            children = sorted(p.rstrip('/').rsplit('/', 1)[-1]
-                              for p in self.fs.ls(dir_path, detail=False))
+            children = sorted(
+                p.rstrip("/").rsplit("/", 1)[-1]
+                for p in self.fs.ls(dir_path, detail=False)
+            )
             if self.key_separator != "/":
                 return children
             else:
@@ -163,7 +187,7 @@ class FSStore(MutableMapping):
                             for file_name in self.fs.find(entry_path):
                                 file_path = os.path.join(dir_path, file_name)
                                 rel_path = file_path.split(root_path)[1]
-                                new_children.append(rel_path.replace(os.path.sep, '.'))
+                                new_children.append(rel_path.replace(os.path.sep, "."))
                         else:
                             new_children.append(entry)
                     return sorted(new_children)
@@ -173,7 +197,7 @@ class FSStore(MutableMapping):
             return []
 
     def rmdir(self, path=None):
-        if self.mode == 'r':
+        if self.mode == "r":
             raise ReadOnlyError()
         store_path = self.dir_path(path)
         if self.fs.isdir(store_path):
@@ -184,14 +208,14 @@ class FSStore(MutableMapping):
         return self.fs.du(store_path, True, True)
 
     def clear(self):
-        if self.mode == 'r':
+        if self.mode == "r":
             raise ReadOnlyError()
         self.map.clear()
 
 
 class N5FSStore(FSStore):
-    """Implentation of the N5 format (https://github.com/saalfeldlab/n5) using `fsspec`, 
-    which allows storage on a variety of filesystems. Based on `zarr.N5Store`. 
+    """Implentation of the N5 format (https://github.com/saalfeldlab/n5) using `fsspec`,
+    which allows storage on a variety of filesystems. Based on `zarr.N5Store`.
 
     Parameters
     ----------
@@ -228,22 +252,23 @@ class N5FSStore(FSStore):
     Safe to write in multiple threads or processes.
 
     """
+
     def __init__(self, *args, **kwargs):
-        kwargs['key_separator'] = '/'
-        kwargs['meta_keys'] = ('attributes.json',)
+        kwargs["key_separator"] = "/"
+        kwargs["meta_keys"] = ("attributes.json",)
         super().__init__(*args, **kwargs)
 
     def _normalize_key(self, key):
         if is_chunk_key(key):
             key = invert_chunk_coords(key)
 
-        key = normalize_storage_path(key).lstrip('/')
+        key = normalize_storage_path(key).lstrip("/")
         if key:
-            *bits, end = key.split('/')
+            *bits, end = key.split("/")
 
             if end not in self.meta_keys:
-                end = end.replace('.', self.key_separator)
-                key = '/'.join(bits + [end])
+                end = end.replace(".", self.key_separator)
+                key = "/".join(bits + [end])
         return key.lower() if self.normalize_keys else key
 
     def __getitem__(self, key):
@@ -301,7 +326,9 @@ class N5FSStore(FSStore):
 
             for k in n5_keywords:
                 if k in zarr_attrs.keys():
-                    raise ValueError("Can not set attribute %s, this is a reserved N5 keyword" % k)
+                    raise ValueError(
+                        "Can not set attribute %s, this is a reserved N5 keyword" % k
+                    )
 
             # replace previous user attributes
             for k in list(n5_attrs.keys()):
@@ -312,7 +339,7 @@ class N5FSStore(FSStore):
             n5_attrs.update(**zarr_attrs)
 
             value = json_dumps(n5_attrs)
-        
+
         super().__setitem__(key, value)
 
     def __delitem__(self, key):
@@ -333,26 +360,23 @@ class N5FSStore(FSStore):
             if key not in self:
                 return False
             # group if not a dataset (attributes do not contain 'dimensions')
-            return 'dimensions' not in self._load_n5_attrs(key)
+            return "dimensions" not in self._load_n5_attrs(key)
 
         elif key.endswith(zarr_array_meta_key):
 
             key = key.replace(zarr_array_meta_key, self.meta_keys[0])
             # array if attributes contain 'dimensions'
-            return 'dimensions' in self._load_n5_attrs(key)
+            return "dimensions" in self._load_n5_attrs(key)
 
         elif key.endswith(zarr_attrs_key):
 
             key = key.replace(zarr_attrs_key, self.meta_keys[0])
             return self._contains_attrs(key)
-        
+
         return super().__contains__(key)
 
     def __eq__(self, other):
-        return (
-            isinstance(other, N5FSStore) and
-            self.path == other.path
-        )
+        return isinstance(other, N5FSStore) and self.path == other.path
 
     def listdir(self, path=None):
 
@@ -382,7 +406,7 @@ class N5FSStore(FSStore):
                         for file_name in file_names:
                             file_path = os.path.join(dir_path, file_name)
                             rel_path = file_path.split(root_path + os.path.sep)[1]
-                            new_child = rel_path.replace(os.path.sep, '.')
+                            new_child = rel_path.replace(os.path.sep, ".")
                             new_children.append(invert_chunk_coords(new_child))
                 else:
                     new_children.append(entry)
@@ -418,7 +442,7 @@ class N5FSStore(FSStore):
             attrs_key = os.path.join(path, self.meta_keys[0])
 
         n5_attrs = self._load_n5_attrs(attrs_key)
-        return len(n5_attrs) > 0 and 'dimensions' not in n5_attrs
+        return len(n5_attrs) > 0 and "dimensions" not in n5_attrs
 
     def _is_array(self, path):
 
@@ -427,7 +451,7 @@ class N5FSStore(FSStore):
         else:
             attrs_key = os.path.join(path, self.meta_keys[0])
 
-        return 'dimensions' in self._load_n5_attrs(attrs_key)
+        return "dimensions" in self._load_n5_attrs(attrs_key)
 
     def _contains_attrs(self, path):
 
