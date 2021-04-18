@@ -265,7 +265,7 @@ def access_precomputed(
     scale_index=None,
 ) -> TensorStoreArray:
     driver = "neuroglancer_precomputed"
-    
+
     kvstore_driver, _store_path = fsspec.core.split_protocol(store_path)
     if kvstore_driver == None:
         kvstore_driver = "file"
@@ -282,13 +282,15 @@ def access_precomputed(
 
     info_path = os.path.join(store_path, "info")
 
-    if mode == 'r':
+    if mode == "r":
         with fsspec.open(info_path) as fh:
             json_data = json.loads(fh.read())
             precomputed_metadata = parse_info(json_data)
             scale_matches = [scale.key == key for scale in precomputed_metadata.scales]
             if not any(scale_matches):
-                raise ValueError('Could not find key: {key} in info file at {info_path}' )
+                raise ValueError(
+                    "Could not find key: {key} in info file at {info_path}"
+                )
             else:
                 scale_index = scale_matches.index(True)
                 scale_meta = precomputed_metadata.scales[scale_index]
@@ -303,7 +305,10 @@ def access_precomputed(
             jpeg_quality=jpeg_quality,
         )
         precomputed_metadata = PrecomputedMetadata(
-            type=array_type, data_type=dtype, num_channels=num_channels, scales=[scale_meta]
+            type=array_type,
+            data_type=dtype,
+            num_channels=num_channels,
+            scales=[scale_meta],
         )
 
     if mode == "r":
@@ -312,11 +317,11 @@ def access_precomputed(
         write = None
         create = None
         delete_existing = None
-    elif mode == 'a':
-        read=True
-        write=True
-        create=True
-        delete_existing=False
+    elif mode == "a":
+        read = True
+        write = True
+        create = True
+        delete_existing = False
     elif mode == "rw":
         read = True
         write = True
@@ -349,24 +354,27 @@ def access_precomputed(
         resolution=scale_meta.resolution,
         size=scale_meta.size,
         chunk_size=scale_meta.chunk_size,
-        jpeg_quality=jpeg_quality
+        jpeg_quality=jpeg_quality,
     )
     return tsa.open(
         read=read, write=write, create=create, delete_existing=delete_existing
     ).result()
 
 
-def precomputed_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], channel: int=0):
-    store_path, key, _ = split_path_at_suffix(urlpath, ('.precomputed',))
-    tsa = access_precomputed(store_path, key, mode='r')[ts.d["channel"][channel]]
+def precomputed_to_dask(
+    urlpath: str, chunks: Union[str, Sequence[int]], channel: int = 0
+):
+    store_path, key, _ = split_path_at_suffix(urlpath, (".precomputed",))
+    tsa = access_precomputed(store_path, key, mode="r")[ts.d["channel"][channel]]
     shape = tuple(tsa.shape)
     dtype = tsa.dtype.numpy_dtype
     if chunks == "original":
         chunks = tsa.spec().to_json()["scale_metadata"]["chunk_size"]
     _chunks = normalize_chunks(chunks, shape, dtype=dtype)
-    def chunk_loader(store_path,key, block_info=None):
+
+    def chunk_loader(store_path, key, block_info=None):
         idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
-        tsa = access_precomputed(store_path, key, mode='r')[ts.d["channel"][channel]]
+        tsa = access_precomputed(store_path, key, mode="r")[ts.d["channel"][channel]]
         result = tsa[idx].read().result()
         return result
 

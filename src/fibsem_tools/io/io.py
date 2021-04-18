@@ -22,9 +22,21 @@ import mrcfile
 from xarray import DataArray
 import numpy as np
 from dask import bag
-from .mrc import mrc_coordinate_inference, mrc_shape_dtype_inference, access_mrc, mrc_to_dask
+from .mrc import (
+    mrc_coordinate_inference,
+    mrc_shape_dtype_inference,
+    access_mrc,
+    mrc_to_dask,
+)
 from .util import split_path_at_suffix
-from .zarr import zarr_array_from_dask, access_n5, access_zarr, n5_to_dask, zarr_n5_coordinate_inference, zarr_to_dask
+from .zarr import (
+    zarr_array_from_dask,
+    access_n5,
+    access_zarr,
+    n5_to_dask,
+    zarr_n5_coordinate_inference,
+    zarr_to_dask,
+)
 from .tensorstore import access_precomputed, precomputed_to_dask
 from numcodecs import GZip
 import fsspec
@@ -170,7 +182,7 @@ def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     return access(path, mode="r", **kwargs)
 
 
-def read_dask(urlpath: str, chunks='auto', **kwargs) -> da.core.Array:
+def read_dask(urlpath: str, chunks="auto", **kwargs) -> da.core.Array:
     """
     Create a dask array from a path
     """
@@ -178,31 +190,39 @@ def read_dask(urlpath: str, chunks='auto', **kwargs) -> da.core.Array:
     return daskifiers[suffix](urlpath, chunks, **kwargs)
 
 
-def read_xarray(urlpath: str, chunks: Union[str, Tuple[int,...]]='auto', coords: Any='auto', storage_options: Dict[str, Any] = {}, **kwargs) -> DataArray:
+def read_xarray(
+    urlpath: str,
+    chunks: Union[str, Tuple[int, ...]] = "auto",
+    coords: Any = "auto",
+    storage_options: Dict[str, Any] = {},
+    **kwargs,
+) -> DataArray:
     """
-    Create an xarray.DataArray from data found at a path. 
+    Create an xarray.DataArray from data found at a path.
     """
     raw_array = read(urlpath, storage_options=storage_options)
-    if hasattr(raw_array, 'attrs'):
-        if not kwargs.get('attrs'):
-            kwargs.update({'attrs': dict(raw_array.attrs)}) 
-    if kwargs.get('attrs'):
-        kwargs['attrs'].update({'urlpath': urlpath})
+    if hasattr(raw_array, "attrs"):
+        if not kwargs.get("attrs"):
+            kwargs.update({"attrs": dict(raw_array.attrs)})
+    if kwargs.get("attrs"):
+        kwargs["attrs"].update({"urlpath": urlpath})
     dask_array = read_dask(urlpath, chunks=chunks)
-    if coords == 'auto':
-        coords = infer_coordinates(raw_array)    
-       
+    if coords == "auto":
+        coords = infer_coordinates(raw_array)
+
     result = DataArray(dask_array, coords=coords, **kwargs)
     return result
 
 
-def infer_coordinates(arr: Any, default_unit: str="nm") -> List[DataArray]:
+def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
     if isinstance(arr, zarr.core.Array):
         coords = zarr_n5_coordinate_inference(arr)
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
         coords = mrc_coordinate_inference(arr)
     else:
-        raise ValueError(f'No coordinate inference possible for array of type {type(arr)}')
+        raise ValueError(
+            f"No coordinate inference possible for array of type {type(arr)}"
+        )
     return coords
 
 
@@ -251,12 +271,13 @@ def populate_group(
     group_attrs: Dict[str, Any] = {},
     compressor: Any = GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
-    mode='w',
-    **kwargs
+    mode="w",
+    **kwargs,
 ) -> Tuple[zarr.hierarchy.group, Tuple[zarr.core.Array]]:
 
     zgroup = access(
-        os.path.join(container_path, group_path), mode=mode, attrs=group_attrs, **kwargs)
+        os.path.join(container_path, group_path), mode=mode, attrs=group_attrs, **kwargs
+    )
     zarrays = []
     if array_attrs == None:
         _array_attrs = ({},) * len(arrays)
@@ -267,12 +288,14 @@ def populate_group(
         chunking = chunks[idx]
         compressor = compressor
         attrs = _array_attrs[idx]
-        z_arr = zgroup.require_dataset(fill_value=0,
-                name=array_paths[idx],
-                shape=arr.shape,
-                dtype=arr.dtype,
-                chunks=chunking,
-                compressor=compressor)
+        z_arr = zgroup.require_dataset(
+            fill_value=0,
+            name=array_paths[idx],
+            shape=arr.shape,
+            dtype=arr.dtype,
+            chunks=chunking,
+            compressor=compressor,
+        )
         z_arr.attrs.update(attrs)
         zarrays.append(z_arr)
     return zgroup, zarrays

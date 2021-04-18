@@ -118,9 +118,7 @@ def _read_header(path):
         base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
 
         if len(base_header) == 0:
-            raise RuntimeError(
-                f"Base header is missing for {fobj.name}"
-            )
+            raise RuntimeError(f"Base header is missing for {fobj.name}")
 
         fibsem_header = FIBSEMHeader(
             **dict(zip(base_header.dtype.names, base_header[0]))
@@ -814,7 +812,9 @@ class FibsemDataset:
         )
         result_data = da.stack([all_extrema.min(0)[:, 0], all_extrema.max(0)[:, 1]])
         result = DataArray(
-            result_data, dims=("statistic", "channel"), coords={"statistic": ["min", "max"], 'channel': [0,1]}
+            result_data,
+            dims=("statistic", "channel"),
+            coords={"statistic": ["min", "max"], "channel": [0, 1]},
         )
         return result
 

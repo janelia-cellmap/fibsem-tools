@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fibsem-tools"
-version = "0.1.15"
+version = "0.1.16"
 description = "Tools for processing FIBSEM datasets"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"

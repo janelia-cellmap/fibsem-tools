@@ -74,7 +74,7 @@ def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, st
     suffixes, as well as the suffix. If the last element of the path bears a suffix, return the path,
     the empty string, and the suffix.
     """
-    protocol: str 
+    protocol: str
     subpath: str
     protocol, subpath = fsspec.core.split_protocol(urlpath)
     parts = Path(subpath).parts

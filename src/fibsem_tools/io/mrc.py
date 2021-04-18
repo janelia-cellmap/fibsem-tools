@@ -37,24 +37,24 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
     # round to this many decimal places when calculting the grid spacing, in nm
     grid_spacing_decimals = 2
 
-    if mem.data.flags['C_CONTIGUOUS']:
+    if mem.data.flags["C_CONTIGUOUS"]:
         # we reverse the keys from (x,y,z) to (z,y,x) so the order matches
         # numpy indexing order
         keys = reversed(header.cella.dtype.fields.keys())
-    else: 
+    else:
         keys = header.cella.dtype.fields.keys()
     for key in keys:
-        grid_spacing = np.round((grid_size_angstroms[key] / 10) / header[f'n{key}'], 2)
-        axis = np.arange(header[f'n{key}start'], header[f'n{key}']) * grid_spacing
-        coords.append(DataArray(data=axis, dims=(key,), attrs={'units': 'nm'}))
-    
-    return coords 
+        grid_spacing = np.round((grid_size_angstroms[key] / 10) / header[f"n{key}"], 2)
+        axis = np.arange(header[f"n{key}start"], header[f"n{key}"]) * grid_spacing
+        coords.append(DataArray(data=axis, dims=(key,), attrs={"units": "nm"}))
+
+    return coords
 
 
 def mrc_chunk_loader(fname, block_info=None):
     idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
-    # block_info[None] contains the output specification 
-    dtype = block_info[None]['dtype']
+    # block_info[None] contains the output specification
+    dtype = block_info[None]["dtype"]
     result = np.array(access_mrc(fname, mode="r").data[idx]).astype(dtype)
     return result
 
@@ -66,8 +66,8 @@ def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]]):
     with access_mrc(urlpath, mode="r") as mem:
         shape, dtype = mrc_shape_dtype_inference(mem)
 
-    if chunks=='auto':
-        _chunks = normalize_chunks((1, *(-1,) * (len(shape) -1)), shape, dtype=dtype)
+    if chunks == "auto":
+        _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)
     else:
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
