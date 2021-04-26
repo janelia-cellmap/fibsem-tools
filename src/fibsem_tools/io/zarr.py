@@ -142,9 +142,7 @@ def access_zarr(
     if isinstance(container_path, Path):
         dir_path = str(dir_path)
 
-    attrs = {}
-    if "attrs" in kwargs:
-        attrs = kwargs.pop("attrs")
+    attrs = kwargs.pop("attrs", {})
 
     # zarr is extremely slow to delete existing directories, so we do it ourselves
     if kwargs.get("mode") == "w":
@@ -157,7 +155,7 @@ def access_zarr(
         ):
             delete_zbranch(tmp)
     array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
-    if kwargs.get("mode") != "r":
+    if kwargs.get("mode") != "r" and len(attrs) > 1:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
