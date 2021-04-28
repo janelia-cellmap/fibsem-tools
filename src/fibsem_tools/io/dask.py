@@ -49,7 +49,7 @@ def store_block(
         try:
             target[slices] = source
             return np.expand_dims(0, tuple(range(source.ndim)))
-        except:
+        except OSError:
             if retries_used == retries:
                 return np.expand_dims(1, tuple(range(source.ndim)))
             else:

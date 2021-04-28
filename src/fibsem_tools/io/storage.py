@@ -85,11 +85,6 @@ class FSStore(MutableMapping):
         self.path = self.fs._strip_protocol(url)
         self.mode = mode
         self.exceptions = exceptions
-        # the need for a specific check for links will disappear with the next FSSpec release
-        if self.fs.exists(self.path) and not self.fs.isdir(self.path):
-            info = self.fs.info(self.path)
-            if not (info["type"] == "link" and self.fs.isdir(info["destination"])):
-                raise FSPathExistNotDir(url)
 
     def _normalize_key(self, key):
         key = normalize_storage_path(key).lstrip("/")
