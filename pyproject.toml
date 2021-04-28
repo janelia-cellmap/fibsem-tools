@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fibsem-tools"
-version = "0.1.16"
+version = "0.1.19"
 description = "Tools for processing FIBSEM datasets"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
@@ -10,8 +10,8 @@ python = ">=3.7.1, <4"
 distributed = "^2021.1.1"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
-s3fs = "^0.5.1"
-fsspec = "^0.8.4"
+s3fs = "^2021.4.0"
+fsspec = "^2021.4.0"
 zarr = "^2.6.1"
 mrcfile = "^1.2.0"
 dacite = "^1.6.0"
