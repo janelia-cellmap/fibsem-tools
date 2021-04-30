@@ -45,19 +45,23 @@ def store_block(
     slices = tuple(slice(start, stop) for start, stop in chunk_origin)
     if region:
         slices = da.optimization.fuse_slice(region, slices)
-    while True:
-        try:
-            target[slices] = source
-            return np.expand_dims(0, tuple(range(source.ndim)))
-        except OSError:
-            if retries_used == retries:
-                return np.expand_dims(1, tuple(range(source.ndim)))
-            else:
-                sleep_duration = backoff_seconds * 2 ** retries_used + random.uniform(
-                    0, 1
-                )
-                time.sleep(sleep_duration)
-                retries_used += 1
+    if retries == 0:
+        target[slices] = source
+        return np.expand_dims(0, tuple(range(source.ndim)))
+    else:
+        while True:
+            try:
+                target[slices] = source
+                return np.expand_dims(0, tuple(range(source.ndim)))
+            except OSError:
+                if retries_used == retries:
+                    return np.expand_dims(1, tuple(range(source.ndim)))
+                else:
+                    sleep_duration = backoff_seconds * 2 ** retries_used + random.uniform(
+                        0, 1
+                    )
+                    time.sleep(sleep_duration)
+                    retries_used += 1
 
 
 def store_blocks(

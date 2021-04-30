@@ -5,7 +5,7 @@ from zarr.storage import _prog_number
 from zarr.storage import array_meta_key as zarr_array_meta_key
 from zarr.storage import attrs_key as zarr_attrs_key
 from zarr.storage import group_meta_key as zarr_group_meta_key
-
+import fsspec
 from zarr.storage import FSStore
 from zarr.storage import normalize_storage_path
 from zarr.n5 import (
@@ -69,12 +69,24 @@ class FSStore(MutableMapping):
         mode="w",
         exceptions=(KeyError, PermissionError, IOError),
         meta_keys=(attrs_key, group_meta_key, array_meta_key),
+        dimension_separator=None,
         **storage_options
     ):
-        import fsspec
 
         self.normalize_keys = normalize_keys
         self.key_separator = key_separator
+
+        # For backwards compatibility. Guaranteed to be non-None
+        if key_separator is not None:
+            dimension_separator = key_separator
+
+        self.key_separator = dimension_separator
+        if self.key_separator is None:
+            self.key_separator = "."
+
+        # Pass attributes to array creation
+        self._dimension_separator = dimension_separator
+
         protocol, _ = fsspec.core.split_protocol(url)
         # set auto_mkdir to True for local file system
         if protocol == None and not storage_options.get("auto_mkdir"):
@@ -290,7 +302,6 @@ class N5FSStore(FSStore):
                 raise KeyError(key)
             else:
                 return json_dumps(value)
-
         return super().__getitem__(key)
 
     def __setitem__(self, key, value):
