@@ -201,29 +201,34 @@ def read_xarray(
     Create an xarray.DataArray from data found at a path.
     """
     raw_array = read(urlpath, storage_options=storage_options)
+    dask_array = read_dask(urlpath, chunks=chunks)
+    cleaned_attrs = None
+    if coords == "auto":
+        coords, cleaned_attrs = infer_coordinates(raw_array)
+
     if hasattr(raw_array, "attrs"):
         if not kwargs.get("attrs"):
-            kwargs.update({"attrs": dict(raw_array.attrs)})
+            raw_attrs = dict(raw_array.attrs)
+            if cleaned_attrs is not None:
+                [raw_attrs.pop(key) for key in (set(raw_attrs) - set(cleaned_attrs))]
+            kwargs.update({"attrs": raw_attrs})
     if kwargs.get("attrs"):
         kwargs["attrs"].update({"urlpath": urlpath})
-    dask_array = read_dask(urlpath, chunks=chunks)
-    if coords == "auto":
-        coords = infer_coordinates(raw_array)
-
     result = DataArray(dask_array, coords=coords, **kwargs)
     return result
 
 
-def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
+def infer_coordinates(arr: Any, default_unit: str = "nm") -> Tuple[List[DataArray], Dict[str, Any]]:
+    attrs = {}
     if isinstance(arr, zarr.core.Array):
-        coords = zarr_n5_coordinate_inference(arr.shape, dict(arr.attrs))
+        coords, attrs = zarr_n5_coordinate_inference(arr.shape, dict(arr.attrs))
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
         coords = mrc_coordinate_inference(arr)
     else:
         raise ValueError(
             f"No coordinate inference possible for array of type {type(arr)}"
         )
-    return coords
+    return coords, attrs
 
 
 def DataArrayFactory(arr: Any, **kwargs) -> DataArray:

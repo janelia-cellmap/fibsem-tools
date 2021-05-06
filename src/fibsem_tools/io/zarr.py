@@ -195,34 +195,35 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
 
 def zarr_n5_coordinate_inference(shape: Tuple[int, ...],
     attrs: Dict[str, Any],  default_unit: str="nm"
-) -> List[DataArray]:
+) -> Tuple[List[DataArray], Dict[str, Any]]:
+    output_attrs = attrs.copy()
     input_axes: List[str] = [f"dim_{idx}" for idx in range(len(shape))]
     output_axes: List[str] = input_axes
     units: Dict[str, str] = {ax: default_unit for ax in output_axes}
     scales: Dict[str, float] = {ax: 1.0 for ax in output_axes}
     translates: Dict[str, float] = {ax: 0.0 for ax in output_axes}
 
-    if attrs.get("transform"):
-        transform_meta = attrs.get("transform")
+    if output_attrs.get("transform"):
+        transform_meta = output_attrs.pop("transform")
         input_axes = transform_meta["axes"]
         output_axes = input_axes
         units = dict(zip(output_axes, transform_meta["units"]))
         scales = dict(zip(output_axes, transform_meta["scale"]))
         translates = dict(zip(output_axes, transform_meta["translate"]))
 
-    elif attrs.get("pixelResolution") or attrs.get("resolution"):
+    elif output_attrs.get("pixelResolution") or output_attrs.get("resolution"):
         input_axes = N5_AXES_3D
         output_axes = input_axes[::-1]
         translates = {ax: 0 for ax in output_axes}
         units = {ax: default_unit for ax in output_axes}
 
-        if attrs.get("pixelResolution"):
-            pixelResolution = attrs.get("pixelResolution")
+        if output_attrs.get("pixelResolution"):
+            pixelResolution = output_attrs.pop("pixelResolution")
             scales = dict(zip(input_axes, pixelResolution["dimensions"]))
             units = {ax: pixelResolution["unit"] for ax in input_axes}
 
-        elif attrs.get("resolution"):
-            _scales = attrs.get("resolution")
+        elif output_attrs.get("resolution"):
+            _scales = output_attrs.pop("resolution")
             scales = dict(zip(N5_AXES_3D, _scales))
 
     coords = [
@@ -234,4 +235,4 @@ def zarr_n5_coordinate_inference(shape: Tuple[int, ...],
         for idx, ax in enumerate(output_axes)
     ]
 
-    return coords
+    return coords, output_attrs
