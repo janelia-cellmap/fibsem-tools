@@ -216,7 +216,7 @@ def read_xarray(
 
 def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
     if isinstance(arr, zarr.core.Array):
-        coords = zarr_n5_coordinate_inference(arr)
+        coords = zarr_n5_coordinate_inference(arr.shape, dict(arr.attrs))
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
         coords = mrc_coordinate_inference(arr)
     else:
