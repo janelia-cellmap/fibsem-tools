@@ -3,6 +3,8 @@ import zarr
 from fibsem_tools.io import read, access
 import numpy as np
 import shutil
+import atexit
+import os
 from fibsem_tools.io.storage import N5FSStore
 from fibsem_tools.io.io import read_dask
 from fibsem_tools.io.tensorstore import access_precomputed, precomputed_to_dask
@@ -10,6 +12,7 @@ from fibsem_tools.io.util import list_files, list_files_parallel, split_path_at_
 from pathlib import Path
 import os
 import tempfile
+
 
 def _make_local_files(files):
     result = []
@@ -21,7 +24,8 @@ def _make_local_files(files):
 
 
 def test_accessing_array_zarr():
-    store = 'data/array.zarr'
+    store = tempfile.mkdtemp(suffix='.zarr')
+    atexit.register(shutil.rmtree, store)
     data = np.random.randint(0,255, size=(100,), dtype='uint8') 
     z = zarr.open(store, mode='w', shape=data.shape, chunks=10)
     z[:] = data
@@ -29,11 +33,12 @@ def test_accessing_array_zarr():
 
     darr = read_dask(store, chunks=(10,))
     assert (darr.compute() == data).all
-    shutil.rmtree(store)
+    
 
 
 def test_accessing_array_zarr_n5():
-    store = 'data/array.n5'
+    store = tempfile.mkdtemp(suffix='.n5')
+    atexit.register(shutil.rmtree, store)
     data = np.random.randint(0,255, size=(100,), dtype='uint8') 
     z = zarr.open(store, mode='w', shape=data.shape, chunks=10)
     z[:] = data
@@ -41,11 +46,11 @@ def test_accessing_array_zarr_n5():
 
     darr = read_dask(store, chunks=(10,))
     assert (darr.compute() == data).all
-    shutil.rmtree(store)
 
 
 def test_accessing_group_zarr():
-    store = 'data/group.zarr'
+    store = tempfile.mkdtemp(suffix='.zarr')
+    atexit.register(shutil.rmtree, store)
     data = np.zeros(100, dtype='uint8') + 42
 
     zg = zarr.open(store, mode='w')
@@ -55,10 +60,11 @@ def test_accessing_group_zarr():
     zg = access(store, mode='w')
     zg['foo'] = data
     assert zarr.open(store, mode='a') == zg
-    shutil.rmtree(store)
+
 
 def test_accessing_group_zarr_n5():
-    store = 'data/group.n5'
+    store = tempfile.mkdtemp(suffix='.n5')
+    atexit.register(shutil.rmtree, store)
     data = np.zeros(100, dtype='uint8') + 42
     zg = zarr.open(store, mode='a')
     zg.attrs.update({'foo': 'bar'})
@@ -67,11 +73,9 @@ def test_accessing_group_zarr_n5():
     assert dict(access(store, mode='r').attrs) == {'foo': 'bar'}
     assert np.array_equal(access(store, mode='r')['foo'][:], data) 
 
-    shutil.rmtree(store)
-
-
 def test_accessing_precomputed():
-    store = 'data/array.precomputed/'
+    store = tempfile.mkdtemp(suffix='.precomputed')
+    atexit.register(shutil.rmtree, store)
     key = 's0'
     data = np.random.randint(0,255,size=(10,10,10), dtype='uint8')
     resolution = [1.0, 2.0, 3.0]
@@ -85,23 +89,25 @@ def test_accessing_precomputed():
     
     darr = precomputed_to_dask(os.path.join(store, key), chunks=(2,2,2))
     assert (darr.compute() ==  data).all
-    shutil.rmtree('data/array.precomputed')
+
 
 def test_list_files():
-    fnames = ['./foo/foo.txt', './foo/bar/bar.txt', './foo/bar/baz/baz.txt']
+    path = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, path)
+    fnames = [os.path.join(path, f) for f in ['foo/foo.txt', 'foo/bar/bar.txt', 'foo/bar/baz/baz.txt']]
     files_made = _make_local_files(fnames)    
-    files_found = list_files('./foo')
+    files_found = list_files(path)
     assert set(files_found) == set(fnames)
 
-    shutil.rmtree('foo')
 
 def test_list_files_parellel():
-    fnames = ['./foo/foo.txt', './foo/bar/bar.txt', './foo/bar/baz/baz.txt']
+    path = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, path)
+    fnames = [os.path.join(path, f) for f in ['foo/foo.txt', 'foo/bar/bar.txt', 'foo/bar/baz/baz.txt']]
     files_made = _make_local_files(fnames) 
-    files_found = list_files_parallel('./foo')
+    files_found = list_files_parallel(path)
     assert set(files_found) == set(fnames)
 
-    shutil.rmtree('foo')
 
 def test_path_splitting():
     path = 's3://0/1/2.n5/3/4'
