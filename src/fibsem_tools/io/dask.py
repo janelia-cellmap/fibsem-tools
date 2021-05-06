@@ -4,7 +4,7 @@ import distributed
 import dask.array as da
 import numpy as np
 import random, time
-
+from aiohttp import ServerDisconnectedError
 
 def sequential_rechunk(
     source: Any,
@@ -39,7 +39,6 @@ def store_block(
     retries: int = 5,
     backoff_seconds: float = 1.0,
 ):
-    backoff_seconds = 1.0
     retries_used = 0
     chunk_origin = block_info[0]["array-location"]
     slices = tuple(slice(start, stop) for start, stop in chunk_origin)
@@ -53,7 +52,7 @@ def store_block(
             try:
                 target[slices] = source
                 return np.expand_dims(0, tuple(range(source.ndim)))
-            except OSError:
+            except (OSError, ServerDisconnectedError):
                 if retries_used == retries:
                     return np.expand_dims(1, tuple(range(source.ndim)))
                 else:

@@ -60,13 +60,12 @@ def test_accessing_group_zarr():
 def test_accessing_group_zarr_n5():
     store = 'data/group.n5'
     data = np.zeros(100, dtype='uint8') + 42
-    zg = zarr.open(store, mode='w')
+    zg = zarr.open(store, mode='a')
+    zg.attrs.update({'foo': 'bar'})
     zg['foo'] = data
-    assert access(store, mode='a') == zg
 
-    zg = access(store, mode='w')
-    zg['foo'] = data
-    assert zarr.open(store, mode='a') == zg
+    assert dict(access(store, mode='r').attrs) == {'foo': 'bar'}
+    assert np.array_equal(access(store, mode='r')['foo'][:], data) 
 
     shutil.rmtree(store)
 
