@@ -89,7 +89,7 @@ class FSStore(MutableMapping):
 
         protocol, _ = fsspec.core.split_protocol(url)
         # set auto_mkdir to True for local file system
-        if protocol == None and not storage_options.get("auto_mkdir"):
+        if protocol in (None, "file") and not storage_options.get("auto_mkdir"):
             storage_options["auto_mkdir"] = True
         self.map = fsspec.get_mapper(url, **storage_options)
         self.meta_keys = meta_keys
