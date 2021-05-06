@@ -262,7 +262,7 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
     return data
 
 
-def populate_group(
+def initialize_group(
     container_path: Pathlike,
     group_path: Pathlike,
     arrays: Sequence[DataArray],
@@ -271,7 +271,7 @@ def populate_group(
     group_attrs: Dict[str, Any] = {},
     compressor: Any = GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
-    mode="w",
+    mode: str = "w",
     **kwargs,
 ) -> Tuple[zarr.hierarchy.group, Tuple[zarr.core.Array]]:
 
