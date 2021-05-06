@@ -193,42 +193,45 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
     return darr
 
 
-def zarr_n5_coordinate_inference(
-    arr: zarr.core.Array, default_unit="nm"
+def zarr_n5_coordinate_inference(shape: Tuple[int, ...],
+    attrs: Dict[str, Any],  default_unit: str="nm"
 ) -> List[DataArray]:
-    axes: List[str] = [f"dim_{idx}" for idx in range(arr.ndim)]
-    units: Dict[str, str] = {ax: default_unit for ax in axes}
-    scales: Dict[str, float] = {ax: 1.0 for ax in axes}
-    translates: Dict[str, float] = {ax: 0.0 for ax in axes}
+    input_axes: List[str] = [f"dim_{idx}" for idx in range(len(shape))]
+    output_axes: List[str] = input_axes
+    units: Dict[str, str] = {ax: default_unit for ax in output_axes}
+    scales: Dict[str, float] = {ax: 1.0 for ax in output_axes}
+    translates: Dict[str, float] = {ax: 0.0 for ax in output_axes}
 
-    if arr.attrs.get("transform"):
-        transform_meta = arr.attrs.get("transform")
-        axes = transform_meta["axes"]
-        units = dict(zip(axes, transform_meta["units"]))
-        scales = dict(zip(axes, transform_meta["scale"]))
-        translates = dict(zip(axes, transform_meta["translate"]))
+    if attrs.get("transform"):
+        transform_meta = attrs.get("transform")
+        input_axes = transform_meta["axes"]
+        output_axes = input_axes
+        units = dict(zip(output_axes, transform_meta["units"]))
+        scales = dict(zip(output_axes, transform_meta["scale"]))
+        translates = dict(zip(output_axes, transform_meta["translate"]))
 
-    elif arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
-        axes = N5_AXES_3D
-        translates = {ax: 0 for ax in axes}
-        units = {ax: default_unit for ax in axes}
+    elif attrs.get("pixelResolution") or attrs.get("resolution"):
+        input_axes = N5_AXES_3D
+        output_axes = input_axes[::-1]
+        translates = {ax: 0 for ax in output_axes}
+        units = {ax: default_unit for ax in output_axes}
 
-        if arr.attrs.get("pixelResolution"):
-            pixelResolution = arr.attrs.get("pixelResolution")
-            scales = dict(zip(axes, pixelResolution["dimensions"]))
-            units: str = {ax: pixelResolution["unit"] for ax in axes}
+        if attrs.get("pixelResolution"):
+            pixelResolution = attrs.get("pixelResolution")
+            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
+            units = {ax: pixelResolution["unit"] for ax in input_axes}
 
-        elif arr.attrs.get("resolution"):
-            _scales = arr.attrs.get("resolution")
-            scales = dict(zip(axes, _scales))
+        elif attrs.get("resolution"):
+            _scales = attrs.get("resolution")
+            scales = dict(zip(N5_AXES_3D, _scales))
 
     coords = [
         DataArray(
-            translates[ax] + np.arange(arr.shape[idx]) * scales[ax],
+            translates[ax] + np.arange(shape[idx]) * scales[ax],
             dims=ax,
             attrs={"units": units[ax]},
         )
-        for idx, ax in enumerate(axes)
+        for idx, ax in enumerate(output_axes)
     ]
 
     return coords
