@@ -111,7 +111,7 @@ class FSStore(MutableMapping):
     def getitems(self, keys, **kwargs):
         keys_transformed = [self._normalize_key(key) for key in keys]
         results = self.map.getitems(keys_transformed, on_error="omit")
-        return {k: v for k, v in zip(keys, results.values())}
+        return {keys[keys_transformed.index(k)]: v for k, v in results.items()}
 
     def __getitem__(self, key):
         key = self._normalize_key(key)
