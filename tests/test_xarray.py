@@ -24,6 +24,6 @@ def test_coordinate_inference(attr_factory):
     attr = attr_factory(scales=scales, units=units, axes=axes, translates=translates)
 
     result = [DataArray(translates[idx] + np.arange(shape[idx]) * scales[idx], dims=ax, attrs={"units": units[idx]}) for idx, ax in enumerate(axes)]
-    test = zarr_n5_coordinate_inference(shape, attr)
+    coords, new_attrs = zarr_n5_coordinate_inference(shape, attr)
     for idx, r in enumerate(result):
-        assert DataArray.equals(r,test[idx])
+        assert DataArray.equals(r,coords[idx])
