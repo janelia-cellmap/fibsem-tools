@@ -120,21 +120,27 @@ def access(
 ) -> Any:
     """
 
-    Access data from a variety of array storage formats.
+    Access data (arrays and groups) from a variety of hierarchical array storage formats.
 
     Parameters
     ----------
-    path: A path or collection of paths to image files. If `path` is a string, then the appropriate reader will be
-          selected based on the extension of the path, and the file will be read. If `path` is a collection of strings,
-          it is assumed that each string is a path to an image and each will be read sequentially.
+    path: A path or collection of paths to image files. If `path` is a string, it is assumed to be a path, then the appropriate access function will be
+          selected based on the extension of the path, and the file will be accessed. To access a Zarr or N5 containers, the path to the root container must end with .zarr or .n5
 
-    lazy: A boolean, defaults to False. If True, this function returns the native file reader wrapped by
-    dask.delayed. This is advantageous for distributed computing.
+          For reading .zarr containers, this function dispatches to `zarr.open`
 
-    mode: The access mode for the file. e.g. 'r' for read-only access.
+          For reading n5 containers, this function uses storage routines found in `fibsem_tools.io.storage`
 
-    Returns an array-like object, a collection of array-like objects, a chunked store, or
-    a dask.delayed object.
+          For reading .dat files (Janelia-native binary image format), this function uses routines found in `fibsem_tools.io.fibsem`
+
+          If `path` is a collection of strings,
+          it is assumed that each element of the collection represents a path, and this function will return the result of calling itself on each element of the collection.
+
+    mode: The access mode for the file. e.g. 'r' for read-only access, 'w' for writable access.
+
+    Additional kwargs are passed to the format-specific access function.
+
+    Returns an array-like object, a collection of array-like objects, or an instance of zarr.hierarchy.Group
     -------
 
     """
@@ -163,19 +169,25 @@ def access(
 def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     """
 
-    Access data on disk with read-only permissions
+    Read-only access for data (arrays and groups) from a variety of hierarchical array storage formats.
 
     Parameters
     ----------
-    path: A path or collection of paths to image files. If `path` is a string, then the appropriate image reader will be
-          selected based on the extension of the path, and the file will be read. If `path` is a collection of strings,
-          it is assumed that each string is a path to an image and each will be read sequentially.
+    path: A path or collection of paths to image files. If `path` is a string, it is assumed to be a path, then the appropriate access function will be
+          selected based on the extension of the path, and the file will be accessed. To access a Zarr or N5 containers, the path to the root container must end with .zarr or .n5
 
-    lazy: A boolean, defaults to False. If True, this function returns the native file reader wrapped by
-    dask.delayed. This is advantageous for distributed computing.
+          For reading .zarr containers, this function dispatches to `zarr.open`
 
-    Returns an array-like object, a collection of array-like objects, a chunked store, or
-    a dask.delayed object.
+          For reading n5 containers, this function uses storage routines found in `fibsem_tools.io.storage`
+
+          For reading .dat files (Janelia-native binary image format), this function uses routines found in `fibsem_tools.io.fibsem`
+
+          If `path` is a collection of strings,
+          it is assumed that each element of the collection represents a path, and this function will return the result of calling itself on each element of the collection.
+
+    Additional kwargs are passed to the format-specific access function.
+
+    Returns an array-like object, a collection of array-like objects, or an instance of zarr.hierarchy.Group
     -------
 
     """
@@ -218,7 +230,9 @@ def read_xarray(
     return result
 
 
-def infer_coordinates(arr: Any, default_unit: str = "nm") -> Tuple[List[DataArray], Dict[str, Any]]:
+def infer_coordinates(
+    arr: Any, default_unit: str = "nm"
+) -> Tuple[List[DataArray], Dict[str, Any]]:
     attrs = {}
     if isinstance(arr, zarr.core.Array):
         coords, attrs = zarr_n5_coordinate_inference(arr.shape, dict(arr.attrs))
@@ -300,6 +314,7 @@ def initialize_group(
             dtype=arr.dtype,
             chunks=chunking,
             compressor=compressor,
+            write_empty_chunks=False,
         )
         z_arr.attrs.update(attrs)
         zarrays.append(z_arr)
