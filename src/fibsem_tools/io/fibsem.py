@@ -73,7 +73,7 @@ class _DTypeDict(object):
             self.update(names, formats, offsets)
 
     def update(self, names, formats, offsets):
-        """"""
+        """ """
         if isinstance(names, list):
             if len(names) == len(formats) == len(offsets):
                 self.names.extend(names)

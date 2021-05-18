@@ -193,8 +193,8 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
     return darr
 
 
-def zarr_n5_coordinate_inference(shape: Tuple[int, ...],
-    attrs: Dict[str, Any],  default_unit: str="nm"
+def zarr_n5_coordinate_inference(
+    shape: Tuple[int, ...], attrs: Dict[str, Any], default_unit: str = "nm"
 ) -> Tuple[List[DataArray], Dict[str, Any]]:
     output_attrs = attrs.copy()
     input_axes: List[str] = [f"dim_{idx}" for idx in range(len(shape))]
