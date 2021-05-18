@@ -6,6 +6,7 @@ import numpy as np
 import random, time
 from aiohttp import ServerDisconnectedError
 
+
 def sequential_rechunk(
     source: Any,
     target: Any,
@@ -56,8 +57,8 @@ def store_block(
                 if retries_used == retries:
                     return np.expand_dims(1, tuple(range(source.ndim)))
                 else:
-                    sleep_duration = backoff_seconds * 2 ** retries_used + random.uniform(
-                        0, 1
+                    sleep_duration = (
+                        backoff_seconds * 2 ** retries_used + random.uniform(0, 1)
                     )
                     time.sleep(sleep_duration)
                     retries_used += 1
