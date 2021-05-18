@@ -144,10 +144,10 @@ class FSStore(MutableMapping):
             raise ReadOnlyError()
         key = self._normalize_key(key)
         path = self.dir_path(key)
-        if self.fs.isdir(path):
-            self.fs.rm(path, recursive=True)
-        else:
-            del self.map[key]
+        #if self.fs.isdir(path):
+        #    self.fs.rm(path, recursive=True)
+        #else:
+        del self.map[key]
 
     def __contains__(self, key):
         key = self._normalize_key(key)
