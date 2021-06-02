@@ -213,7 +213,7 @@ def read_xarray(
     Create an xarray.DataArray from data found at a path.
     """
     raw_array = read(urlpath, storage_options=storage_options)
-    dask_array = read_dask(urlpath, chunks=chunks)
+    dask_array = read_dask(urlpath, chunks=chunks, storage_options=storage_options)
     cleaned_attrs = None
     if coords == "auto":
         coords, cleaned_attrs = infer_coordinates(raw_array)
