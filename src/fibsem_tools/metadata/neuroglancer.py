@@ -2,7 +2,7 @@ from pydantic import BaseModel, PositiveInt
 from typing import Sequence
 from xarray import DataArray
 from .transform import SpatialTransform
-
+import numpy as np
 
 class PixelResolution(BaseModel):
     """
@@ -29,7 +29,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
 
 
     @classmethod
-    def fromDataArraySequence(cls, dataarrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
+    def fromDataArrays(cls, dataarrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
         """
         Create neuroglancer-compatibled N5 metadata from a collection of DataArrays.
 
@@ -48,7 +48,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
             SpatialTransform.fromDataArray(array, reverse_axes=True)
             for array in dataarrays
         ]
-        pixelresolution = PixelResolution(transforms[0].scale, transforms[0].units[0])
+        pixelresolution = PixelResolution(dimensions=transforms[0].scale, unit=transforms[0].units[0])
         scales: List[List[int]] = [
             np.round(np.divide(t.scale, transforms[0].scale)).astype("int").tolist()
             for t in transforms
