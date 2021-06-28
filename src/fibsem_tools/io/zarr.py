@@ -176,7 +176,7 @@ def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
         _chunks = arr.chunks
     else:
         _chunks = chunks
-    darr = da.from_array(arr, chunks=_chunks)
+    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
     return darr
 
 
@@ -189,7 +189,7 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
         _chunks = arr.chunks
     else:
         _chunks = chunks
-    darr = da.from_array(arr, chunks=_chunks)
+    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
     return darr
 
 
