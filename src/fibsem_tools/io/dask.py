@@ -32,41 +32,25 @@ def sequential_rechunk(
     return results
 
 
-def store_block(
-    source,
-    target,
-    region,
-    block_info=None,
-    retries: int = 5,
-    backoff_seconds: float = 1.0,
-):
-    retries_used = 0
-    chunk_origin = block_info[0]["array-location"]
-    slices = tuple(slice(start, stop) for start, stop in chunk_origin)
+def write_blocks(source, target, region, lock=None, return_stored=False):
+    """
+    For each chunk in `source`, write that data to `target` 
+    """
+    
+    storage_op = []
+    key_array = np.array(source.__dask_keys__(), dtype=object)
+    slices = slices_from_chunks(source.chunks)
     if region:
-        slices = da.optimization.fuse_slice(region, slices)
-    if retries == 0:
-        target[slices] = source
-        return np.expand_dims(0, tuple(range(source.ndim)))
-    else:
-        while True:
-            try:
-                target[slices] = source
-                return np.expand_dims(0, tuple(range(source.ndim)))
-            except (OSError, ServerDisconnectedError):
-                if retries_used == retries:
-                    return np.expand_dims(1, tuple(range(source.ndim)))
-                else:
-                    sleep_duration = (
-                        backoff_seconds * 2 ** retries_used + random.uniform(0, 1)
-                    )
-                    time.sleep(sleep_duration)
-                    retries_used += 1
+        slices = [fuse_slice(region, slc) for slc in slices]
+    for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
+        region = slices[lidx]
+        source_block = _blocks(source, aidx, key_array)
+        storage_op.append(dask.delayed(store_chunk)(source_block, target, region, lock, return_stored))
+    return storage_op
 
 
 def store_blocks(
-    sources, targets, regions=None, retries: int = 5, backoff_seconds: float = 1.0
-):
+    sources, targets, regions=None) -> List[List[dask.delayed]]:
     result = []
 
     if isinstance(sources, dask.array.core.Array):
@@ -92,17 +76,5 @@ def store_blocks(
         )
 
     for source, target, region in zip(sources, targets, regions):
-        out_chunks = tuple((1,) * len(c) for c in source.chunks)
-        result.append(
-            da.map_blocks(
-                store_block,
-                source,
-                target,
-                region,
-                chunks=out_chunks,
-                retries=retries,
-                backoff_seconds=backoff_seconds,
-                dtype="int64",
-            )
-        )
+        result.append(write_blocks(source, target, region, lock=None, return_stored=False)) 
     return result
