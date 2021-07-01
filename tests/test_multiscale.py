@@ -9,6 +9,7 @@ import atexit
 import numpy as np
 import pytest
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
+from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import SpatialTransform
 
 @pytest.mark.parametrize('multiscale_metadata', (True, False))
@@ -46,8 +47,17 @@ def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bo
             assert f'{k}/foo' not in arrays[idx].attrs
 
         if multiscale_metadata:
+            cosem_meta = COSEMGroupMetadata.fromDataArrays(name=ms.name, paths=tuple(multi.keys()), dataarrays=tuple(multi.values())).dict()
+            for mkey, mvalue in cosem_meta.items():
+                assert group.attrs[mkey] == mvalue
+            
+            neuroglancer_meta = NeuroglancerN5GroupMetadata.fromDataArrays(dataarrays=tuple(multi.values())).dict()
+            for mkey, mvalue in neuroglancer_meta.items():
+                assert group.attrs[mkey] == mvalue
+
             assert arrays[idx].attrs['transform'] == SpatialTransform.fromDataArray(dataarray=multi[k]).dict()
-            assert group.attrs['multiscales'] == COSEMGroupMetadata.fromDataArrays(name=ms.name, paths=tuple(multi.keys()), dataarrays=tuple(multi.values())).dict()['multiscales']
+            
+        
         else:
             assert 'multiscales' not in group.attrs
         
