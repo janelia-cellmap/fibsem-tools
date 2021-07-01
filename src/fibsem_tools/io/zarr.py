@@ -155,7 +155,7 @@ def access_zarr(
         ):
             delete_zbranch(tmp)
     array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
-    if kwargs.get("mode") != "r" and len(attrs) > 1:
+    if kwargs.get("mode") != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
