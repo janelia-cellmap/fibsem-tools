@@ -8,10 +8,12 @@ import tempfile
 import atexit
 import numpy as np
 import pytest
+from fibsem_tools.metadata.cosem import COSEMGroupMetadata
 from fibsem_tools.metadata.transform import SpatialTransform
 
+@pytest.mark.parametrize('multiscale_metadata', (True, False))
 @pytest.mark.parametrize('propagate_array_attrs', (True, False))
-def test_multiscale_storage(propagate_array_attrs: bool):
+def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bool):
     data = da.random.randint(0, 8, (16,16), chunks=(8,8), dtype='uint8')
     coords = ('x', da.arange(data.shape[0]), {'units' : 'nm'}), ('y',da.arange(data.shape[1]), {'units' : 'nm'})
     multi = {'s0' : DataArray(data, coords=coords)}
@@ -19,12 +21,14 @@ def test_multiscale_storage(propagate_array_attrs: bool):
     for k in multi:
         multi[k].attrs[f'{k}/foo'] = f'{k}/bar'
 
-    ms = Multiscales('test', multi, {'foo' : 'bar'})
+    ms = Multiscales('test', multi, attrs={'foo' : 'bar'})
     
     store = tempfile.mkdtemp(suffix='.zarr')
     atexit.register(shutil.rmtree, store)
 
-    group, arrays, storage = ms.store(store, propagate_array_attrs=propagate_array_attrs)
+    group, arrays, storage = ms.store(store, 
+                                      multiscale_metadata=multiscale_metadata, 
+                                      propagate_array_attrs=propagate_array_attrs)
     dask.delayed(storage).compute()
     
     for key, value in ms.attrs.items():
@@ -41,5 +45,9 @@ def test_multiscale_storage(propagate_array_attrs: bool):
         else:
             assert f'{k}/foo' not in arrays[idx].attrs
 
-        assert arrays[idx].attrs['transform'] == SpatialTransform.fromDataArray(dataarray=multi[k]).dict()
+        if multiscale_metadata:
+            assert arrays[idx].attrs['transform'] == SpatialTransform.fromDataArray(dataarray=multi[k]).dict()
+            assert group.attrs['multiscales'] == COSEMGroupMetadata.fromDataArrays(name=ms.name, paths=tuple(multi.keys()), dataarrays=tuple(multi.values())).dict()['multiscales']
+        else:
+            assert 'multiscales' not in group.attrs
         

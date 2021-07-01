@@ -1,12 +1,9 @@
 
-import dask.array as da
 import numpy as np
 from xarray import DataArray
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata, PixelResolution
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, MultiscaleMeta, ScaleMeta
 from fibsem_tools.metadata.transform import SpatialTransform
-
-import zarr
 from xarray_multiscale import multiscale
 
 
