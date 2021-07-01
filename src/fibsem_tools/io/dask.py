@@ -3,9 +3,39 @@ import dask
 import distributed
 import dask.array as da
 import numpy as np
-import random, time
-from aiohttp import ServerDisconnectedError
+from dask.array.core import slices_from_chunks, store_chunk
 
+def _blocks(self, index, key_array):
+    from numbers import Number
+    from dask.array.slicing import normalize_index
+    from dask.base import tokenize
+
+    from itertools import product
+    from dask.highlevelgraph import HighLevelGraph
+    from dask.array import Array
+    if not isinstance(index, tuple):
+        index = (index,)
+    if sum(isinstance(ind, (np.ndarray, list)) for ind in index) > 1:
+        raise ValueError("Can only slice with a single list")
+    if any(ind is None for ind in index):
+        raise ValueError("Slicing with np.newaxis or None is not supported")
+    index = normalize_index(index, self.numblocks)
+    index = tuple(slice(k, k + 1) if isinstance(k, Number) else k for k in index)
+    
+    name = "blocks-" + tokenize(self, index)
+
+    new_keys = key_array[index]
+
+    chunks = tuple(
+        tuple(np.array(c)[i].tolist()) for c, i in zip(self.chunks, index)
+    )
+
+    keys = product(*(range(len(c)) for c in chunks))
+
+    layer = {(name,) + key: tuple(new_keys[key].tolist()) for key in keys}
+
+    graph = HighLevelGraph.from_collections(name, layer, dependencies=[self])
+    return Array(graph, name, chunks, meta=self)
 
 def sequential_rechunk(
     source: Any,
@@ -20,7 +50,7 @@ def sequential_rechunk(
     chunked array storage.
     """
     results = []
-    slices = da.core.slices_from_chunks(source.rechunk(slab_size).chunks)
+    slices = slices_from_chunks(source.rechunk(slab_size).chunks)
 
     for sl in slices:
         arr_in = source[sl].compute(scheduler="threads")
