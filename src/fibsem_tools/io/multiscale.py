@@ -104,7 +104,7 @@ class Multiscales:
 
         """
 
-        group_attrs = {**self.attrs}
+        group_attrs = self.attrs.copy()
         array_attrs: Dict[str, Any] = {k: {} for k in self.arrays}
 
         if propagate_array_attrs:
