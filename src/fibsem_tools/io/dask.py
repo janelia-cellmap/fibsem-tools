@@ -5,7 +5,11 @@ import dask.array as da
 import numpy as np
 from dask.array.core import slices_from_chunks, store_chunk
 
+
 def _blocks(self, index, key_array):
+    """
+    This only exists until a performance issue in the dask.array.block is sorted out
+    """
     from numbers import Number
     from dask.array.slicing import normalize_index
     from dask.base import tokenize
@@ -13,6 +17,7 @@ def _blocks(self, index, key_array):
     from itertools import product
     from dask.highlevelgraph import HighLevelGraph
     from dask.array import Array
+
     if not isinstance(index, tuple):
         index = (index,)
     if sum(isinstance(ind, (np.ndarray, list)) for ind in index) > 1:
@@ -21,14 +26,12 @@ def _blocks(self, index, key_array):
         raise ValueError("Slicing with np.newaxis or None is not supported")
     index = normalize_index(index, self.numblocks)
     index = tuple(slice(k, k + 1) if isinstance(k, Number) else k for k in index)
-    
+
     name = "blocks-" + tokenize(self, index)
 
     new_keys = key_array[index]
 
-    chunks = tuple(
-        tuple(np.array(c)[i].tolist()) for c, i in zip(self.chunks, index)
-    )
+    chunks = tuple(tuple(np.array(c)[i].tolist()) for c, i in zip(self.chunks, index))
 
     keys = product(*(range(len(c)) for c in chunks))
 
@@ -36,6 +39,7 @@ def _blocks(self, index, key_array):
 
     graph = HighLevelGraph.from_collections(name, layer, dependencies=[self])
     return Array(graph, name, chunks, meta=self)
+
 
 def sequential_rechunk(
     source: Any,
@@ -64,9 +68,9 @@ def sequential_rechunk(
 
 def write_blocks(source, target, region, lock=None, return_stored=False):
     """
-    For each chunk in `source`, write that data to `target` 
+    For each chunk in `source`, write that data to `target`
     """
-    
+
     storage_op = []
     key_array = np.array(source.__dask_keys__(), dtype=object)
     slices = slices_from_chunks(source.chunks)
@@ -75,12 +79,13 @@ def write_blocks(source, target, region, lock=None, return_stored=False):
     for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
         region = slices[lidx]
         source_block = _blocks(source, aidx, key_array)
-        storage_op.append(dask.delayed(store_chunk)(source_block, target, region, lock, return_stored))
+        storage_op.append(
+            dask.delayed(store_chunk)(source_block, target, region, lock, return_stored)
+        )
     return storage_op
 
 
-def store_blocks(
-    sources, targets, regions=None) -> List[List[dask.delayed]]:
+def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
     result = []
 
     if isinstance(sources, dask.array.core.Array):
@@ -106,5 +111,7 @@ def store_blocks(
         )
 
     for source, target, region in zip(sources, targets, regions):
-        result.append(write_blocks(source, target, region, lock=None, return_stored=False)) 
+        result.append(
+            write_blocks(source, target, region, lock=None, return_stored=False)
+        )
     return result
