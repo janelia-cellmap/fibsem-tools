@@ -29,7 +29,8 @@ class SpatialTransform(BaseModel):
 
     @classmethod
     def fromDataArray(
-        cls, dataarray: DataArray, reverse_axes: bool=False) -> "SpatialTransform":
+        cls, dataarray: DataArray, reverse_axes: bool = False
+    ) -> "SpatialTransform":
         """
         Generate a spatial transform from a DataArray.
 
@@ -37,7 +38,7 @@ class SpatialTransform(BaseModel):
         ----------
 
         dataarray: DataArray
-        
+
         reverse_axes: boolean, default=False
             If True, the order of the `axes` in the spatial transform will be reversed relative to the order of the dimensions of `dataarray`.
 
@@ -45,7 +46,7 @@ class SpatialTransform(BaseModel):
         -------
 
         SpatialTransform
-        
+
         """
 
         orderer = slice(None)
@@ -57,9 +58,13 @@ class SpatialTransform(BaseModel):
         scale = []
         for ax in axes:
             if len(dataarray.coords[ax]) > 1:
-                scale_estimate = abs(float(dataarray.coords[ax][1]) - float(dataarray.coords[ax][0]))
+                scale_estimate = abs(
+                    float(dataarray.coords[ax][1]) - float(dataarray.coords[ax][0])
+                )
             else:
-                raise ValueError(f'Cannot infer scale parameter along dimension {ax} with length {len(dataarray.coords[ax])}')
+                raise ValueError(
+                    f"Cannot infer scale parameter along dimension {ax} with length {len(dataarray.coords[ax])}"
+                )
             scale.append(scale_estimate)
 
         return cls(axes=axes, units=units, translate=translate, scale=scale)

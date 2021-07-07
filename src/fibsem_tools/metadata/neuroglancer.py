@@ -4,6 +4,7 @@ from xarray import DataArray
 from .transform import SpatialTransform
 import numpy as np
 
+
 class PixelResolution(BaseModel):
     """
     PixelResolution attribute used by the Saalfeld lab. The dimensions attribute contains a list of scales that define the
@@ -27,9 +28,10 @@ class NeuroglancerN5GroupMetadata(BaseModel):
     scales: Sequence[Sequence[PositiveInt]]
     pixelResolution: PixelResolution
 
-
     @classmethod
-    def fromDataArrays(cls, dataarrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
+    def fromDataArrays(
+        cls, dataarrays: Sequence[DataArray]
+    ) -> "NeuroglancerN5GroupMetadata":
         """
         Create neuroglancer-compatibled N5 metadata from a collection of DataArrays.
 
@@ -48,9 +50,16 @@ class NeuroglancerN5GroupMetadata(BaseModel):
             SpatialTransform.fromDataArray(array, reverse_axes=True)
             for array in dataarrays
         ]
-        pixelresolution = PixelResolution(dimensions=transforms[0].scale, unit=transforms[0].units[0])
+        pixelresolution = PixelResolution(
+            dimensions=transforms[0].scale, unit=transforms[0].units[0]
+        )
         scales: List[List[int]] = [
             np.round(np.divide(t.scale, transforms[0].scale)).astype("int").tolist()
             for t in transforms
         ]
-        return cls(axes=transforms[0].axes, units=transforms[0].units, scales=scales, pixelResolution=pixelresolution)
+        return cls(
+            axes=transforms[0].axes,
+            units=transforms[0].units,
+            scales=scales,
+            pixelResolution=pixelresolution,
+        )
