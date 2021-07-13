@@ -3,8 +3,10 @@ import dask
 import distributed
 import dask.array as da
 import numpy as np
-from dask.array.core import slices_from_chunks, store_chunk
-
+from dask.array.core import slices_from_chunks
+import backoff
+from aiohttp import ServerDisconnectedError
+from dask.utils import is_arraylike
 
 def _blocks(self, index, key_array):
     """
@@ -66,7 +68,49 @@ def sequential_rechunk(
     return results
 
 
-def write_blocks(source, target, region, lock=None, return_stored=False):
+@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+def store_chunk(x, out, index, lock):
+    """
+    A function inserted in a Dask graph for storing a chunk.
+
+    Parameters
+    ----------
+    x: array-like
+        An array (potentially a NumPy one)
+    out: array-like
+        Where to store results too.
+    index: slice-like
+        Where to store result from ``x`` in ``out``.
+    lock: Lock-like or False
+        Lock to use before writing to ``out``.
+
+    Examples
+    --------
+
+    >>> a = np.ones((5, 6))
+    >>> b = np.empty(a.shape)
+    >>> load_store_chunk(a, b, (slice(None), slice(None)), False, False, False)
+    """
+
+    result = None
+
+    if lock:
+        lock.acquire()
+    try:
+        if x is not None:
+            if is_arraylike(x):
+                out[index] = x
+            else:
+                out[index] = np.asanyarray(x)
+    finally:
+        if lock:
+            lock.release()
+
+    return result
+
+
+
+def write_blocks(source, target, region, lock=None):
     """
     For each chunk in `source`, write that data to `target`
     """
@@ -80,7 +124,7 @@ def write_blocks(source, target, region, lock=None, return_stored=False):
         region = slices[lidx]
         source_block = _blocks(source, aidx, key_array)
         storage_op.append(
-            dask.delayed(store_chunk)(source_block, target, region, lock, return_stored)
+            dask.delayed(store_chunk)(source_block, target, region, lock)
         )
     return storage_op
 
@@ -112,6 +156,6 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
 
     for source, target, region in zip(sources, targets, regions):
         result.append(
-            write_blocks(source, target, region, lock=None, return_stored=False)
+            write_blocks(source, target, region, lock=None)
         )
     return result
