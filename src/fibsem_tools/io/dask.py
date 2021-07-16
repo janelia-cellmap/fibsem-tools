@@ -1,10 +1,11 @@
-from typing import Any, Tuple, List
+from typing import Any, Sequence, Tuple, List
 import dask
 import distributed
 import dask.array as da
 import numpy as np
 from dask.array.core import slices_from_chunks
 import backoff
+from dask.array.optimization import fuse_slice
 # from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 
@@ -68,9 +69,9 @@ def sequential_rechunk(
         client.cluster.scale(0)
     return results
 
-
+# consider adding some exceptions to the function signature instead of grabbing everything
 # @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def store_chunk(x, out, index):
+def store_chunk(x, out, index, lock):
     """
     A function inserted in a Dask graph for storing a chunk.
 
@@ -94,17 +95,24 @@ def store_chunk(x, out, index):
     """
 
     result = None
-
-    if x is not None:
-        if is_arraylike(x):
-            out[index] = x
-        else:
-            out[index] = np.asanyarray(x)
-
+    if lock:
+        with lock:        
+            if x is not None:
+                if is_arraylike(x):
+                    out[index] = x
+                else:
+                    out[index] = np.asanyarray(x)
+    else:
+        if x is not None:
+            if is_arraylike(x):
+                out[index] = x
+            else:
+                out[index] = np.asanyarray(x)
+    
     return result
 
 
-def write_blocks(source, target, region):
+def write_blocks(source, target, region, lock=False):
     """
     For each chunk in `source`, write that data to `target`
     """
@@ -117,11 +125,11 @@ def write_blocks(source, target, region):
     for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
         region = slices[lidx]
         source_block = _blocks(source, aidx, key_array)
-        storage_op.append(dask.delayed(store_chunk)(source_block, target, region))
+        storage_op.append(dask.delayed(store_chunk)(source_block, target, region, lock=lock))
     return storage_op
 
 
-def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
+def store_blocks(sources, targets, regions=None, locks=False) -> List[List[dask.delayed]]:
     result = []
 
     if isinstance(sources, dask.array.core.Array):
@@ -134,11 +142,17 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
             % (len(sources), len(targets))
         )
 
-    if isinstance(regions, tuple) or regions is None:
+    if isinstance(regions, Sequence) or regions is None:
         regions = [regions]
+    
+    if isinstance(locks, Sequence) or locks is None:
+        locks = [locks]
 
     if len(sources) > 1 and len(regions) == 1:
         regions *= len(sources)
+    
+    if len(sources) > 1 and len(locks) == 1:
+        locks *= len(sources)
 
     if len(sources) != len(regions):
         raise ValueError(
@@ -146,6 +160,6 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
             % (len(sources), len(targets), len(regions))
         )
 
-    for source, target, region in zip(sources, targets, regions):
-        result.append(write_blocks(source, target, region))
+    for source, target, region, lock in zip(sources, targets, regions, locks):
+        result.append(write_blocks(source, target, region, lock))
     return result
