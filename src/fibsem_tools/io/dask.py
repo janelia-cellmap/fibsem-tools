@@ -8,6 +8,7 @@ import backoff
 from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 
+
 def _blocks(self, index, key_array):
     """
     This only exists until a performance issue in the dask.array.block is sorted out
@@ -68,8 +69,8 @@ def sequential_rechunk(
     return results
 
 
-@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def store_chunk(x, out, index, lock):
+# @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+def store_chunk(x, out, index):
     """
     A function inserted in a Dask graph for storing a chunk.
 
@@ -94,23 +95,16 @@ def store_chunk(x, out, index, lock):
 
     result = None
 
-    if lock:
-        lock.acquire()
-    try:
-        if x is not None:
-            if is_arraylike(x):
-                out[index] = x
-            else:
-                out[index] = np.asanyarray(x)
-    finally:
-        if lock:
-            lock.release()
+    if x is not None:
+        if is_arraylike(x):
+            out[index] = x
+        else:
+            out[index] = np.asanyarray(x)
 
     return result
 
 
-
-def write_blocks(source, target, region, lock=None):
+def write_blocks(source, target, region):
     """
     For each chunk in `source`, write that data to `target`
     """
@@ -123,9 +117,7 @@ def write_blocks(source, target, region, lock=None):
     for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
         region = slices[lidx]
         source_block = _blocks(source, aidx, key_array)
-        storage_op.append(
-            dask.delayed(store_chunk)(source_block, target, region, lock)
-        )
+        storage_op.append(dask.delayed(store_chunk)(source_block, target, region))
     return storage_op
 
 
@@ -155,7 +147,5 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
         )
 
     for source, target, region in zip(sources, targets, regions):
-        result.append(
-            write_blocks(source, target, region, lock=None)
-        )
+        result.append(write_blocks(source, target, region))
     return result
