@@ -5,7 +5,7 @@ import dask.array as da
 import numpy as np
 from dask.array.core import slices_from_chunks
 import backoff
-from aiohttp import ServerDisconnectedError
+# from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 
 
