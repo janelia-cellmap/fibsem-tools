@@ -23,7 +23,7 @@ class SpatialTransform(BaseModel):
         translate = values.get("translate")
         if not len(axes) == len(units) == len(translate) == len(scale):
             raise ValueError(
-                f"The length of all arguments must match. {len(axes) = },  {len(units) = }, {len(translate) = }, {len(scale) = }"
+                f"The length of all arguments must match. len(axes) = {len(axes)},  len(units) = {len(units)}, len(translate) = {len(translate)}, len(scale) = {len(scale)}"
             )
         return values
 
