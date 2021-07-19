@@ -145,7 +145,7 @@ def store_blocks(sources, targets, regions=None, locks=False) -> List[List[dask.
     if isinstance(regions, Sequence) or regions is None:
         regions = [regions]
     
-    if isinstance(locks, Sequence) or locks is None:
+    if not isinstance(locks, Sequence):
         locks = [locks]
 
     if len(sources) > 1 and len(regions) == 1:
