@@ -1,3 +1,7 @@
+from scipy.stats import mode
+import numpy as np
+from numpy.typing import ArrayLike
+from tinybrain.downsample import countless
 from typing import Any, Dict, Tuple, Optional
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform, ScaleMeta
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
@@ -139,3 +143,20 @@ class Multiscales:
 
         storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays)
         return store_group, store_arrays, storage_ops
+
+
+def mode_reduce(array: ArrayLike, axis: Optional[int] = None) -> ArrayLike:
+    if axis is None:
+        result = array
+    else:
+        if np.all(np.array(array.shape)[1::2] == 2):
+            reshaped = array.reshape(np.array(array.shape).reshape(-1, 2).prod(1))
+            result = countless(reshaped, (2,) * reshaped.ndim)
+        else:
+            transposed = array.transpose(
+                *range(0, array.ndim, 2), *range(1, array.ndim, 2)
+            )
+            reshaped = transposed.reshape(*transposed.shape[: array.ndim // 2], -1)
+            modes = mode(reshaped, axis=reshaped.ndim - 1).mode
+            result = modes.squeeze(axis=-1)
+    return result
