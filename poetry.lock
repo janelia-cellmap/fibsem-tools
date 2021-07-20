@@ -535,6 +535,17 @@ python-versions = ">=3.5"
 numpy = ">=1.16.0"
 
 [[package]]
+name = "tinybrain"
+version = "1.2.1"
+description = "Image pyramid generation specialized for connectomics data types and procedures."
+category = "main"
+optional = false
+python-versions = "~=3.6"
+
+[package.dependencies]
+numpy = "*"
+
+[[package]]
 name = "toml"
 version = "0.10.2"
 description = "Python Library for Tom's Obvious, Minimal Language"
@@ -659,7 +670,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytes
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7.1, <4"
-content-hash = "375d48b3b98b87c45b49d24543ea88ed7009bebe293e4fe826fa08c4a454b385"
+content-hash = "114c7a132b70852a3f12c385a58f0ec9a6d359138a24445f9a2bb59e93c67ffc"
 
 [metadata.files]
 appdirs = [
@@ -1092,6 +1103,27 @@ tensorstore = [
     {file = "tensorstore-0.1.12-cp39-cp39-manylinux2014_x86_64.whl", hash = "sha256:ab81549915534b66b4b5f6a2293985e091ea49d68ba6ffc85663eee84d425c37"},
     {file = "tensorstore-0.1.12-cp39-cp39-win_amd64.whl", hash = "sha256:46bfb745a40bc194140fd64f322215facfa27b4516846562cf75dc037dea462f"},
     {file = "tensorstore-0.1.12.tar.gz", hash = "sha256:320e960eab509ab29b96a3ef40b11ac8e4049f4f731c8fe1b3eecf8351274d59"},
+]
+tinybrain = [
+    {file = "tinybrain-1.2.1-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:6409038bda2aa565533cff3c0ec31683bb9e934c5c22b0d080955d1a8541f981"},
+    {file = "tinybrain-1.2.1-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:30d94f1990ea2b2b614c8345338f2295b0e54df7e73a64d194b68a1cc5dbf89c"},
+    {file = "tinybrain-1.2.1-cp36-cp36m-manylinux2014_x86_64.whl", hash = "sha256:afee9817e5c5e94e2c9717c49a9e1ea9150a436533aca83816851fdf7b632dc1"},
+    {file = "tinybrain-1.2.1-cp36-cp36m-win32.whl", hash = "sha256:021a8d09f241b51034c53efa13f4c87e496bde029f1e330f995e6b76c9663952"},
+    {file = "tinybrain-1.2.1-cp36-cp36m-win_amd64.whl", hash = "sha256:632af1c22b55c1c38561ca0fad28d2789cb2fdf69ee2c5af060c334ceac23cd2"},
+    {file = "tinybrain-1.2.1-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:ad2cad4b86d21057b02aa9c45618c917ae3d6527da3b29ab286a5406e0bd1514"},
+    {file = "tinybrain-1.2.1-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:d9515a16d5ceaab0d983032d09687ace8c6d5c5974cd69146553ca42166beb43"},
+    {file = "tinybrain-1.2.1-cp37-cp37m-manylinux2014_x86_64.whl", hash = "sha256:f58d936f318744bfc83cb6da314612e0741fe4c43eb68fd942a019af48ee2bf9"},
+    {file = "tinybrain-1.2.1-cp37-cp37m-win32.whl", hash = "sha256:0c2f70cfc9214fed87443663839e7e897c2963002048f5a3c1d78065c57b2134"},
+    {file = "tinybrain-1.2.1-cp37-cp37m-win_amd64.whl", hash = "sha256:1f55acaff84cc8fb0d88acc416e3ac563d6ad8d807b70f66900287a7591e03a4"},
+    {file = "tinybrain-1.2.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:2540284d9de6b05bf81cf18ad8dba8826d8b28cff703c71dfb7c62cef9ef6064"},
+    {file = "tinybrain-1.2.1-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:8ddb79e2aa38ca8b5361f89ae891fbcc019d619193b7fb3ccd8132b54c628eec"},
+    {file = "tinybrain-1.2.1-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:9b9578cf17f95ded62bb761fb2780608e1ec04a1865f74b8839293a5563adbc0"},
+    {file = "tinybrain-1.2.1-cp38-cp38-manylinux2014_x86_64.whl", hash = "sha256:af86855b943ab583e700dae84ce86ab02f2751c56b05bce6e49c538d58476a10"},
+    {file = "tinybrain-1.2.1-cp38-cp38-win32.whl", hash = "sha256:5e0f1c32e9524a28b8eb1d6b84b49ff11ad19f3bae617a0d66b3fe8367bf9309"},
+    {file = "tinybrain-1.2.1-cp38-cp38-win_amd64.whl", hash = "sha256:c061a4777c972e664338d2bfdf8f52739a2c1db2bd127a0c37d2202767d07318"},
+    {file = "tinybrain-1.2.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:20723edc4b57ab0ee4f4e110035b94d97acfa4024326ddacab7b9e69cb8f2633"},
+    {file = "tinybrain-1.2.1-cp39-cp39-manylinux2014_x86_64.whl", hash = "sha256:925452b54b85f88b3bd618d7b3f4c4bf31107247b2cec038a4b2c836961db806"},
+    {file = "tinybrain-1.2.1.tar.gz", hash = "sha256:2fdf2e84c6cfbe8b1372731bc1dcd5f343e645edc15a3da1c05dd3b01a837764"},
 ]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
