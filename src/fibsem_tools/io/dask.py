@@ -5,6 +5,7 @@ import dask.array as da
 import numpy as np
 from dask.array.core import slices_from_chunks
 import backoff
+
 # from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 
@@ -149,3 +150,12 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
     for source, target, region in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region))
     return result
+
+
+def ensure_minimum_chunksize(array, chunksize):
+    old_chunks = np.array(array.chunksize)
+    new_chunks = old_chunks.copy()
+    chunk_fitness = np.less(old_chunks, chunksize)
+    if np.any(chunk_fitness):
+        new_chunks[chunk_fitness] = np.array(chunksize)[chunk_fitness]
+    return array.rechunk(new_chunks.tolist())
