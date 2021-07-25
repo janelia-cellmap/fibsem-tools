@@ -7,7 +7,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.7.1, <4"
-distributed = "^2021.1.1"
+distributed = { git = "https://github.com/dask/distributed.git", branch = "main"}
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
 fsspec = { git = "https://github.com/d-v-b/filesystem_spec.git", branch = "getitems_fix" }
@@ -21,6 +21,7 @@ pydantic = "^1.8.2"
 backoff = "^1.10.0"
 xarray-multiscale = "^0.2.1"
 tinybrain = "^1.2.1"
+dask-jobqueue = "0.7.3"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
