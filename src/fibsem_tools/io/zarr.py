@@ -5,11 +5,13 @@ from dask import delayed
 import dask.array as da
 import zarr
 import os
-from .util import rmtree_parallel, split_path_at_suffix
+from fibsem_tools.io.util import rmtree_parallel, split_path_at_suffix
 from toolz import concat
 from xarray import DataArray
 import numpy as np
-from .storage import N5FSStore
+from fibsem_tools.io.storage import N5FSStore
+from zarr.indexing import BasicIndexer
+from distributed import Lock, Client
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -236,3 +238,25 @@ def zarr_n5_coordinate_inference(
     ]
 
     return coords, output_attrs
+
+
+def get_chunk_keys(array: zarr.core.Array, region=slice(None)) -> Sequence[str]:
+    indexer = BasicIndexer(region, array)
+    chunk_coords = (idx.chunk_coords for idx in indexer)
+    keys = (array._chunk_key(cc) for cc in chunk_coords)
+    return keys
+
+
+def get_chunklock(array: zarr.core.Array, client: Client) -> Dict[str, Lock]:
+    if isinstance(array.store, (zarr.N5Store, N5FSStore)):
+        attrs_path = f'{array.path}/attributes.json'
+    else:
+        attrs_path = f'{array.path}/.zarray'
+    result = {key: Lock(key, client=client) for key in (attrs_path, *get_chunk_keys(array))}
+    return result
+
+
+def lock_array(array: zarr.core.Array, client: Client) -> zarr.core.Array:
+    locks = get_chunklock(array, client)
+    locked_array = zarr.open(store=array.store, path=array.path, synchronizer=locks, mode='a')
+    return locked_array
