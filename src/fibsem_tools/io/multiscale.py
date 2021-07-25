@@ -1,6 +1,7 @@
 from typing import Any, Dict, Tuple, Optional
 from distributed import Lock
 import numpy as np
+from fibsem_tools.io.zarr import lock_array
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform, ScaleMeta
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
@@ -73,7 +74,7 @@ class Multiscales:
         chunks: Optional[Tuple[int]] = None,
         multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
-        locks=False,
+        locking=False,
         client=None,
         **kwargs
     ):
@@ -147,17 +148,16 @@ class Multiscales:
             **kwargs
         )
         # create locks for the arrays with misaligned chunks
+        if locking:
+            if client is None:
+                raise ValueError('Supply an instance of distributed.Client to use locking.')
+            locked_arrays = []
+            for store_array in store_arrays:
+                if np.any(np.mod(self.arrays[store_array.path].data.chunksize, store_array.chunks) > 0):
+                    locked_arrays.append(lock_array(store_array, client))
+                else:
+                    locked_arrays.append(store_array)
+            store_arrays = locked_arrays
         
-        if locks == 'auto':
-            locks = []
-            for key in self.arrays:
-                if np.any(np.mod(self.arrays[key].data.chunksize, store_group[key].chunks) > 0):
-                    if client is not None:
-                        locks.append(Lock(key, client=client))
-                    else:
-                        locks.append(Lock(key))
-                else: 
-                    locks.append(False)
-
-        storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays, locks=locks)
+        storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays)
         return store_group, store_arrays, storage_ops
