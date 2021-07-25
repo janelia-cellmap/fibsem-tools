@@ -71,7 +71,7 @@ def sequential_rechunk(
 
 # consider adding some exceptions to the function signature instead of grabbing everything
 # @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def store_chunk(x, out, index, lock):
+def store_chunk(x, out, index):
     """
     A function inserted in a Dask graph for storing a chunk.
 
@@ -95,24 +95,16 @@ def store_chunk(x, out, index, lock):
     """
 
     result = None
-    if lock:
-        with lock:        
-            if x is not None:
-                if is_arraylike(x):
-                    out[index] = x
-                else:
-                    out[index] = np.asanyarray(x)
-    else:
-        if x is not None:
-            if is_arraylike(x):
-                out[index] = x
-            else:
-                out[index] = np.asanyarray(x)
+    if x is not None:
+        if is_arraylike(x):
+            out[index] = x
+        else:
+            out[index] = np.asanyarray(x)
     
     return result
 
 
-def write_blocks(source, target, region, lock=False):
+def write_blocks(source, target, region):
     """
     For each chunk in `source`, write that data to `target`
     """
@@ -125,11 +117,11 @@ def write_blocks(source, target, region, lock=False):
     for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
         region = slices[lidx]
         source_block = _blocks(source, aidx, key_array)
-        storage_op.append(dask.delayed(store_chunk)(source_block, target, region, lock=lock))
+        storage_op.append(dask.delayed(store_chunk)(source_block, target, region))
     return storage_op
 
 
-def store_blocks(sources, targets, regions=None, locks=False) -> List[List[dask.delayed]]:
+def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
     result = []
 
     if isinstance(sources, dask.array.core.Array):
@@ -144,22 +136,16 @@ def store_blocks(sources, targets, regions=None, locks=False) -> List[List[dask.
 
     if isinstance(regions, Sequence) or regions is None:
         regions = [regions]
-    
-    if not isinstance(locks, Sequence):
-        locks = [locks]
 
     if len(sources) > 1 and len(regions) == 1:
         regions *= len(sources)
     
-    if len(sources) > 1 and len(locks) == 1:
-        locks *= len(sources)
-
     if len(sources) != len(regions):
         raise ValueError(
             "Different number of sources [%d] and targets [%d] than regions [%d]"
             % (len(sources), len(targets), len(regions))
         )
 
-    for source, target, region, lock in zip(sources, targets, regions, locks):
+    for source, target, region, lock in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region, lock))
     return result
