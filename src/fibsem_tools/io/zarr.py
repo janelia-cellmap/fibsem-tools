@@ -5,11 +5,13 @@ from dask import delayed
 import dask.array as da
 import zarr
 import os
-from .util import rmtree_parallel, split_path_at_suffix
+from fibsem_tools.io.util import rmtree_parallel, split_path_at_suffix
 from toolz import concat
 from xarray import DataArray
 import numpy as np
-from .storage import N5FSStore
+from fibsem_tools.io.storage import N5FSStore
+from zarr.indexing import BasicIndexer
+from distributed import Lock, Client
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -236,3 +238,48 @@ def zarr_n5_coordinate_inference(
     ]
 
     return coords, output_attrs
+
+
+def is_n5(array: zarr.core.Array) -> bool:
+    if isinstance(array.store, (zarr.N5Store, N5FSStore)):
+        return True
+    else:
+        return False
+
+
+def get_chunk_keys(array: zarr.core.Array, region=slice(None)) -> Sequence[str]:
+    indexer = BasicIndexer(region, array)
+    chunk_coords = (idx.chunk_coords for idx in indexer)
+    keys = (array._chunk_key(cc) for cc in chunk_coords)
+    return keys
+
+
+class ChunkLock:
+    def __init__(self, array: zarr.core.Array, client: Client):
+        self._locks = get_chunklock(array, client)
+        # from the perspective of a zarr array, metadata has this key regardless of the
+        # location on storage. unfortunately, the synchronizer does not get access to the
+        # indirection provided by the the store class.
+
+        array_attrs_key = f"{array.path}/.zarray"
+        if is_n5(array):
+            attrs_path = f"{array.path}/attributes.json"
+        else:
+            attrs_path = array_attrs_key
+        self._locks[array_attrs_key] = Lock(attrs_path, client=client)
+
+    def __getitem__(self, key):
+        return self._locks[key]
+
+
+def get_chunklock(array: zarr.core.Array, client: Client) -> Dict[str, Lock]:
+    result = {key: Lock(key, client=client) for key in get_chunk_keys(array)}
+    return result
+
+
+def lock_array(array: zarr.core.Array, client: Client) -> zarr.core.Array:
+    lock = ChunkLock(array, client)
+    locked_array = zarr.open(
+        store=array.store, path=array.path, synchronizer=lock, mode="a"
+    )
+    return locked_array

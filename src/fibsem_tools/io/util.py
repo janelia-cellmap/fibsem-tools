@@ -29,12 +29,13 @@ def rmtree_parallel(
         return result
 
 
-def list_files(paths: Union[Sequence[Union[str, Path]], str, Path]):
+def list_files(paths: Union[Sequence[Union[str, Path]], str, Path], followlinks=False):
     if isinstance(paths, str) or isinstance(paths, Path):
         if os.path.isdir(paths):
             return list(
                 tz.concat(
-                    (os.path.join(dp, f) for f in fn) for dp, dn, fn in os.walk(paths)
+                    (os.path.join(dp, f) for f in fn)
+                    for dp, dn, fn in os.walk(paths, followlinks=followlinks)
                 )
             )
         elif os.path.isfile(paths):
@@ -49,10 +50,12 @@ def list_files(paths: Union[Sequence[Union[str, Path]], str, Path]):
 
 
 def list_files_parallel(
-    paths: Union[Sequence[Union[str, Path]], str, Path], compute: bool = True
+    paths: Union[Sequence[Union[str, Path]], str, Path],
+    followlinks=False,
+    compute: bool = True,
 ):
     result = []
-    delf = delayed(list_files)
+    delf = delayed(lambda p: list_files(p, followlinks=followlinks))
 
     if isinstance(paths, str) or isinstance(paths, Path):
         result = bag.from_delayed([delf(paths)])
