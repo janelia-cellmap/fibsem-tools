@@ -94,7 +94,7 @@ def test_accessing_precomputed():
 def test_list_files():
     path = tempfile.mkdtemp()
     atexit.register(shutil.rmtree, path)
-    fnames = [os.path.join(path, f) for f in ['foo/foo.txt', 'foo/bar/bar.txt', 'foo/bar/baz/baz.txt']]
+    fnames = [os.path.join(path, f) for f in [os.path.join('foo', 'foo.txt'), os.path.join('foo', 'bar', 'bar.txt'), os.path.join('foo', 'bar' , 'baz', 'baz.txt')]]
     files_made = _make_local_files(fnames)    
     files_found = list_files(path)
     assert set(files_found) == set(fnames)
@@ -103,7 +103,7 @@ def test_list_files():
 def test_list_files_parellel():
     path = tempfile.mkdtemp()
     atexit.register(shutil.rmtree, path)
-    fnames = [os.path.join(path, f) for f in ['foo/foo.txt', 'foo/bar/bar.txt', 'foo/bar/baz/baz.txt']]
+    fnames = [os.path.join(path, f) for f in [os.path.join('foo', 'foo.txt'), os.path.join('foo', 'bar', 'bar.txt'), os.path.join('foo','bar','baz','baz.txt')]]
     files_made = _make_local_files(fnames) 
     files_found = list_files_parallel(path)
     assert set(files_found) == set(fnames)
@@ -114,13 +114,13 @@ def test_path_splitting():
     split = split_path_at_suffix(path, ('.n5',))
     assert(split == ('s3://0/1/2.n5', '3/4', '.n5'))
     
-    path = '/0/1/2.n5/3/4'
+    path = os.path.join('0', '1' , '2.n5', '3' ,'4')
     split = split_path_at_suffix(path, ('.n5',))
-    assert(split == ('/0/1/2.n5', '3/4', '.n5'))
+    assert(split == (os.path.join('0', '1' , '2.n5'), os.path.join('3', '4'), '.n5'))
     
-    path = '/0/1/2.n5'
+    path = os.path.join('0', '1' , '2.n5')
     split = split_path_at_suffix(path, ('.n5',))
-    assert(split == ('/0/1/2.n5', '', '.n5'))
+    assert(split == (os.path.join('0', '1', '2.n5'), '', '.n5'))
 
 def test_n5fsstore():
     with tempfile.TemporaryDirectory() as store_path:
