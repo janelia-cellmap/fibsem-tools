@@ -1,10 +1,11 @@
-from typing import Any, Tuple, List
+from typing import Any, Sequence, Tuple, List
 import dask
 import distributed
 import dask.array as da
 import numpy as np
 from dask.array.core import slices_from_chunks
 import backoff
+from dask.array.optimization import fuse_slice
 
 # from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
@@ -70,6 +71,7 @@ def sequential_rechunk(
     return results
 
 
+# consider adding some exceptions to the function signature instead of grabbing everything
 # @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(x, out, index):
     """
@@ -83,8 +85,6 @@ def store_chunk(x, out, index):
         Where to store results too.
     index: slice-like
         Where to store result from ``x`` in ``out``.
-    lock: Lock-like or False
-        Lock to use before writing to ``out``.
 
     Examples
     --------
@@ -96,11 +96,10 @@ def store_chunk(x, out, index):
 
     result = None
 
-    if x is not None:
-        if is_arraylike(x):
-            out[index] = x
-        else:
-            out[index] = np.asanyarray(x)
+    if is_arraylike(x):
+        out[index] = x
+    else:
+        out[index] = np.asanyarray(x)
 
     return result
 
@@ -135,7 +134,7 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
             % (len(sources), len(targets))
         )
 
-    if isinstance(regions, tuple) or regions is None:
+    if isinstance(regions, Sequence) or regions is None:
         regions = [regions]
 
     if len(sources) > 1 and len(regions) == 1:
