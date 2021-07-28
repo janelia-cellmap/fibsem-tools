@@ -18,6 +18,7 @@ from functools import reduce
 
 import math
 
+
 class Multiscales:
     def __init__(
         self, name: str, arrays: Dict[str, DataArray], attrs: Dict[str, Any] = {}
@@ -158,15 +159,23 @@ class Multiscales:
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
-                raise ValueError('Supply an instance of distributed.Client to use locking.')
+                raise ValueError(
+                    "Supply an instance of distributed.Client to use locking."
+                )
             locked_arrays = []
             for store_array in store_arrays:
-                if np.any(np.mod(self.arrays[store_array.path].data.chunksize, store_array.chunks) > 0):
+                if np.any(
+                    np.mod(
+                        self.arrays[store_array.basename].data.chunksize,
+                        store_array.chunks,
+                    )
+                    > 0
+                ):
                     locked_arrays.append(lock_array(store_array, client))
                 else:
                     locked_arrays.append(store_array)
             store_arrays = locked_arrays
-        
+
         storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays)
         return store_group, store_arrays, storage_ops
 
@@ -189,62 +198,62 @@ def mode_reduce(array: ArrayLike, axis: Optional[int] = None) -> ArrayLike:
 
 
 def countless(data, factor):
-  """
-  countless downsamples labeled images (segmentations)
-  by finding the mode using vectorized instructions.
-  It is ill advised to use this O(2^N-1) time algorithm
-  and O(NCN/2) space for N > about 16 tops. 
-  This means it's useful for the following kinds 
-  of downsampling.
-  This could be implemented for higher performance in
-  C/Cython more simply, but at least this is easily
-  portable.
-  2x2x1 (N=4), 2x2x2 (N=8), 4x4x1 (N=16), 3x2x1 (N=6)
-  and various other configurations of a similar nature.
-  c.f. https://medium.com/@willsilversmith/countless-3d-vectorized-2x-downsampling-of-labeled-volume-images-using-python-and-numpy-59d686c2f75
-  """
-  sections = []
+    """
+    countless downsamples labeled images (segmentations)
+    by finding the mode using vectorized instructions.
+    It is ill advised to use this O(2^N-1) time algorithm
+    and O(NCN/2) space for N > about 16 tops.
+    This means it's useful for the following kinds
+    of downsampling.
+    This could be implemented for higher performance in
+    C/Cython more simply, but at least this is easily
+    portable.
+    2x2x1 (N=4), 2x2x2 (N=8), 4x4x1 (N=16), 3x2x1 (N=6)
+    and various other configurations of a similar nature.
+    c.f. https://medium.com/@willsilversmith/countless-3d-vectorized-2x-downsampling-of-labeled-volume-images-using-python-and-numpy-59d686c2f75
+    """
+    sections = []
 
-  mode_of = reduce(lambda x,y: x * y, factor)
-  majority = int(math.ceil(float(mode_of) / 2))
+    mode_of = reduce(lambda x, y: x * y, factor)
+    majority = int(math.ceil(float(mode_of) / 2))
 
-  #data += 1 # offset from zero
-  
-  for offset in np.ndindex(factor):
-    part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))] + 1
-    sections.append(part)
+    # data += 1 # offset from zero
 
-  pick = lambda a,b: a * (a == b)
-  lor = lambda x,y: x + (x == 0) * y # logical or
+    for offset in np.ndindex(factor):
+        part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))] + 1
+        sections.append(part)
 
-  subproblems = [ {}, {} ]
-  results2 = None
-  for x,y in combinations(range(len(sections) - 1), 2):
-    res = pick(sections[x], sections[y])
-    subproblems[0][(x,y)] = res
-    if results2 is not None:
-      results2 = lor(results2, res)
-    else:
-      results2 = res
+    pick = lambda a, b: a * (a == b)
+    lor = lambda x, y: x + (x == 0) * y  # logical or
 
-  results = [ results2 ]
-  for r in range(3, majority+1):
-    r_results = None
-    for combo in combinations(range(len(sections)), r):
-      res = pick(subproblems[0][combo[:-1]], sections[combo[-1]])
-      
-      if combo[-1] != len(sections) - 1:
-        subproblems[1][combo] = res
+    subproblems = [{}, {}]
+    results2 = None
+    for x, y in combinations(range(len(sections) - 1), 2):
+        res = pick(sections[x], sections[y])
+        subproblems[0][(x, y)] = res
+        if results2 is not None:
+            results2 = lor(results2, res)
+        else:
+            results2 = res
 
-      if r_results is not None:
-        r_results = lor(r_results, res)
-      else:
-        r_results = res
-    results.append(r_results)
-    subproblems[0] = subproblems[1]
-    subproblems[1] = {}
-    
-  results.reverse()
-  final_result = lor(reduce(lor, results), sections[-1]) - 1
+    results = [results2]
+    for r in range(3, majority + 1):
+        r_results = None
+        for combo in combinations(range(len(sections)), r):
+            res = pick(subproblems[0][combo[:-1]], sections[combo[-1]])
 
-  return final_result
+            if combo[-1] != len(sections) - 1:
+                subproblems[1][combo] = res
+
+            if r_results is not None:
+                r_results = lor(r_results, res)
+            else:
+                r_results = res
+        results.append(r_results)
+        subproblems[0] = subproblems[1]
+        subproblems[1] = {}
+
+    results.reverse()
+    final_result = lor(reduce(lor, results), sections[-1]) - 1
+
+    return final_result
