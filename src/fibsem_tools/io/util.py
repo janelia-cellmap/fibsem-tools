@@ -80,11 +80,10 @@ def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, st
     protocol: str
     subpath: str
     protocol, subpath = fsspec.core.split_protocol(urlpath)
-    if protocol == "file":
+    if protocol is None:
         separator = os.path.sep
     else:
         separator = "/"
-
     parts = Path(subpath).parts
     suffixed = [Path(part).suffix in suffixes for part in parts]
 
