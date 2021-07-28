@@ -34,7 +34,8 @@ def list_files(paths: Union[Sequence[Union[str, Path]], str, Path], followlinks=
         if os.path.isdir(paths):
             return list(
                 tz.concat(
-                    (os.path.join(dp, f) for f in fn) for dp, dn, fn in os.walk(paths, followlinks=followlinks)
+                    (os.path.join(dp, f) for f in fn)
+                    for dp, dn, fn in os.walk(paths, followlinks=followlinks)
                 )
             )
         elif os.path.isfile(paths):
@@ -49,7 +50,9 @@ def list_files(paths: Union[Sequence[Union[str, Path]], str, Path], followlinks=
 
 
 def list_files_parallel(
-    paths: Union[Sequence[Union[str, Path]], str, Path], followlinks=False, compute: bool = True
+    paths: Union[Sequence[Union[str, Path]], str, Path],
+    followlinks=False,
+    compute: bool = True,
 ):
     result = []
     delf = delayed(lambda p: list_files(p, followlinks=followlinks))
