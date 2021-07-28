@@ -77,6 +77,11 @@ def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, st
     protocol: str
     subpath: str
     protocol, subpath = fsspec.core.split_protocol(urlpath)
+    if protocol == 'file':
+        separator = os.path.sep 
+    else: 
+        separator = '/'
+    
     parts = Path(subpath).parts
     suffixed = [Path(part).suffix in suffixes for part in parts]
 
@@ -87,7 +92,7 @@ def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, st
     if index == (len(parts) - 1):
         pre, post = subpath, ""
     else:
-        pre, post = os.path.join(*parts[: index + 1]), os.path.join(*parts[index + 1 :])
+        pre, post = separator.join(parts[: index + 1]), separator.join(parts[index + 1 :])
 
     suffix = Path(pre).suffix
     if protocol:
