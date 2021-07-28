@@ -186,11 +186,12 @@ six = "*"
 
 [[package]]
 name = "fsspec"
-version = "2021.7.0"
+version = "2021.7.0+8.gee22435"
 description = "File-system specification"
 category = "main"
 optional = false
 python-versions = ">=3.6"
+develop = false
 
 [package.extras]
 abfs = ["adlfs"]
@@ -208,6 +209,12 @@ s3 = ["s3fs"]
 sftp = ["paramiko"]
 smb = ["smbprotocol"]
 ssh = ["paramiko"]
+
+[package.source]
+type = "git"
+url = "https://github.com/intake/filesystem_spec.git"
+reference = "master"
+resolved_reference = "ee22435bc57bd9158103415c5fc58c3cbdddebf2"
 
 [[package]]
 name = "h5py"
@@ -344,7 +351,7 @@ pyparsing = ">=2.0.2"
 
 [[package]]
 name = "pandas"
-version = "1.3.0"
+version = "1.3.1"
 description = "Powerful data structures for data analysis, time series, and statistics"
 category = "main"
 optional = false
@@ -531,7 +538,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
 name = "tensorstore"
-version = "0.1.12"
+version = "0.1.13"
 description = "Read and write large, multi-dimensional arrays"
 category = "main"
 optional = false
@@ -628,11 +635,12 @@ xarray = ">=0.17"
 
 [[package]]
 name = "zarr"
-version = "2.8.3"
+version = "2.6.2.dev125"
 description = "An implementation of chunked, compressed, N-dimensional arrays for Python."
 category = "main"
 optional = false
-python-versions = ">=3.6, <4"
+python-versions = ">=3.7, <4"
+develop = false
 
 [package.dependencies]
 asciitree = "*"
@@ -642,6 +650,12 @@ numpy = ">=1.7"
 
 [package.extras]
 jupyter = ["notebook", "ipytree"]
+
+[package.source]
+type = "git"
+url = "https://github.com/d-v-b/zarr-python.git"
+reference = "opt_setitem_fill_value"
+resolved_reference = "40c3f147ff18242fee7f39161a222cc6a0a3ba38"
 
 [[package]]
 name = "zict"
@@ -669,7 +683,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytes
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7.1, <4"
-content-hash = "91a5b62a10cf71b22cb69fdac700c0b895ce80e61b413d66a62363ab35b6388c"
+content-hash = "d5879953897cb2696767cfee5291e1d4688e5369b2545cbfdefa753592028238"
 
 [metadata.files]
 appdirs = [
@@ -730,10 +744,7 @@ fasteners = [
     {file = "fasteners-0.16.3-py2.py3-none-any.whl", hash = "sha256:8408e52656455977053871990bd25824d85803b9417aa348f10ba29ef0c751f7"},
     {file = "fasteners-0.16.3.tar.gz", hash = "sha256:b1ab4e5adfbc28681ce44b3024421c4f567e705cc3963c732bf1cba3348307de"},
 ]
-fsspec = [
-    {file = "fsspec-2021.7.0-py3-none-any.whl", hash = "sha256:86822ccf367da99957f49db64f7d5fd3d8d21444fac4dfdc8ebc38ee93d478c6"},
-    {file = "fsspec-2021.7.0.tar.gz", hash = "sha256:792ebd3b54de0b30f1ce73f0ba0a8bcc864724f2d9f248cb8d0ece47db0cbde8"},
-]
+fsspec = []
 h5py = [
     {file = "h5py-3.3.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:f3bba8ffddd1fd2bf06127c5ff7b73f022cc1c8b7164355ddc760dc3f8570136"},
     {file = "h5py-3.3.0-cp37-cp37m-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:baef1a2cdef287a83e7f95ce9e0f4d762a9852fe7117b471063442c78b973695"},
@@ -882,25 +893,25 @@ packaging = [
     {file = "packaging-21.0.tar.gz", hash = "sha256:7dc96269f53a4ccec5c0670940a4281106dd0bb343f47b7471f779df49c2fbe7"},
 ]
 pandas = [
-    {file = "pandas-1.3.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:c81b8d91e9ae861eb4406b4e0f8d4dabbc105b9c479b3d1e921fba1d35b5b62a"},
-    {file = "pandas-1.3.0-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:08eeff3da6a188e24db7f292b39a8ca9e073bf841fbbeadb946b3ad5c19d843e"},
-    {file = "pandas-1.3.0-cp37-cp37m-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:88864c1e28353b958b1f30e4193818519624ad9a1776921622a6a2a016d5d807"},
-    {file = "pandas-1.3.0-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:872aa91e0f9ca913046ab639d4181a899f5e592030d954d28c2529b88756a736"},
-    {file = "pandas-1.3.0-cp37-cp37m-win32.whl", hash = "sha256:92835113a67cbd34747c198d41f09f4b63f6fe11ca5643baebc7ab1e30e89e95"},
-    {file = "pandas-1.3.0-cp37-cp37m-win_amd64.whl", hash = "sha256:7d3cd2c99faa94d717ca00ea489264a291ad7209453dffbf059bfb7971fd3a61"},
-    {file = "pandas-1.3.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:823737830364d0e2af8c3912a28ba971296181a07950873492ed94e12d28c405"},
-    {file = "pandas-1.3.0-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c746876cdd8380be0c3e70966d4566855901ac9aaa5e4b9ccaa5ca5311457d11"},
-    {file = "pandas-1.3.0-cp38-cp38-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:fe7a549d10ca534797095586883a5c17d140d606747591258869c56e14d1b457"},
-    {file = "pandas-1.3.0-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:f058c786e7b0a9e7fa5e0b9f4422e0ccdd3bf3aa3053c18d77ed2a459bd9a45a"},
-    {file = "pandas-1.3.0-cp38-cp38-win32.whl", hash = "sha256:98efc2d4983d5bb47662fe2d97b2c81b91566cb08b266490918b9c7d74a5ef64"},
-    {file = "pandas-1.3.0-cp38-cp38-win_amd64.whl", hash = "sha256:e6b75091fa54a53db3927b4d1bc997c23c5ba6f87acdfe1ee5a92c38c6b2ed6a"},
-    {file = "pandas-1.3.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:1ff13eed501e07e7fb26a4ea18a846b6e5d7de549b497025601fd9ccb7c1d123"},
-    {file = "pandas-1.3.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:798675317d0e4863a92a9a6bc5bd2490b5f6fef8c17b95f29e2e33f28bef9eca"},
-    {file = "pandas-1.3.0-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:ed4fc66f23fe17c93a5d439230ca2d6b5f8eac7154198d327dbe8a16d98f3f10"},
-    {file = "pandas-1.3.0-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:522bfea92f3ef6207cadc7428bda1e7605dae0383b8065030e7b5d0266717b48"},
-    {file = "pandas-1.3.0-cp39-cp39-win32.whl", hash = "sha256:7897326cae660eee69d501cbfa950281a193fcf407393965e1bc07448e1cc35a"},
-    {file = "pandas-1.3.0-cp39-cp39-win_amd64.whl", hash = "sha256:b10d7910ae9d7920a5ff7816d794d99acbc361f7b16a0f017d4fa83ced8cb55e"},
-    {file = "pandas-1.3.0.tar.gz", hash = "sha256:c554e6c9cf2d5ea1aba5979cc837b3649539ced0e18ece186f055450c86622e2"},
+    {file = "pandas-1.3.1-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:1ee8418d0f936ff2216513aa03e199657eceb67690995d427a4a7ecd2e68f442"},
+    {file = "pandas-1.3.1-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5d9acfca191140a518779d1095036d842d5e5bc8e8ad8b5eaad1aff90fe1870d"},
+    {file = "pandas-1.3.1-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e323028ab192fcfe1e8999c012a0fa96d066453bb354c7e7a4a267b25e73d3c8"},
+    {file = "pandas-1.3.1-cp37-cp37m-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:9d06661c6eb741ae633ee1c57e8c432bb4203024e263fe1a077fa3fda7817fdb"},
+    {file = "pandas-1.3.1-cp37-cp37m-win32.whl", hash = "sha256:23c7452771501254d2ae23e9e9dac88417de7e6eff3ce64ee494bb94dc88c300"},
+    {file = "pandas-1.3.1-cp37-cp37m-win_amd64.whl", hash = "sha256:7150039e78a81eddd9f5a05363a11cadf90a4968aac6f086fd83e66cf1c8d1d6"},
+    {file = "pandas-1.3.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:5c09a2538f0fddf3895070579082089ff4ae52b6cb176d8ec7a4dacf7e3676c1"},
+    {file = "pandas-1.3.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:905fc3e0fcd86b0a9f1f97abee7d36894698d2592b22b859f08ea5a8fe3d3aab"},
+    {file = "pandas-1.3.1-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5ee927c70794e875a59796fab8047098aa59787b1be680717c141cd7873818ae"},
+    {file = "pandas-1.3.1-cp38-cp38-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0c976e023ed580e60a82ccebdca8e1cc24d8b1fbb28175eb6521025c127dab66"},
+    {file = "pandas-1.3.1-cp38-cp38-win32.whl", hash = "sha256:22f3fcc129fb482ef44e7df2a594f0bd514ac45aabe50da1a10709de1b0f9d84"},
+    {file = "pandas-1.3.1-cp38-cp38-win_amd64.whl", hash = "sha256:45656cd59ae9745a1a21271a62001df58342b59c66d50754390066db500a8362"},
+    {file = "pandas-1.3.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:114c6789d15862508900a25cb4cb51820bfdd8595ea306bab3b53cd19f990b65"},
+    {file = "pandas-1.3.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:527c43311894aff131dea99cf418cd723bfd4f0bcf3c3da460f3b57e52a64da5"},
+    {file = "pandas-1.3.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fdb3b33dde260b1766ea4d3c6b8fbf6799cee18d50a2a8bc534cf3550b7c819a"},
+    {file = "pandas-1.3.1-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c28760932283d2c9f6fa5e53d2f77a514163b9e67fd0ee0879081be612567195"},
+    {file = "pandas-1.3.1-cp39-cp39-win32.whl", hash = "sha256:be12d77f7e03c40a2466ed00ccd1a5f20a574d3c622fe1516037faa31aa448aa"},
+    {file = "pandas-1.3.1-cp39-cp39-win_amd64.whl", hash = "sha256:9e1fe6722cbe27eb5891c1977bca62d456c19935352eea64d33956db46139364"},
+    {file = "pandas-1.3.1.tar.gz", hash = "sha256:341935a594db24f3ff07d1b34d1d231786aa9adfa84b76eab10bf42907c8aed3"},
 ]
 partd = [
     {file = "partd-1.2.0-py3-none-any.whl", hash = "sha256:5c3a5d70da89485c27916328dc1e26232d0e270771bd4caef4a5124b6a457288"},
@@ -1096,19 +1107,19 @@ tblib = [
     {file = "tblib-1.7.0.tar.gz", hash = "sha256:059bd77306ea7b419d4f76016aef6d7027cc8a0785579b5aad198803435f882c"},
 ]
 tensorstore = [
-    {file = "tensorstore-0.1.12-cp36-cp36m-macosx_10_14_x86_64.whl", hash = "sha256:ca62f9800a40c3ca1d8a1f9c5dd8a5989374714313fa28e6b5342fabb7c8e427"},
-    {file = "tensorstore-0.1.12-cp36-cp36m-manylinux2014_x86_64.whl", hash = "sha256:82ff58aa930c859b01732767a0c43a3157d42a1270c400843476cc8686b3d72e"},
-    {file = "tensorstore-0.1.12-cp36-cp36m-win_amd64.whl", hash = "sha256:470f859e60ff0455cf85d6a4ca0e20eefb6d285a9bb47b6014b889a6f6b3c954"},
-    {file = "tensorstore-0.1.12-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:821a4bfa590a675a4a0595cad23dedc52684fb63b1304872d6c61492bf0f9b9d"},
-    {file = "tensorstore-0.1.12-cp37-cp37m-manylinux2014_x86_64.whl", hash = "sha256:ca64ff928a5d38984ed5ecd171ce478e26f65e7fa0c9b325c192d8ab0771ff88"},
-    {file = "tensorstore-0.1.12-cp37-cp37m-win_amd64.whl", hash = "sha256:e162e0d100e62e63ccf3c1eec42dd8826c7cd0ad413ed77621189c27f326ac94"},
-    {file = "tensorstore-0.1.12-cp38-cp38-macosx_10_14_x86_64.whl", hash = "sha256:f4e443832ceb43495f69f4370a8d4faa693ce1c95b9a96ebfb60a45764ba8441"},
-    {file = "tensorstore-0.1.12-cp38-cp38-manylinux2014_x86_64.whl", hash = "sha256:ec11fffc8af8f9eccab23a3556ee8647bc5cbeb471aa1656b482ebaa94f54d1b"},
-    {file = "tensorstore-0.1.12-cp38-cp38-win_amd64.whl", hash = "sha256:ed832cef4cb2832a82f8640bc5cf5ab86798e6de31655ba985ea6a4bc9171b0f"},
-    {file = "tensorstore-0.1.12-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:1d794812cc846245b26e15f356120083d88fbc422aaa0609e2b5bbbd58d977ff"},
-    {file = "tensorstore-0.1.12-cp39-cp39-manylinux2014_x86_64.whl", hash = "sha256:ab81549915534b66b4b5f6a2293985e091ea49d68ba6ffc85663eee84d425c37"},
-    {file = "tensorstore-0.1.12-cp39-cp39-win_amd64.whl", hash = "sha256:46bfb745a40bc194140fd64f322215facfa27b4516846562cf75dc037dea462f"},
-    {file = "tensorstore-0.1.12.tar.gz", hash = "sha256:320e960eab509ab29b96a3ef40b11ac8e4049f4f731c8fe1b3eecf8351274d59"},
+    {file = "tensorstore-0.1.13-cp36-cp36m-macosx_10_14_x86_64.whl", hash = "sha256:86d59193b042f6aecf3d70e718d583949f00fbf76439987b2113c2c9daf48eff"},
+    {file = "tensorstore-0.1.13-cp36-cp36m-manylinux2014_x86_64.whl", hash = "sha256:c8816860a4c1ee25b6bbf3c26cfabc539dfb28383a06f5fe9a899f72f185fa29"},
+    {file = "tensorstore-0.1.13-cp36-cp36m-win_amd64.whl", hash = "sha256:a5a797126a7df41f1f606d191673b3c5044fbe06728baa00023ae57ac6f8db70"},
+    {file = "tensorstore-0.1.13-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:39b342aaf3e872e037803acab2b1afdbca0cee450519c9d664dfcaf69cf2f3cb"},
+    {file = "tensorstore-0.1.13-cp37-cp37m-manylinux2014_x86_64.whl", hash = "sha256:5c1a461cb5b7f3225d739318477166571a76c51af8eac78183aeb306a7557b96"},
+    {file = "tensorstore-0.1.13-cp37-cp37m-win_amd64.whl", hash = "sha256:4036252ed819021beae62fb3f5db4a5203ea9a2e93870268b56ed4ffa4d3c1a5"},
+    {file = "tensorstore-0.1.13-cp38-cp38-macosx_10_14_x86_64.whl", hash = "sha256:114a852d16b5900c5acc72910f1f0bfdd759636c9fad03355dbe04353632309f"},
+    {file = "tensorstore-0.1.13-cp38-cp38-manylinux2014_x86_64.whl", hash = "sha256:95d12bd83d7e3d3a70e87a83cb1b8c23b6daa206aa2c7b4ca18e7b7abc3d025e"},
+    {file = "tensorstore-0.1.13-cp38-cp38-win_amd64.whl", hash = "sha256:72abfbd21f66330703576242a97f10e7099732c4a89b0f2b779754f21bf6f23a"},
+    {file = "tensorstore-0.1.13-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:6ae244ee8c6b5135c14cdcf35b374ff07dbf5335ab4e0aae5b1c442c0b44af2d"},
+    {file = "tensorstore-0.1.13-cp39-cp39-manylinux2014_x86_64.whl", hash = "sha256:80905c39adcf547d9bdea53a90793f175a98d8888d39c82827849e1366c68591"},
+    {file = "tensorstore-0.1.13-cp39-cp39-win_amd64.whl", hash = "sha256:0bd1fa0512f3902fd054eec4778cef0b76fbd9aac776f3dad8e38630fb9f531e"},
+    {file = "tensorstore-0.1.13.tar.gz", hash = "sha256:4f3f87c02a047e0b14eac356cde2e384feaaef30de48a9cecb8324b9eecaf30b"},
 ]
 tinybrain = [
     {file = "tinybrain-1.2.1-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:6409038bda2aa565533cff3c0ec31683bb9e934c5c22b0d080955d1a8541f981"},
@@ -1227,10 +1238,7 @@ xarray-multiscale = [
     {file = "xarray-multiscale-0.2.2.tar.gz", hash = "sha256:659bf9fd1a971f824321fffe291151f3a8e5a2b7b29e6c0f5be7376e7c886c87"},
     {file = "xarray_multiscale-0.2.2-py3-none-any.whl", hash = "sha256:1fd662ed37a52e80300939ff3c903bdd1fa6542481fd2ee683530202c8784277"},
 ]
-zarr = [
-    {file = "zarr-2.8.3-py3-none-any.whl", hash = "sha256:9357fb40ce0bffdf81b9aac912c83829618ea367b7898f5a150eecde4cfa1338"},
-    {file = "zarr-2.8.3.tar.gz", hash = "sha256:8aece33269ba3ee2af9320aa528d5fe93f76c30e4ad7fdbfb604b1db3f0d779f"},
-]
+zarr = []
 zict = [
     {file = "zict-2.0.0-py3-none-any.whl", hash = "sha256:26aa1adda8250a78dfc6a78d200bfb2ea43a34752cf58980bca75dde0ba0c6e9"},
     {file = "zict-2.0.0.tar.gz", hash = "sha256:8e2969797627c8a663575c2fc6fcb53a05e37cdb83ee65f341fc6e0c3d0ced16"},
