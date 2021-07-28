@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fibsem-tools"
-version = "0.2.6"
+version = "0.2.8"
 description = "Tools for processing FIBSEM datasets"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
@@ -22,6 +22,7 @@ backoff = "^1.10.0"
 xarray-multiscale = "^0.2.1"
 tinybrain = "^1.2.1"
 dask-jobqueue = "0.7.3"
+s3fs = "^2021.7.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
