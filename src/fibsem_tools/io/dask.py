@@ -6,6 +6,7 @@ import numpy as np
 from dask.array.core import slices_from_chunks
 import backoff
 from dask.array.optimization import fuse_slice
+
 # from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 
@@ -69,6 +70,7 @@ def sequential_rechunk(
         client.cluster.scale(0)
     return results
 
+
 # consider adding some exceptions to the function signature instead of grabbing everything
 # @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(x, out, index):
@@ -83,8 +85,6 @@ def store_chunk(x, out, index):
         Where to store results too.
     index: slice-like
         Where to store result from ``x`` in ``out``.
-    lock: Lock-like or False
-        Lock to use before writing to ``out``.
 
     Examples
     --------
@@ -95,12 +95,12 @@ def store_chunk(x, out, index):
     """
 
     result = None
-    if x is not None:
-        if is_arraylike(x):
-            out[index] = x
-        else:
-            out[index] = np.asanyarray(x)
-    
+
+    if is_arraylike(x):
+        out[index] = x
+    else:
+        out[index] = np.asanyarray(x)
+
     return result
 
 
@@ -139,15 +139,15 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
 
     if len(sources) > 1 and len(regions) == 1:
         regions *= len(sources)
-    
+
     if len(sources) != len(regions):
         raise ValueError(
             "Different number of sources [%d] and targets [%d] than regions [%d]"
             % (len(sources), len(targets), len(regions))
         )
 
-    for source, target, region, lock in zip(sources, targets, regions):
-        result.append(write_blocks(source, target, region, lock))
+    for source, target, region in zip(sources, targets, regions):
+        result.append(write_blocks(source, target, region))
     return result
 
 
