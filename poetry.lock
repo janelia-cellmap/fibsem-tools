@@ -195,7 +195,7 @@ dev = ["pytest (>=5)", "pytest-cov", "coveralls", "black", "mypy", "pylint"]
 
 [[package]]
 name = "dask"
-version = "2021.7.1"
+version = "2021.7.2"
 description = "Parallel PyData with Task Scheduling"
 category = "main"
 optional = false
@@ -211,10 +211,10 @@ toolz = ">=0.8.2"
 
 [package.extras]
 array = ["numpy (>=1.16)"]
-complete = ["bokeh (>=1.0.0,!=2.0.0)", "distributed (==2021.07.1)", "numpy (>=1.16)", "pandas (>=0.25.0)"]
+complete = ["bokeh (>=1.0.0,!=2.0.0)", "distributed (==2021.07.2)", "numpy (>=1.16)", "pandas (>=0.25.0)"]
 dataframe = ["numpy (>=1.16)", "pandas (>=0.25.0)"]
 diagnostics = ["bokeh (>=1.0.0,!=2.0.0)"]
-distributed = ["distributed (==2021.07.1)"]
+distributed = ["distributed (==2021.07.2)"]
 test = ["pytest", "pytest-rerunfailures", "pytest-xdist"]
 
 [[package]]
@@ -231,7 +231,7 @@ distributed = ">=2.19"
 
 [[package]]
 name = "distributed"
-version = "2021.7.1"
+version = "2021.7.2"
 description = "Distributed scheduler for Dask"
 category = "main"
 optional = false
@@ -240,7 +240,7 @@ python-versions = ">=3.7"
 [package.dependencies]
 click = ">=6.6"
 cloudpickle = ">=1.5.0"
-dask = "2021.07.1"
+dask = "2021.07.2"
 msgpack = ">=0.6.0"
 psutil = ">=5.0"
 pyyaml = "*"
@@ -823,7 +823,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytes
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7.1, <4"
-content-hash = "95193335102e98df5b11ebf1a5bde21c266f91435e3712e6562aa64d545166c4"
+content-hash = "09df969894532fb632f3240af3006fafc2642278d5e7e80ccb6470e0d3f76d5c"
 
 [metadata.files]
 aiobotocore = [
@@ -927,16 +927,16 @@ dacite = [
     {file = "dacite-1.6.0.tar.gz", hash = "sha256:d48125ed0a0352d3de9f493bf980038088f45f3f9d7498f090b50a847daaa6df"},
 ]
 dask = [
-    {file = "dask-2021.7.1-py3-none-any.whl", hash = "sha256:b56572363cfda0e57771ef39c84cbd8103e0dea5c6fcbbd7a2224240bb3a0bd9"},
-    {file = "dask-2021.7.1.tar.gz", hash = "sha256:e72f8773a14e2909a2105e628d981083859915373281fec8e5a78d14ee0a2c8c"},
+    {file = "dask-2021.7.2-py3-none-any.whl", hash = "sha256:63a6e56cd64ae6f9cee2cdddd756a31222a563ea7a4cfee472ca5ce25ec02179"},
+    {file = "dask-2021.7.2.tar.gz", hash = "sha256:41727347fb4c098c5cafe3e1e24634b086461603cc3b6f6f71f335abf15833c8"},
 ]
 dask-jobqueue = [
     {file = "dask-jobqueue-0.7.3.tar.gz", hash = "sha256:682d7cc0e6b319b6ab83a7a898680c12e9c77ddc77df380b40041290f55d4e79"},
     {file = "dask_jobqueue-0.7.3-py2.py3-none-any.whl", hash = "sha256:435b8a77a95f82326b3b18a3f60358754ea3f7ac4d62950ab8fed0f56f223c71"},
 ]
 distributed = [
-    {file = "distributed-2021.7.1-py3-none-any.whl", hash = "sha256:0b979c350315bdc85d75a17787b29b869ff88992f2573d503f3e28b256faae50"},
-    {file = "distributed-2021.7.1.tar.gz", hash = "sha256:3a41ff1a1674d4ff0944dfdd8024e168ff451bcd72474d3f4d61d8a4ba019a78"},
+    {file = "distributed-2021.7.2-py3-none-any.whl", hash = "sha256:2453f1bb8b5380689c620260eede2dfd6f69517a30ffda1030f27052e8cf9d3b"},
+    {file = "distributed-2021.7.2.tar.gz", hash = "sha256:5c03aae2f2ba7b0945b423162db4f2b2ec01faf73f91e0e38c1bc5b2f9ed216d"},
 ]
 fasteners = [
     {file = "fasteners-0.16.3-py2.py3-none-any.whl", hash = "sha256:8408e52656455977053871990bd25824d85803b9417aa348f10ba29ef0c751f7"},

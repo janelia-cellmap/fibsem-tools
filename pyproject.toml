@@ -7,7 +7,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.7.1, <4"
-distributed = "2021.07.1"
+distributed = "2021.07.2"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
 fsspec = "2021.07.0"
