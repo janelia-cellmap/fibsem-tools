@@ -1,5 +1,8 @@
 import os
 
+from botocore.parsers import ResponseParserError
+from aiohttp import ServerDisconnectedError
+
 from zarr.meta import ZARR_FORMAT, json_dumps, json_loads
 from zarr.storage import _prog_number
 from zarr.storage import array_meta_key as zarr_array_meta_key
@@ -24,7 +27,7 @@ from zarr.errors import (
     ReadOnlyError,
 )
 import re
-
+import backoff
 from collections.abc import MutableMapping
 
 array_meta_key = ".zarray"
@@ -210,7 +213,7 @@ class FSStore(MutableMapping):
                     return children
         except IOError:
             return []
-
+    @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError, ResponseParserError))
     def rmdir(self, path=None):
         if self.mode == "r":
             raise ReadOnlyError()

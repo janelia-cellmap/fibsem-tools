@@ -7,7 +7,7 @@ from dask.array.core import slices_from_chunks
 import backoff
 from dask.array.optimization import fuse_slice
 
-# from aiohttp import ServerDisconnectedError
+from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 
 
@@ -72,7 +72,7 @@ def sequential_rechunk(
 
 
 # consider adding some exceptions to the function signature instead of grabbing everything
-# @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(x, out, index):
     """
     A function inserted in a Dask graph for storing a chunk.
