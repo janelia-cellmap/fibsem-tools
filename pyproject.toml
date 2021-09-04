@@ -10,7 +10,7 @@ python = ">=3.7.1, <4"
 distributed = "^2021.7.2"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
-fsspec = {git = "https://github.com/intake/filesystem_spec.git", branch="master"}
+fsspec = "2021.08.1"
 zarr = {git = "https://github.com/d-v-b/zarr-python.git", branch="opt_setitem_fill_value"}
 mrcfile = "^1.2.0"
 dacite = "^1.6.0"
