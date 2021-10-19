@@ -157,4 +157,6 @@ def ensure_minimum_chunksize(array, chunksize):
     chunk_fitness = np.less(old_chunks, chunksize)
     if np.any(chunk_fitness):
         new_chunks[chunk_fitness] = np.array(chunksize)[chunk_fitness]
-    return array.rechunk(new_chunks.tolist())
+        return array.rechunk(new_chunks.tolist())
+    else:
+        return array

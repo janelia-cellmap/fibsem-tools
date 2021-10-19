@@ -1,7 +1,7 @@
 from scipy.stats import mode
 import numpy as np
 from numpy.typing import ArrayLike
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Sequence, Tuple, Optional
 from distributed import Lock
 import numpy as np
 from fibsem_tools.io.zarr import lock_array
@@ -83,7 +83,7 @@ class Multiscales:
         chunks: Optional[Tuple[int]] = None,
         multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
-        locking=False,
+        locking: bool =False,
         client=None,
         **kwargs
     ):
@@ -119,6 +119,9 @@ class Multiscales:
 
         client : distributed.Client or None. default=None
             A distributed.client object to register locks with.
+
+        offsets: Sequence of length-two sequences of ints denoting the 
+            array index range into which each scale level is to be saved. 
 
         Returns
         -------
@@ -180,20 +183,27 @@ class Multiscales:
         return store_group, store_arrays, storage_ops
 
 
+def mean_reduce(array: ArrayLike, **kwargs) -> ArrayLike:
+    return np.mean(array, **kwargs, dtype='float32')
+
+
 def mode_reduce(array: ArrayLike, axis: Optional[int] = None) -> ArrayLike:
     if axis is None:
         result = array
     else:
-        if np.all(np.array(array.shape)[1::2] == 2):
-            reshaped = array.reshape(np.array(array.shape).reshape(-1, 2).prod(1))
-            result = countless(reshaped, (2,) * reshaped.ndim)
+        if np.all(array == 0):
+            result = np.zeros(np.array(array.shape)[0::2], dtype=array.dtype)
         else:
-            transposed = array.transpose(
-                *range(0, array.ndim, 2), *range(1, array.ndim, 2)
-            )
-            reshaped = transposed.reshape(*transposed.shape[: array.ndim // 2], -1)
-            modes = mode(reshaped, axis=reshaped.ndim - 1).mode
-            result = modes.squeeze(axis=-1)
+            if np.all(np.array(array.shape)[1::2] == 2):
+                reshaped = array.reshape(np.array(array.shape).reshape(-1, 2).prod(1))
+                result = countless(reshaped, (2,) * reshaped.ndim)
+            else:
+                transposed = array.transpose(
+                    *range(0, array.ndim, 2), *range(1, array.ndim, 2)
+                )
+                reshaped = transposed.reshape(*transposed.shape[: array.ndim // 2], -1)
+                modes = mode(reshaped, axis=reshaped.ndim - 1).mode
+                result = modes.squeeze(axis=-1)
     return result
 
 
@@ -257,3 +267,23 @@ def countless(data, factor):
     final_result = lor(reduce(lor, results), sections[-1]) - 1
 
     return final_result
+
+
+def generate_output_indices(arrays: Sequence[DataArray], scale_factors: Sequence[int], offset: Sequence[int]) -> Tuple[Tuple[int,...], ...]:
+    """
+    Generate array indices for storing partial multresolution pyramids in 
+    an output array
+    """
+
+    all_scales = [np.power(scale_factors, depth).tolist() for depth in range(len(arrays))]
+    if np.any(np.mod(offset, all_scales[-1])):
+        raise ValueError(f'An offset of {offset} is not evenly divisible by the scale factor of the largest downscaling factor: {all_scales[-1]}')
+    if len(scale_factors) != len(offset):
+        raise ValueError(f'Length of scale_factors ({len(scale_factors)}) does not match length of offset ({len(offset)})')
+    results = []
+    for array, scales in zip(arrays, all_scales):
+        subresults = []
+        for o, shp, scale in zip(offset, array.shape, scales):
+            subresults.append((o // scale, o // scale + shp))
+        results.append(tuple(subresults))
+    return tuple(results)

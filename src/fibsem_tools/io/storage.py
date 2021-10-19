@@ -70,7 +70,7 @@ class FSStore(MutableMapping):
         normalize_keys=True,
         key_separator="/",
         mode="w",
-        exceptions=(KeyError, PermissionError, IOError),
+        exceptions=(KeyError, PermissionError),
         meta_keys=(attrs_key, group_meta_key, array_meta_key),
         dimension_separator=None,
         **storage_options

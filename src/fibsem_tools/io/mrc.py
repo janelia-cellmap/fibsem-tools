@@ -52,16 +52,18 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
 
 
 def mrc_chunk_loader(fname, block_info=None):
+    import ctypes
     idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
     # block_info[None] contains the output specification
     dtype = block_info[None]["dtype"]
-    result = np.array(access_mrc(fname, mode="r").data[idx]).astype(dtype)
+    with access_mrc(fname, mode="r") as memmap:
+        result = np.array(memmap.data[idx]).astype(dtype)
     return result
 
 
-def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]]):
+def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]], **kwargs):
     """
-    Generate a dask array backed by a memory-mapped .mrc file
+    Generate a dask array backed by a memory-mapped .mrc file.
     """
     with access_mrc(urlpath, mode="r") as mem:
         shape, dtype = mrc_shape_dtype_inference(mem)
