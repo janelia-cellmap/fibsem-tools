@@ -9,7 +9,6 @@ from fibsem_tools.io.util import rmtree_parallel, split_path_at_suffix
 from toolz import concat
 from xarray import DataArray
 import numpy as np
-from fibsem_tools.io.storage import N5FSStore
 from zarr.indexing import BasicIndexer
 from distributed import Lock, Client
 
@@ -165,7 +164,7 @@ def access_zarr(
 def access_n5(
     dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs
 ) -> Any:
-    dir_path = N5FSStore(dir_path, **kwargs.get("storage_options", {}))
+    dir_path = zarr.N5FSStore(dir_path, **kwargs.get("storage_options", {}))
     return access_zarr(dir_path, container_path, **kwargs)
 
 
