@@ -156,10 +156,6 @@ class Multiscales:
             array_attrs=tuple(array_attrs.values()),
             **kwargs
         )
-        # this is a hack until this is fixed in zarr
-        if 'write_empty_chunks' in kwargs:
-            for store_array in store_arrays:
-                store_array.write_empty_chunks = kwargs['write_empty_chunks']
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:

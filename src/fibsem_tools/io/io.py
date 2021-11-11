@@ -314,10 +314,14 @@ def initialize_group(
             dtype=arr.dtype,
             chunks=chunking,
             compressor=compressor,
-            write_empty_chunks=False,
         )
         z_arr.attrs.update(attrs)
         zarrays.append(z_arr)
+    
+    # this is a hack until this is fixed in zarr
+    for array in zarrays:
+        array._write_empty_chunks = False
+    
     return zgroup, zarrays
 
 
