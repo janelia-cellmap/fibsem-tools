@@ -2,7 +2,7 @@ from dask import delayed, bag
 from shutil import rmtree
 from glob import glob
 import os
-from typing import List
+from typing import List, Optional
 import toolz as tz
 from typing import Sequence, Union, Any, Tuple
 from pathlib import Path
@@ -29,7 +29,8 @@ def rmtree_parallel(
         return result
 
 
-def list_files(paths: Union[Sequence[Union[str, Path]], str, Path], followlinks=False):
+def list_files(paths: Union[Sequence[Union[str, Path]], str, Path],
+               followlinks: bool = False):
     if isinstance(paths, str) or isinstance(paths, Path):
         if os.path.isdir(paths):
             return list(
@@ -70,16 +71,17 @@ def list_files_parallel(
         return result
 
 
-def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
+def split_by_suffix(uri: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     """
-    Given a string representing a path on a filesystem and a collection of suffixes, return
-    the path split at the last instance of any element of the path containing one of the
-    suffixes, as well as the suffix. If the last element of the path bears a suffix, return the path,
+    Given a string and a collection of suffixes, return
+    the string split at the last instance of any element of the string 
+    containing one of the suffixes, as well as the suffix. 
+    If the last element of the string bears a suffix, return the string,
     the empty string, and the suffix.
     """
-    protocol: str
+    protocol: Optional[str]
     subpath: str
-    protocol, subpath = fsspec.core.split_protocol(urlpath)
+    protocol, subpath = fsspec.core.split_protocol(uri)
     if protocol is None:
         separator = os.path.sep
     else:
@@ -96,7 +98,7 @@ def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]) -> Tuple[str, st
     else:
         pre, post = (
             separator.join([p.strip(separator) for p in parts[: index + 1]]),
-            separator.join([p.strip(separator) for p in parts[index + 1 :]]),
+            separator.join([p.strip(separator) for p in parts[index + 1:]]),
         )
 
     suffix = Path(pre).suffix

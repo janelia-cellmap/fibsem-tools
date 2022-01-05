@@ -1,16 +1,17 @@
-from collections import defaultdict
 from typing import Dict, List, Tuple, Any, Union, Sequence
 from pathlib import Path
 from dask import delayed
 import dask.array as da
 import zarr
 import os
-from fibsem_tools.io.util import rmtree_parallel, split_path_at_suffix
+from fibsem_tools.io.util import rmtree_parallel, split_by_suffix
 from toolz import concat
 from xarray import DataArray
 import numpy as np
 from zarr.indexing import BasicIndexer
 from distributed import Lock, Client
+import logging 
+import time
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -20,6 +21,7 @@ ZARR_AXES_3D = ["z", "y", "x"]
 # is x,y,z
 N5_AXES_3D = ZARR_AXES_3D[::-1]
 
+logger = logging.getLogger(__name__)
 
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     result = ()
@@ -32,7 +34,7 @@ def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     return result
 
 
-def delete_zbranch(branch, compute=True):
+def delete_zbranch(branch: Union[zarr.hierarchy.Group, zarr.core.Array], compute: bool=True):
     """
     Delete a branch (group or array) from a zarr container
     """
@@ -46,7 +48,7 @@ def delete_zbranch(branch, compute=True):
         )
 
 
-def delete_zgroup(zgroup, compute=True):
+def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool=True):
     """
     Delete all arrays in a zarr group
     """
@@ -64,7 +66,7 @@ def delete_zgroup(zgroup, compute=True):
         return to_delete
 
 
-def delete_zarray(zarray, compute=True):
+def delete_zarray(zarray: zarr.core.Array, compute: bool = True):
     """
     Delete a zarr array.
     """
@@ -140,8 +142,12 @@ def access_zarr(
 ) -> Any:
     if isinstance(dir_path, Path):
         dir_path = str(dir_path)
+
+    if isinstance(dir_path, str):
+        dir_path = zarr.NestedDirectoryStore(dir_path)
+    
     if isinstance(container_path, Path):
-        dir_path = str(dir_path)
+        container_path = str(container_path)
 
     attrs = kwargs.pop("attrs", {})
 
@@ -154,7 +160,11 @@ def access_zarr(
         if isinstance(
             tmp.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
         ):
+            logger.info(f'Beginning parallel rmdir of {tmp.path}...')
+            pre = time.time()
             delete_zbranch(tmp)
+            post = time.time()
+            logger.info(f'Completed parallel rmdir of {tmp.path} in {post - pre}s.')
     array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
     if kwargs.get("mode") != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
@@ -169,7 +179,7 @@ def access_n5(
 
 
 def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
-    store_path, key, _ = split_path_at_suffix(urlpath, (".zarr",))
+    store_path, key, _ = split_by_suffix(urlpath, (".zarr",))
     arr = access_zarr(store_path, key, mode="r", **kwargs)
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not a zarr array")
@@ -182,7 +192,7 @@ def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
 
 
 def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
-    store_path, key, _ = split_path_at_suffix(urlpath, (".n5",))
+    store_path, key, _ = split_by_suffix(urlpath, (".n5",))
     arr = access_n5(store_path, key, mode="r", **kwargs)
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not an n5 array")
@@ -240,13 +250,13 @@ def zarr_n5_coordinate_inference(
 
 
 def is_n5(array: zarr.core.Array) -> bool:
-    if isinstance(array.store, (zarr.N5Store, N5FSStore)):
+    if isinstance(array.store, (zarr.N5Store, zarr.N5FSStore)):
         return True
     else:
         return False
 
 
-def get_chunk_keys(array: zarr.core.Array, region=slice(None)) -> Sequence[str]:
+def get_chunk_keys(array: zarr.core.Array, region: slice = slice(None)) -> Sequence[str]:
     indexer = BasicIndexer(region, array)
     chunk_coords = (idx.chunk_coords for idx in indexer)
     keys = (array._chunk_key(cc) for cc in chunk_coords)

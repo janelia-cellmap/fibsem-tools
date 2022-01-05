@@ -1,14 +1,12 @@
-from scipy.stats import mode
+import os
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import NDArray
 from typing import Any, Dict, Tuple, Optional
-from distributed import Lock
-import numpy as np
 from fibsem_tools.io.zarr import lock_array
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform, ScaleMeta
+from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
-
+from xarray_multiscale.reducers import windowed_mode
 from fibsem_tools.io import initialize_group
 from fibsem_tools.io.dask import store_blocks
 
@@ -20,21 +18,19 @@ import math
 
 
 class Multiscales:
-    def __init__(
-        self, name: str, arrays: Dict[str, DataArray], attrs: Dict[str, Any] = {}
-    ):
+    def __init__(self,
+                 name: str,
+                 arrays: Dict[str, DataArray],
+                 attrs: Dict[str, Any] = {}
+                 ):
         """
         Create a representation of a multiresolution collection of arrays.
-        This class is basically a string name, a dict-of-arrays representing a multiresolution pyramid,
-        and a dict of attributes associated with the multiresolution pyramid.
+        This class is basically a string name, a dict-of-arrays representing a
+        multiresolution pyramid, and a dict of attributes associated with
+        the multiresolution pyramid.
 
         Parameters
         ----------
-
-        name : str,
-            The name associated with this multiscale collection. When storing the collection,
-            `name` is used as the name of the group or folder in storage that contains the collection
-            of arrays.
 
         arrays : dict of xarray.DataArray
             The keys of this dict will be used as the names of the individual arrays when serialized to storage.
@@ -79,12 +75,13 @@ class Multiscales:
 
     def store(
         self,
-        store: str,
-        chunks: Optional[Tuple[int]] = None,
+        uri: str,
+        chunks: Optional[Tuple[int, ...]] = None,
         multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
-        locking=False,
+        locking: bool=False,
         client=None,
+        access_modes = ('a', 'a'),
         **kwargs
     ):
         """
@@ -93,10 +90,8 @@ class Multiscales:
         Parameters
         ----------
 
-        store : str
-            Path to the root storage location.
-            When saving to zarr or n5 (the only two modes currently supported),
-            `store` should be the root of the zarr / n5 hierarchy, e.g. `store='foo/bar.n5'`
+        uri : str
+            Path to the storage location.
 
         chunks : tuple of ints, or dict of tuples of ints
             The chunking used for the arrays in storage. If a single tuple of ints is provided,
@@ -143,19 +138,19 @@ class Multiscales:
 
         if chunks is None:
             _chunks = {key: v.data.chunksize for key, v in self.arrays.items()}
-        elif isinstance(chunks, (tuple, list)):
+        else:
             _chunks = {key: chunks for key in self.arrays}
-
-        store_group, store_arrays = initialize_group(
-            store,
-            self.name,
-            tuple(self.arrays.values()),
-            array_paths=tuple(self.arrays.keys()),
-            chunks=tuple(_chunks.values()),
+        store_group = initialize_group(
+            uri,
+            self.arrays.values(),
+            array_paths=self.arrays.keys(),
+            chunks=_chunks.values(),
             group_attrs=group_attrs,
-            array_attrs=tuple(array_attrs.values()),
+            array_attrs=array_attrs.values(),
+            modes = access_modes,
             **kwargs
         )
+        store_arrays = [store_group[key] for key in self.arrays.keys()]
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
@@ -176,28 +171,22 @@ class Multiscales:
                     locked_arrays.append(store_array)
             store_arrays = locked_arrays
 
-        storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays)
+        storage_ops = store_blocks([v.data for v in self.arrays.values()],
+                                   store_arrays)
         return store_group, store_arrays, storage_ops
 
 
-def mode_reduce(array: ArrayLike, axis: Optional[int] = None) -> ArrayLike:
-    if axis is None:
-        result = array
+def mode_reduce(array: NDArray[Any],
+                window_size: Tuple[int, ...]) -> NDArray[Any]:
+    if np.all(np.array(window_size) == 2):
+        result = countless(array, window_size)
     else:
-        if np.all(np.array(array.shape)[1::2] == 2):
-            reshaped = array.reshape(np.array(array.shape).reshape(-1, 2).prod(1))
-            result = countless(reshaped, (2,) * reshaped.ndim)
-        else:
-            transposed = array.transpose(
-                *range(0, array.ndim, 2), *range(1, array.ndim, 2)
-            )
-            reshaped = transposed.reshape(*transposed.shape[: array.ndim // 2], -1)
-            modes = mode(reshaped, axis=reshaped.ndim - 1).mode
-            result = modes.squeeze(axis=-1)
+        result = windowed_mode(array, window_size)
+
     return result
 
 
-def countless(data, factor):
+def countless(data, factor) -> NDArray[Any]:
     """
     countless downsamples labeled images (segmentations)
     by finding the mode using vectorized instructions.
@@ -211,13 +200,14 @@ def countless(data, factor):
     2x2x1 (N=4), 2x2x2 (N=8), 4x4x1 (N=16), 3x2x1 (N=6)
     and various other configurations of a similar nature.
     c.f. https://medium.com/@willsilversmith/countless-3d-vectorized-2x-downsampling-of-labeled-volume-images-using-python-and-numpy-59d686c2f75
+
+    This function has been modified from the original
+    to avoid mutation of the input argument.
     """
     sections = []
 
     mode_of = reduce(lambda x, y: x * y, factor)
     majority = int(math.ceil(float(mode_of) / 2))
-
-    # data += 1 # offset from zero
 
     for offset in np.ndindex(factor):
         part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))] + 1

@@ -11,15 +11,15 @@ distributed = ">=2021.10.0"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
 fsspec = "2021.07.0"
-zarr = "^2.9.5"
+zarr = { git = "https://github.com/zarr-developers/zarr-python.git" }
 mrcfile = "^1.2.0"
 dacite = "^1.6.0"
 numpy = "^1.20.0"
 pandas = "^1.2.3"
-xarray = "^0.18.0"
+xarray = "^0.20.0"
 pydantic = "^1.8.2"
 backoff = "^1.10.0"
-xarray-multiscale = "^0.2.1"
+xarray-multiscale = "^0.3.0"
 dask-jobqueue = "0.7.3"
 s3fs = "^2021.7.0"
 
@@ -27,6 +27,7 @@ s3fs = "^2021.7.0"
 mypy = "^0.790"
 black = "^20.8b1"
 pytest = "^6.1.2"
+pytest-cov = "^3.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
