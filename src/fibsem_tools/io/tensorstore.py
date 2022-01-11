@@ -364,7 +364,7 @@ def access_precomputed(
 def precomputed_to_dask(
     urlpath: str, chunks: Union[str, Sequence[int]], channel: int = 0
 ):
-    store_path, key, _ = split_path_at_suffix(urlpath, (".precomputed",))
+    store_path, key, _ = split_by_suffix(urlpath, (".precomputed",))
     tsa = access_precomputed(store_path, key, mode="r")[ts.d["channel"][channel]]
     shape = tuple(tsa.shape)
     dtype = tsa.dtype.numpy_dtype
