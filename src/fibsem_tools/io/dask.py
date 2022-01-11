@@ -1,4 +1,4 @@
-from typing import Any, Sequence, Tuple, List
+from typing import Any, Literal, Sequence, Tuple, List
 import dask
 import distributed
 import dask.array as da
@@ -12,7 +12,9 @@ from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 from dask.optimization import fuse
 from dask.delayed import Delayed
-
+from dask.core import flatten
+from dask.base import tokenize
+from dask.highlevelgraph import HighLevelGraph
 
 def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
     """
@@ -50,7 +52,7 @@ def sequential_rechunk(
 
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> None:
+def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> Literal[0]:
     """
     A function inserted in a Dask graph for storing a chunk.
 
@@ -76,26 +78,49 @@ def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> None:
     else:
         out[index] = np.asanyarray(x)
 
-    return None
+    return 0
 
 
-def write_blocks(source, target, region: Optional[Tuple[slice, ...]]):
+def ndwrapper(func, ndim, *args, **kwargs):
+    """
+    Wrap the result of `func` in a rank-`ndim` numpy array
+    """
+    return np.array([func(*args, **kwargs)]).reshape((1,) * ndim)
+
+
+def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
     """
     For each chunk in `source`, write that data to `target`
     """
 
-    storage_op = []
     slices = slices_from_chunks(source.chunks)
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]
-    for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
-        region = slices[lidx]
-        source_block = source.blocks[aidx]
-        storage_op.append((dask.delayed(store_chunk)(source_block, target, region)))
-    return storage_op
+
+    source_name = 'store-source-' + tokenize(source)
+    store_name = 'store-' + tokenize(source)
+    
+    layers = {source_name: source.__dask_graph__()}
+    deps = {source_name: set()}
+    
+    dsk = {}
+    chunks = tuple((1,) * s for s in source.blocks.shape)
+    
+    for slice, key in zip(slices, flatten(source.__dask_keys__())):
+        dsk[(store_name,) + key[1:]] = (ndwrapper, store_chunk, source.ndim, key, target, slice)
+    
+    layers[store_name] = dsk
+    deps[store_name] = {source_name}
+    store_dsk = HighLevelGraph(layers, deps)
+    
+    return da.Array(store_dsk,
+                    store_name,
+                    shape=source.blocks.shape,
+                    chunks=chunks,
+                    dtype=int)
 
 
-def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
+def store_blocks(sources, targets, regions=None) -> List[da.Array]:
     result = []
 
     if isinstance(sources, dask.array.core.Array):
