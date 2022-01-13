@@ -1,4 +1,4 @@
-from typing import Any, Literal, Sequence, Tuple, List
+from typing import Any, Callable, Literal, Sequence, Tuple, List
 import dask
 import distributed
 import dask.array as da
@@ -15,6 +15,7 @@ from dask.delayed import Delayed
 from dask.core import flatten
 from dask.base import tokenize
 from dask.highlevelgraph import HighLevelGraph
+
 
 def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
     """
@@ -81,7 +82,7 @@ def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> Literal[
     return 0
 
 
-def ndwrapper(func, ndim, *args, **kwargs):
+def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
     """
     Wrap the result of `func` in a rank-`ndim` numpy array
     """
@@ -90,7 +91,8 @@ def ndwrapper(func, ndim, *args, **kwargs):
 
 def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
     """
-    For each chunk in `source`, write that data to `target`
+    Return a dask array with where each chunk contains the result of writing 
+    each chunk of `source` to `target`.
     """
 
     slices = slices_from_chunks(source.chunks)
@@ -120,7 +122,12 @@ def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Arra
                     dtype=int)
 
 
-def store_blocks(sources, targets, regions=None) -> List[da.Array]:
+def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.Array]:
+    """
+    Write dask array(s) to sliceable storage. Like `da.store` but instead of 
+    returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,
+    which allows saving a subset of the data by slicing these arrays.
+    """
     result = []
 
     if isinstance(sources, dask.array.core.Array):
@@ -141,9 +148,7 @@ def store_blocks(sources, targets, regions=None) -> List[da.Array]:
 
     if len(sources) != len(regions):
         raise ValueError(
-            "Different number of sources [%d] and targets [%d] than regions [%d]"
-            % (len(sources), len(targets), len(regions))
-        )
+            f"Different number of sources [{len(sources)}] and targets [{len(targets)}] than regions [{len(regions)}]")
 
     for source, target, region in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region))

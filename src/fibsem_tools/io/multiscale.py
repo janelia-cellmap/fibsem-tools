@@ -8,7 +8,7 @@ from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
 from xarray_multiscale.reducers import windowed_mode
 from fibsem_tools.io import initialize_group
-from fibsem_tools.io.dask import store_blocks
+from fibsem_tools.io.dask import store_blocks, write_blocks
 
 
 from itertools import combinations
@@ -247,3 +247,16 @@ def countless(data, factor) -> NDArray[Any]:
     final_result = lor(reduce(lor, results), sections[-1]) - 1
 
     return final_result
+
+
+  
+
+def rechunked_move(source, target, read_chunks, write_chunks='auto'):
+    # insert signed chunk alignment validation
+    if write_chunks == 'auto':
+        write_chunks = source.chunks
+    
+    input_array = da.from_array(source, chunks=read_chunks).rechunk(write_chunks)
+    save_op = write_blocks(input_array, target)
+    return save_op
+
