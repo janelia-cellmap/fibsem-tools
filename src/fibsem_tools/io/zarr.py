@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple, Any, Union, Sequence
 from pathlib import Path
 from dask import delayed
+from dask import bag
 import dask.array as da
 import zarr
 import os
@@ -20,7 +21,7 @@ ZARR_AXES_3D = ["z", "y", "x"]
 # default axis order of raw n5 spatial metadata
 # is x,y,z
 N5_AXES_3D = ZARR_AXES_3D[::-1]
-
+DEFAULT_ZARR_STORE = zarr.NestedDirectoryStore
 logger = logging.getLogger(__name__)
 
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
@@ -66,31 +67,23 @@ def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool=True):
         return to_delete
 
 
-def delete_zarray(zarray: zarr.core.Array, compute: bool = True):
+def delete_zarray(arr: zarr.core.Array, compute: bool = True):
     """
     Delete a zarr array.
     """
 
-    if not isinstance(zarray, zarr.core.Array):
+    if not isinstance(arr, zarr.core.Array):
         raise TypeError(
             f"Cannot use the delete_zarray function on object of type {type(zarray)}"
         )
-
-    path = os.path.join(zarray.store.path, zarray.path)
-    store = zarray.store
-    branch_depth = None
-    if isinstance(store, zarr.N5Store) or isinstance(store, zarr.NestedDirectoryStore):
-        branch_depth = 1
-    elif isinstance(store, zarr.DirectoryStore):
-        branch_depth = 0
+   
+    keys = map(lambda v: os.path.join(arr.chunk_store.path, v), arr.chunk_store.keys()) 
+    key_bag = bag.from_sequence(keys)
+    delete_op = key_bag.map_partitions(lambda v: [os.remove(f) for f in v])
+    if compute:
+        return delete_op.compute()
     else:
-        warnings.warn(
-            f"Deferring to the zarr-python implementation for deleting store with type {type(store)}"
-        )
-        return None
-
-    result = rmtree_parallel(path, branch_depth=branch_depth, compute=compute)
-    return result
+        return delete_op
 
 
 def same_compressor(arr: zarr.Array, compressor) -> bool:
@@ -138,16 +131,16 @@ def zarr_array_from_dask(arr: Any) -> Any:
 
 
 def access_zarr(
-    dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs
+    store: Union[str, Path], path: Union[str, Path], **kwargs
 ) -> Any:
-    if isinstance(dir_path, Path):
-        dir_path = str(dir_path)
+    if isinstance(store, Path):
+        store = str(store)
 
-    if isinstance(dir_path, str):
-        dir_path = zarr.NestedDirectoryStore(dir_path)
+    if isinstance(store, str) and kwargs.get('mode') == 'w':
+        store = DEFAULT_ZARR_STORE(store)
     
-    if isinstance(container_path, Path):
-        container_path = str(container_path)
+    if isinstance(path, Path):
+        path = str(path)
 
     attrs = kwargs.pop("attrs", {})
 
@@ -155,7 +148,7 @@ def access_zarr(
     if kwargs.get("mode") == "w":
         tmp_kwargs = kwargs.copy()
         tmp_kwargs["mode"] = "a"
-        tmp = zarr.open(dir_path, path=str(container_path), **tmp_kwargs)
+        tmp = zarr.open(store, path=path, **tmp_kwargs)
         # todo: move this logic to methods on the stores themselves
         if isinstance(
             tmp.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
@@ -165,17 +158,17 @@ def access_zarr(
             delete_zbranch(tmp)
             post = time.time()
             logger.info(f'Completed parallel rmdir of {tmp.path} in {post - pre}s.')
-    array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
+    array_or_group = zarr.open(store, path=path, **kwargs)
     if kwargs.get("mode") != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
 
 def access_n5(
-    dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs
+    store: Union[str, Path], path: Union[str, Path], **kwargs
 ) -> Any:
-    dir_path = zarr.N5FSStore(dir_path, **kwargs.get("storage_options", {}))
-    return access_zarr(dir_path, container_path, **kwargs)
+    store = zarr.N5FSStore(store, **kwargs.get("storage_options", {}))
+    return access_zarr(store, path, **kwargs)
 
 
 def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):

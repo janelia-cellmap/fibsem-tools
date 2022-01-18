@@ -6,6 +6,7 @@ import numpy as np
 import shutil
 import atexit
 import os
+from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE
 from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.io import read_dask, initialize_group
 from fibsem_tools.io.tensorstore import access_precomputed, precomputed_to_dask
@@ -59,7 +60,7 @@ def test_accessing_group_zarr():
 
     zg = access(store, mode='w')
     zg['foo'] = data
-    assert zarr.open(store, mode='a') == zg
+    assert zarr.open(DEFAULT_ZARR_STORE(store), mode='a') == zg
 
 
 def test_accessing_group_zarr_n5():
