@@ -18,11 +18,9 @@ import math
 
 
 class Multiscales:
-    def __init__(self,
-                 name: str,
-                 arrays: Dict[str, DataArray],
-                 attrs: Dict[str, Any] = {}
-                 ):
+    def __init__(
+        self, name: str, arrays: Dict[str, DataArray], attrs: Dict[str, Any] = {}
+    ):
         """
         Create a representation of a multiresolution collection of arrays.
         This class is basically a string name, a dict-of-arrays representing a
@@ -79,9 +77,9 @@ class Multiscales:
         chunks: Optional[Tuple[int, ...]] = None,
         multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
-        locking: bool=False,
+        locking: bool = False,
         client=None,
-        access_modes = ('a', 'a'),
+        access_modes=("a", "a"),
         **kwargs
     ):
         """
@@ -147,7 +145,7 @@ class Multiscales:
             chunks=_chunks.values(),
             group_attrs=group_attrs,
             array_attrs=array_attrs.values(),
-            modes = access_modes,
+            modes=access_modes,
             **kwargs
         )
         store_arrays = [store_group[key] for key in self.arrays.keys()]
@@ -171,13 +169,11 @@ class Multiscales:
                     locked_arrays.append(store_array)
             store_arrays = locked_arrays
 
-        storage_ops = store_blocks([v.data for v in self.arrays.values()],
-                                   store_arrays)
+        storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays)
         return store_group, store_arrays, storage_ops
 
 
-def mode_reduce(array: NDArray[Any],
-                window_size: Tuple[int, ...]) -> NDArray[Any]:
+def mode_reduce(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
     if np.all(np.array(window_size) == 2):
         result = countless(array, window_size)
     else:
@@ -249,14 +245,11 @@ def countless(data, factor) -> NDArray[Any]:
     return final_result
 
 
-  
-
-def rechunked_move(source, target, read_chunks, write_chunks='auto'):
+def rechunked_move(source, target, read_chunks, write_chunks="auto"):
     # insert signed chunk alignment validation
-    if write_chunks == 'auto':
+    if write_chunks == "auto":
         write_chunks = source.chunks
-    
+
     input_array = da.from_array(source, chunks=read_chunks).rechunk(write_chunks)
     save_op = write_blocks(input_array, target)
     return save_op
-

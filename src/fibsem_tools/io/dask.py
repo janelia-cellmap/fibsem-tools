@@ -91,7 +91,7 @@ def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
 
 def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
     """
-    Return a dask array with where each chunk contains the result of writing 
+    Return a dask array with where each chunk contains the result of writing
     each chunk of `source` to `target`.
     """
 
@@ -99,32 +99,37 @@ def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Arra
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]
 
-    source_name = 'store-source-' + tokenize(source)
-    store_name = 'store-' + tokenize(source)
-    
+    source_name = "store-source-" + tokenize(source)
+    store_name = "store-" + tokenize(source)
+
     layers = {source_name: source.__dask_graph__()}
     deps = {source_name: set()}
-    
+
     dsk = {}
     chunks = tuple((1,) * s for s in source.blocks.shape)
-    
+
     for slice, key in zip(slices, flatten(source.__dask_keys__())):
-        dsk[(store_name,) + key[1:]] = (ndwrapper, store_chunk, source.ndim, key, target, slice)
-    
+        dsk[(store_name,) + key[1:]] = (
+            ndwrapper,
+            store_chunk,
+            source.ndim,
+            key,
+            target,
+            slice,
+        )
+
     layers[store_name] = dsk
     deps[store_name] = {source_name}
     store_dsk = HighLevelGraph(layers, deps)
-    
-    return da.Array(store_dsk,
-                    store_name,
-                    shape=source.blocks.shape,
-                    chunks=chunks,
-                    dtype=int)
+
+    return da.Array(
+        store_dsk, store_name, shape=source.blocks.shape, chunks=chunks, dtype=int
+    )
 
 
 def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.Array]:
     """
-    Write dask array(s) to sliceable storage. Like `da.store` but instead of 
+    Write dask array(s) to sliceable storage. Like `da.store` but instead of
     returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,
     which allows saving a subset of the data by slicing these arrays.
     """
@@ -148,7 +153,8 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.A
 
     if len(sources) != len(regions):
         raise ValueError(
-            f"Different number of sources [{len(sources)}] and targets [{len(targets)}] than regions [{len(regions)}]")
+            f"Different number of sources [{len(sources)}] and targets [{len(targets)}] than regions [{len(regions)}]"
+        )
 
     for source, target, region in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region))

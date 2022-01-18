@@ -11,7 +11,7 @@ from xarray import DataArray
 import numpy as np
 from zarr.indexing import BasicIndexer
 from distributed import Lock, Client
-import logging 
+import logging
 import time
 
 # default axis order of zarr spatial metadata
@@ -24,6 +24,7 @@ N5_AXES_3D = ZARR_AXES_3D[::-1]
 DEFAULT_ZARR_STORE = zarr.NestedDirectoryStore
 logger = logging.getLogger(__name__)
 
+
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     result = ()
     if isinstance(obj, zarr.core.Array):
@@ -35,7 +36,9 @@ def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     return result
 
 
-def delete_zbranch(branch: Union[zarr.hierarchy.Group, zarr.core.Array], compute: bool=True):
+def delete_zbranch(
+    branch: Union[zarr.hierarchy.Group, zarr.core.Array], compute: bool = True
+):
     """
     Delete a branch (group or array) from a zarr container
     """
@@ -49,7 +52,7 @@ def delete_zbranch(branch: Union[zarr.hierarchy.Group, zarr.core.Array], compute
         )
 
 
-def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool=True):
+def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool = True):
     """
     Delete all arrays in a zarr group
     """
@@ -76,8 +79,8 @@ def delete_zarray(arr: zarr.core.Array, compute: bool = True):
         raise TypeError(
             f"Cannot use the delete_zarray function on object of type {type(zarray)}"
         )
-   
-    keys = map(lambda v: os.path.join(arr.chunk_store.path, v), arr.chunk_store.keys()) 
+
+    keys = map(lambda v: os.path.join(arr.chunk_store.path, v), arr.chunk_store.keys())
     key_bag = bag.from_sequence(keys)
     delete_op = key_bag.map_partitions(lambda v: [os.remove(f) for f in v])
     if compute:
@@ -130,15 +133,13 @@ def zarr_array_from_dask(arr: Any) -> Any:
     return arr.dask[keys[-1]]
 
 
-def access_zarr(
-    store: Union[str, Path], path: Union[str, Path], **kwargs
-) -> Any:
+def access_zarr(store: Union[str, Path], path: Union[str, Path], **kwargs) -> Any:
     if isinstance(store, Path):
         store = str(store)
 
-    if isinstance(store, str) and kwargs.get('mode') == 'w':
+    if isinstance(store, str) and kwargs.get("mode") == "w":
         store = DEFAULT_ZARR_STORE(store)
-    
+
     if isinstance(path, Path):
         path = str(path)
 
@@ -153,20 +154,18 @@ def access_zarr(
         if isinstance(
             tmp.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
         ):
-            logger.info(f'Beginning parallel rmdir of {tmp.path}...')
+            logger.info(f"Beginning parallel rmdir of {tmp.path}...")
             pre = time.time()
             delete_zbranch(tmp)
             post = time.time()
-            logger.info(f'Completed parallel rmdir of {tmp.path} in {post - pre}s.')
+            logger.info(f"Completed parallel rmdir of {tmp.path} in {post - pre}s.")
     array_or_group = zarr.open(store, path=path, **kwargs)
     if kwargs.get("mode") != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
 
-def access_n5(
-    store: Union[str, Path], path: Union[str, Path], **kwargs
-) -> Any:
+def access_n5(store: Union[str, Path], path: Union[str, Path], **kwargs) -> Any:
     store = zarr.N5FSStore(store, **kwargs.get("storage_options", {}))
     return access_zarr(store, path, **kwargs)
 
@@ -249,7 +248,9 @@ def is_n5(array: zarr.core.Array) -> bool:
         return False
 
 
-def get_chunk_keys(array: zarr.core.Array, region: slice = slice(None)) -> Sequence[str]:
+def get_chunk_keys(
+    array: zarr.core.Array, region: slice = slice(None)
+) -> Sequence[str]:
     indexer = BasicIndexer(region, array)
     chunk_coords = (idx.chunk_coords for idx in indexer)
     keys = (array._chunk_key(cc) for cc in chunk_coords)

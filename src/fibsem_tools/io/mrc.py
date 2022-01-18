@@ -45,7 +45,9 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
     else:
         keys = header.cella.dtype.fields.keys()
     for key in keys:
-        grid_spacing = np.round((grid_size_angstroms[key] / 10) / header[f"n{key}"], grid_spacing_decimals)
+        grid_spacing = np.round(
+            (grid_size_angstroms[key] / 10) / header[f"n{key}"], grid_spacing_decimals
+        )
         axis = np.arange(header[f"n{key}start"], header[f"n{key}"]) * grid_spacing
         coords.append(DataArray(data=axis, dims=(key,), attrs={"units": "nm"}))
 
@@ -61,14 +63,12 @@ def mrc_chunk_loader(fname, block_info=None):
     mrc = mrcfile.open(fname, header_only=True)
     chunk_offset = chunk_location[0]
     offset = mrc.header.nbytes + mrc.header.nsymbt + chunk_bytes * chunk_offset
-    with np.memmap(fname, dtype, 'r', offset, shape) as mem:
+    with np.memmap(fname, dtype, "r", offset, shape) as mem:
         result = np.array(mem).astype(dtype)
     return result
 
 
-def mrc_to_dask(urlpath: Pathlike,
-                chunks: Union[str, Sequence[int]],
-                **kwargs):
+def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]], **kwargs):
     """
     Generate a dask array backed by a memory-mapped .mrc file.
     """
@@ -76,9 +76,7 @@ def mrc_to_dask(urlpath: Pathlike,
         shape, dtype = mrc_shape_dtype_inference(mem)
 
     if chunks == "auto":
-        _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)),
-                                   shape,
-                                   dtype=dtype)
+        _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)
     else:
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 

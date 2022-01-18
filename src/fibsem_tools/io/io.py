@@ -53,11 +53,11 @@ defaultUnit = "nm"
 
 
 class AccessMode(str, Enum):
-    w = 'w'
-    w_minus = 'w-'
-    r = 'r'
-    r_plus = 'r+'
-    a = 'a'
+    w = "w"
+    w_minus = "w-"
+    r = "r"
+    r_plus = "r+"
+    a = "a"
 
 
 def broadcast_kwargs(**kwargs) -> Dict:
@@ -85,8 +85,9 @@ def broadcast_kwargs(**kwargs) -> Dict:
     return result
 
 
-def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]],
-                  mode: AccessMode):
+def access_fibsem(
+    path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: AccessMode
+):
     if mode != "r":
         raise ValueError(
             f".dat files can only be accessed in read-only mode, not {mode}."
@@ -199,9 +200,9 @@ def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     return access(path, mode="r", **kwargs)
 
 
-def read_dask(uri: str, 
-             chunks: Union[str, Tuple[int, ...]] = "auto", 
-            **kwargs: Dict[str, Any]) -> da.core.Array:
+def read_dask(
+    uri: str, chunks: Union[str, Tuple[int, ...]] = "auto", **kwargs: Dict[str, Any]
+) -> da.core.Array:
     """
     Create a dask array from a uri
     """
@@ -220,8 +221,7 @@ def read_xarray(
     Create an xarray.DataArray from data found at a path.
     """
     raw_array = read(url, storage_options=storage_options)
-    dask_array = read_dask(url, 
-                           chunks=chunks, storage_options=storage_options)
+    dask_array = read_dask(url, chunks=chunks, storage_options=storage_options)
     cleaned_attrs = None
     if coords == "auto":
         coords, cleaned_attrs = infer_coordinates(raw_array)
@@ -230,7 +230,7 @@ def read_xarray(
         if not kwargs.get("attrs"):
             raw_attrs = dict(raw_array.attrs)
             if cleaned_attrs is not None:
-                keys = (set(raw_attrs) - set(cleaned_attrs))
+                keys = set(raw_attrs) - set(cleaned_attrs)
                 [raw_attrs.pop(key) for key in keys]
             kwargs.update({"attrs": raw_attrs})
     if kwargs.get("attrs"):
@@ -244,8 +244,7 @@ def infer_coordinates(
 ) -> Tuple[List[DataArray], Dict[str, Any]]:
     attrs = {}
     if isinstance(arr, zarr.core.Array):
-        coords, attrs = zarr_n5_coordinate_inference(arr.shape,
-                                                     dict(arr.attrs))
+        coords, attrs = zarr_n5_coordinate_inference(arr.shape, dict(arr.attrs))
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
         coords = mrc_coordinate_inference(arr)
     else:
@@ -304,20 +303,16 @@ def initialize_group(
     array_kwargs: Dict[str, Any] = {},
 ) -> zarr.hierarchy.Group:
     group_access_mode, array_access_mode = modes
-    group = access(group_path,
-                   mode=group_access_mode,
-                   attrs=group_attrs,
-                   **group_kwargs)
+    group = access(
+        group_path, mode=group_access_mode, attrs=group_attrs, **group_kwargs
+    )
 
     if array_attrs is None:
         _array_attrs: Tuple[Dict[str, Any], ...] = ({},) * len(arrays)
     else:
         _array_attrs = array_attrs
 
-    for name, arr, attrs, chnks in zip(array_paths,
-                                       arrays,
-                                       _array_attrs,
-                                       chunks):
+    for name, arr, attrs, chnks in zip(array_paths, arrays, _array_attrs, chunks):
         path = os.path.join(group.path, name)
         z_arr = zarr.open_array(
             store=group.store,
@@ -328,7 +323,8 @@ def initialize_group(
             dtype=arr.dtype,
             chunks=chnks,
             compressor=compressor,
-            **array_kwargs)
+            **array_kwargs,
+        )
         z_arr.attrs.update(attrs)
 
     return group

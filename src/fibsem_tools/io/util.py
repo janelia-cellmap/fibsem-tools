@@ -29,8 +29,9 @@ def rmtree_parallel(
         return result
 
 
-def list_files(paths: Union[Sequence[Union[str, Path]], str, Path],
-               followlinks: bool = False):
+def list_files(
+    paths: Union[Sequence[Union[str, Path]], str, Path], followlinks: bool = False
+):
     if isinstance(paths, str) or isinstance(paths, Path):
         if os.path.isdir(paths):
             return list(
@@ -74,8 +75,8 @@ def list_files_parallel(
 def split_by_suffix(uri: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     """
     Given a string and a collection of suffixes, return
-    the string split at the last instance of any element of the string 
-    containing one of the suffixes, as well as the suffix. 
+    the string split at the last instance of any element of the string
+    containing one of the suffixes, as well as the suffix.
     If the last element of the string bears a suffix, return the string,
     the empty string, and the suffix.
     """
@@ -98,7 +99,7 @@ def split_by_suffix(uri: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     else:
         pre, post = (
             separator.join([p.strip(separator) for p in parts[: index + 1]]),
-            separator.join([p.strip(separator) for p in parts[index + 1:]]),
+            separator.join([p.strip(separator) for p in parts[index + 1 :]]),
         )
 
     suffix = Path(pre).suffix
