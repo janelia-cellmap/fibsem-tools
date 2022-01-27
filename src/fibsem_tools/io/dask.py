@@ -7,11 +7,7 @@ from numpy.typing import NDArray
 from dask.array.core import slices_from_chunks
 import backoff
 from dask.array.optimization import fuse_slice
-<<<<<<< HEAD
-
-=======
 from typing import Any, Tuple, Optional
->>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
 from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
 from dask.optimization import fuse
@@ -56,14 +52,8 @@ def sequential_rechunk(
     return results
 
 
-<<<<<<< HEAD
-# consider adding some exceptions to the function signature instead of grabbing everything
-@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def store_chunk(x, out, index):
-=======
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> Literal[0]:
->>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
     """
     A function inserted in a Dask graph for storing a chunk.
 
