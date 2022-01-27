@@ -7,19 +7,11 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.7.1, <4"
-<<<<<<< HEAD
-distributed = "^2021.7.2"
-tensorstore = "^0.1.8"
-h5py = "^3.1.0"
-fsspec = "2021.08.1"
-zarr = {git = "https://github.com/d-v-b/zarr-python.git", branch="opt_setitem_fill_value"}
-=======
 distributed = ">=2021.10.0"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
 fsspec = "2021.07.0"
 zarr = "^2.10.3"
->>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
 mrcfile = "^1.2.0"
 dacite = "^1.6.0"
 numpy = "^1.20.0"
@@ -29,13 +21,7 @@ pydantic = "^1.8.2"
 backoff = "^1.10.0"
 xarray-multiscale = "^0.3.0"
 dask-jobqueue = "0.7.3"
-<<<<<<< HEAD
-matplotlib = "^3.4.3"
-dask-image = "^0.6.0"
-scikit-image = "^0.18.3"
-=======
 s3fs = "^2021.7.0"
->>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
