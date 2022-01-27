@@ -550,7 +550,7 @@ def _read_header(path):
                     "FaradayCupI",  # Faraday cup current (nA)
                     "FIBSpecimenI",  # FIB specimen current (nA)
                     "BeamDump1I",  # Beam dump 1 current (nA)
-                    "SEMSpecimenI",  # SEM specimen current (nA)
+                    "SEMSpecimenICurrent",  # SEM specimen current (nA)
                     "MillingYVoltage",  # Milling Y voltage (V)
                     "FocusIndex",  # Focus index
                     "FIBSliceNum",  # FIB slice #
