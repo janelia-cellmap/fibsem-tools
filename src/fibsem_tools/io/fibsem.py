@@ -482,7 +482,7 @@ def _read_header(path):
                 ],
             )
 
-        if fibsem_header.FileVersion in {5, 6, 7, 8}:
+        if fibsem_header.FileVersion >= 5:
             header_dtype.update(
                 [
                     "MillingXResolution",  # FIB milling X resolution
@@ -546,7 +546,7 @@ def _read_header(path):
                 ],
             )
 
-        if fibsem_header.FileVersion in {6, 7}:
+        if fibsem_header.FileVersion >= 6:
             header_dtype.update(
                 [
                     "Temperature",  # Temperature (F)
@@ -561,7 +561,7 @@ def _read_header(path):
                 [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u4"],
                 [850, 854, 858, 862, 866, 870, 874, 878],
             )
-        if fibsem_header.FileVersion == 8:
+        if fibsem_header.FileVersion >= 8:
             header_dtype.update(
                 [
                     "BeamDump2I",  # Beam dump 2 current (nA)
