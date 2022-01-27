@@ -1,7 +1,6 @@
 """
 Functions for reading FIB-SEM data from Harald Hess' proprietary format
 Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem.py
-Copyright (c) 2017, David Hoffman, Davis Bennett
 """
 
 import os
@@ -74,7 +73,7 @@ class _DTypeDict(object):
             self.update(names, formats, offsets)
 
     def update(self, names, formats, offsets):
-        """"""
+        """ """
         if isinstance(names, list):
             if len(names) == len(formats) == len(offsets):
                 self.names.extend(names)
@@ -119,9 +118,7 @@ def _read_header(path):
         base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
 
         if len(base_header) == 0:
-            raise RuntimeError(
-                f"Base header is missing for {fobj.name}"
-            )
+            raise RuntimeError(f"Base header is missing for {fobj.name}")
 
         fibsem_header = FIBSEMHeader(
             **dict(zip(base_header.dtype.names, base_header[0]))
@@ -774,7 +771,7 @@ def aggregate_fibsem_metadata(fnames):
 
 
 class FibsemDataset:
-    def __init__(self, filenames: Sequence):
+    def __init__(self, filenames: Sequence[str]):
         """
         Create a representation of a collection of .dat files as a single dataset.
         """
@@ -815,7 +812,9 @@ class FibsemDataset:
         )
         result_data = da.stack([all_extrema.min(0)[:, 0], all_extrema.max(0)[:, 1]])
         result = DataArray(
-            result_data, dims=("stat", "c"), coords={"stat": ["min", "max"]}
+            result_data,
+            dims=("statistic", "channel"),
+            coords={"statistic": ["min", "max"], "channel": [0, 1]},
         )
         return result
 

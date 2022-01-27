@@ -2,7 +2,7 @@ from dask import delayed, bag
 from shutil import rmtree
 from glob import glob
 import os
-from typing import List
+from typing import List, Optional
 import toolz as tz
 from typing import Sequence, Union, Any, Tuple
 from pathlib import Path
@@ -29,12 +29,14 @@ def rmtree_parallel(
         return result
 
 
-def list_files(paths: Union[Sequence[Union[str, Path]], str, Path]):
+def list_files(paths: Union[Sequence[Union[str, Path]], str, Path],
+               followlinks: bool = False):
     if isinstance(paths, str) or isinstance(paths, Path):
         if os.path.isdir(paths):
             return list(
                 tz.concat(
-                    (os.path.join(dp, f) for f in fn) for dp, dn, fn in os.walk(paths)
+                    (os.path.join(dp, f) for f in fn)
+                    for dp, dn, fn in os.walk(paths, followlinks=followlinks)
                 )
             )
         elif os.path.isfile(paths):
@@ -49,10 +51,12 @@ def list_files(paths: Union[Sequence[Union[str, Path]], str, Path]):
 
 
 def list_files_parallel(
-    paths: Union[Sequence[Union[str, Path]], str, Path], compute: bool = True
+    paths: Union[Sequence[Union[str, Path]], str, Path],
+    followlinks=False,
+    compute: bool = True,
 ):
     result = []
-    delf = delayed(list_files)
+    delf = delayed(lambda p: list_files(p, followlinks=followlinks))
 
     if isinstance(paths, str) or isinstance(paths, Path):
         result = bag.from_delayed([delf(paths)])
@@ -67,14 +71,21 @@ def list_files_parallel(
         return result
 
 
-def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]):
+def split_by_suffix(uri: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     """
-    Given a string representing a path on a filesystem and a collection of suffixes, return
-    the path split at the last instance of any element of the path containing one of the
-    suffixes, as well as the suffix. If the last element of the path bears a suffix, return the path,
+    Given a string and a collection of suffixes, return
+    the string split at the last instance of any element of the string 
+    containing one of the suffixes, as well as the suffix. 
+    If the last element of the string bears a suffix, return the string,
     the empty string, and the suffix.
     """
-    protocol, subpath = fsspec.core.split_protocol(urlpath)
+    protocol: Optional[str]
+    subpath: str
+    protocol, subpath = fsspec.core.split_protocol(uri)
+    if protocol is None:
+        separator = os.path.sep
+    else:
+        separator = "/"
     parts = Path(subpath).parts
     suffixed = [Path(part).suffix in suffixes for part in parts]
 
@@ -85,7 +96,10 @@ def split_path_at_suffix(urlpath: str, suffixes: Sequence[str]):
     if index == (len(parts) - 1):
         pre, post = subpath, ""
     else:
-        pre, post = os.path.join(*parts[: index + 1]), os.path.join(*parts[index + 1 :])
+        pre, post = (
+            separator.join([p.strip(separator) for p in parts[: index + 1]]),
+            separator.join([p.strip(separator) for p in parts[index + 1:]]),
+        )
 
     suffix = Path(pre).suffix
     if protocol:

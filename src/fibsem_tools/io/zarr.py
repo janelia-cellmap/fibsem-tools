@@ -1,13 +1,27 @@
-from typing import Tuple, Any, Union, Sequence
+from typing import Dict, List, Tuple, Any, Union, Sequence
 from pathlib import Path
 from dask import delayed
 import dask.array as da
-from dask.bag import from_sequence
 import zarr
 import os
-from .util import rmtree_parallel
+from fibsem_tools.io.util import rmtree_parallel, split_by_suffix
 from toolz import concat
+from xarray import DataArray
+import numpy as np
+from zarr.indexing import BasicIndexer
+from distributed import Lock, Client
+import logging 
+import time
 
+# default axis order of zarr spatial metadata
+# is z,y,x
+ZARR_AXES_3D = ["z", "y", "x"]
+
+# default axis order of raw n5 spatial metadata
+# is x,y,z
+N5_AXES_3D = ZARR_AXES_3D[::-1]
+
+logger = logging.getLogger(__name__)
 
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     result = ()
@@ -20,7 +34,7 @@ def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     return result
 
 
-def delete_zbranch(branch, compute=True):
+def delete_zbranch(branch: Union[zarr.hierarchy.Group, zarr.core.Array], compute: bool=True):
     """
     Delete a branch (group or array) from a zarr container
     """
@@ -34,7 +48,7 @@ def delete_zbranch(branch, compute=True):
         )
 
 
-def delete_zgroup(zgroup, compute=True):
+def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool=True):
     """
     Delete all arrays in a zarr group
     """
@@ -52,7 +66,7 @@ def delete_zgroup(zgroup, compute=True):
         return to_delete
 
 
-def delete_zarray(zarray, compute=True):
+def delete_zarray(zarray: zarr.core.Array, compute: bool = True):
     """
     Delete a zarr array.
     """
@@ -128,21 +142,31 @@ def access_zarr(
 ) -> Any:
     if isinstance(dir_path, Path):
         dir_path = str(dir_path)
-    if isinstance(container_path, Path):
-        dir_path = str(dir_path)
 
-    attrs = {}
-    if "attrs" in kwargs:
-        attrs = kwargs.pop("attrs")
+    if isinstance(dir_path, str):
+        dir_path = zarr.NestedDirectoryStore(dir_path)
+    
+    if isinstance(container_path, Path):
+        container_path = str(container_path)
+
+    attrs = kwargs.pop("attrs", {})
 
     # zarr is extremely slow to delete existing directories, so we do it ourselves
     if kwargs.get("mode") == "w":
         tmp_kwargs = kwargs.copy()
         tmp_kwargs["mode"] = "a"
         tmp = zarr.open(dir_path, path=str(container_path), **tmp_kwargs)
-        delete_zbranch(tmp)
+        # todo: move this logic to methods on the stores themselves
+        if isinstance(
+            tmp.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
+        ):
+            logger.info(f'Beginning parallel rmdir of {tmp.path}...')
+            pre = time.time()
+            delete_zbranch(tmp)
+            post = time.time()
+            logger.info(f'Completed parallel rmdir of {tmp.path} in {post - pre}s.')
     array_or_group = zarr.open(dir_path, path=str(container_path), **kwargs)
-    if kwargs.get("mode") != "r":
+    if kwargs.get("mode") != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
@@ -150,21 +174,121 @@ def access_zarr(
 def access_n5(
     dir_path: Union[str, Path], container_path: Union[str, Path], **kwargs
 ) -> Any:
-    dir_path = zarr.N5Store(dir_path)
+    dir_path = zarr.N5FSStore(dir_path, **kwargs.get("storage_options", {}))
     return access_zarr(dir_path, container_path, **kwargs)
 
 
-def zarr_to_dask(store_path: str, key: str, chunks: Union[str, Sequence[int]]):
-    arr = access_zarr(store_path, key, mode="r")
+def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
+    store_path, key, _ = split_by_suffix(urlpath, (".zarr",))
+    arr = access_zarr(store_path, key, mode="r", **kwargs)
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not a zarr array")
-    darr = da.from_array(arr, chunks=chunks)
+    if chunks == "original":
+        _chunks = arr.chunks
+    else:
+        _chunks = chunks
+    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
     return darr
 
 
-def n5_to_dask(store_path: str, key: str, chunks: Union[str, Sequence[int]]):
-    arr = access_n5(store_path, key, mode="r")
+def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
+    store_path, key, _ = split_by_suffix(urlpath, (".n5",))
+    arr = access_n5(store_path, key, mode="r", **kwargs)
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not an n5 array")
-    darr = da.from_array(arr, chunks=chunks)
+    if chunks == "original":
+        _chunks = arr.chunks
+    else:
+        _chunks = chunks
+    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
     return darr
+
+
+def zarr_n5_coordinate_inference(
+    shape: Tuple[int, ...], attrs: Dict[str, Any], default_unit: str = "nm"
+) -> Tuple[List[DataArray], Dict[str, Any]]:
+    output_attrs = attrs.copy()
+    input_axes: List[str] = [f"dim_{idx}" for idx in range(len(shape))]
+    output_axes: List[str] = input_axes
+    units: Dict[str, str] = {ax: default_unit for ax in output_axes}
+    scales: Dict[str, float] = {ax: 1.0 for ax in output_axes}
+    translates: Dict[str, float] = {ax: 0.0 for ax in output_axes}
+
+    if output_attrs.get("transform"):
+        transform_meta = output_attrs.pop("transform")
+        input_axes = transform_meta["axes"]
+        output_axes = input_axes
+        units = dict(zip(output_axes, transform_meta["units"]))
+        scales = dict(zip(output_axes, transform_meta["scale"]))
+        translates = dict(zip(output_axes, transform_meta["translate"]))
+
+    elif output_attrs.get("pixelResolution") or output_attrs.get("resolution"):
+        input_axes = N5_AXES_3D
+        output_axes = input_axes[::-1]
+        translates = {ax: 0 for ax in output_axes}
+        units = {ax: default_unit for ax in output_axes}
+
+        if output_attrs.get("pixelResolution"):
+            pixelResolution = output_attrs.pop("pixelResolution")
+            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
+            units = {ax: pixelResolution["unit"] for ax in input_axes}
+
+        elif output_attrs.get("resolution"):
+            _scales = output_attrs.pop("resolution")
+            scales = dict(zip(N5_AXES_3D, _scales))
+
+    coords = [
+        DataArray(
+            translates[ax] + np.arange(shape[idx]) * scales[ax],
+            dims=ax,
+            attrs={"units": units[ax]},
+        )
+        for idx, ax in enumerate(output_axes)
+    ]
+
+    return coords, output_attrs
+
+
+def is_n5(array: zarr.core.Array) -> bool:
+    if isinstance(array.store, (zarr.N5Store, zarr.N5FSStore)):
+        return True
+    else:
+        return False
+
+
+def get_chunk_keys(array: zarr.core.Array, region: slice = slice(None)) -> Sequence[str]:
+    indexer = BasicIndexer(region, array)
+    chunk_coords = (idx.chunk_coords for idx in indexer)
+    keys = (array._chunk_key(cc) for cc in chunk_coords)
+    return keys
+
+
+class ChunkLock:
+    def __init__(self, array: zarr.core.Array, client: Client):
+        self._locks = get_chunklock(array, client)
+        # from the perspective of a zarr array, metadata has this key regardless of the
+        # location on storage. unfortunately, the synchronizer does not get access to the
+        # indirection provided by the the store class.
+
+        array_attrs_key = f"{array.path}/.zarray"
+        if is_n5(array):
+            attrs_path = f"{array.path}/attributes.json"
+        else:
+            attrs_path = array_attrs_key
+        self._locks[array_attrs_key] = Lock(attrs_path, client=client)
+
+    def __getitem__(self, key):
+        return self._locks[key]
+
+
+def get_chunklock(array: zarr.core.Array, client: Client) -> Dict[str, Lock]:
+    result = {key: Lock(key, client=client) for key in get_chunk_keys(array)}
+    return result
+
+
+def lock_array(array: zarr.core.Array, client: Client) -> zarr.core.Array:
+    lock = ChunkLock(array, client)
+    locked_array = zarr.open(
+        store=array.store, path=array.path, synchronizer=lock, mode="a"
+    )
+    return locked_array

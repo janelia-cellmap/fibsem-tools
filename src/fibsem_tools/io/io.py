@@ -1,5 +1,6 @@
 from .fibsem import read_fibsem
 from pathlib import Path
+from numpy.typing import NDArray
 from typing import (
     Union,
     Iterable,
@@ -10,28 +11,34 @@ from typing import (
     Tuple,
     Sequence,
     Any,
+    Literal,
 )
-from dask import delayed
 import dask.array as da
 import os
 from itertools import groupby
 from collections import defaultdict
-from dask.diagnostics import ProgressBar
 import zarr
 import h5py
-from mrcfile.mrcmemmap import MrcMemmap
+import mrcfile
 from xarray import DataArray
-import numpy as np
-from dask import bag
-from .mrc import mrc_shape_dtype_inference, access_mrc, mrc_to_dask
-from .util import split_path_at_suffix
-from .zarr import zarr_array_from_dask, access_n5, access_zarr, n5_to_dask, zarr_to_dask
+from .mrc import (
+    mrc_coordinate_inference,
+    mrc_shape_dtype_inference,
+    access_mrc,
+    mrc_to_dask,
+)
+from .util import split_by_suffix
+from .zarr import (
+    access_n5,
+    access_zarr,
+    n5_to_dask,
+    zarr_n5_coordinate_inference,
+    zarr_to_dask,
+)
 from .tensorstore import access_precomputed, precomputed_to_dask
-from numcodecs import GZip
-import fsspec
-import toolz as tz
-from glob import glob
-import distributed
+import numcodecs
+from numcodecs.abc import Codec
+from enum import Enum
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -43,6 +50,14 @@ _suffixes = (*_formats, *_container_extensions)
 
 Pathlike = Union[str, Path]
 defaultUnit = "nm"
+
+
+class AccessMode(str, Enum):
+    w = 'w'
+    w_minus = 'w-'
+    r = 'r'
+    r_plus = 'r+'
+    a = 'a'
 
 
 def broadcast_kwargs(**kwargs) -> Dict:
@@ -70,7 +85,8 @@ def broadcast_kwargs(**kwargs) -> Dict:
     return result
 
 
-def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: str):
+def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]],
+                  mode: AccessMode):
     if mode != "r":
         raise ValueError(
             f".dat files can only be accessed in read-only mode, not {mode}."
@@ -87,7 +103,7 @@ def access_h5(
     return result
 
 
-accessors: Dict[str, Callable] = {}
+accessors: Dict[str, Callable[..., Any]] = {}
 accessors[".dat"] = access_fibsem
 accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
@@ -95,7 +111,7 @@ accessors[".h5"] = access_h5
 accessors[".mrc"] = access_mrc
 accessors[".precomputed"] = access_precomputed
 
-daskifiers: Dict[str, Callable] = {}
+daskifiers: Dict[str, Callable[..., da.core.Array]] = {}
 daskifiers[".mrc"] = mrc_to_dask
 daskifiers[".n5"] = n5_to_dask
 daskifiers[".zarr"] = zarr_to_dask
@@ -104,31 +120,37 @@ daskifiers[".precomputed"] = precomputed_to_dask
 
 def access(
     path: Union[Pathlike, Iterable[str], Iterable[Path]],
-    mode: str,
-    **kwargs,
+    mode: AccessMode,
+    **kwargs: Dict[str, Any],
 ) -> Any:
     """
 
-    Access data from a variety of array storage formats.
+    Access a variety of hierarchical array storage formats.
 
     Parameters
     ----------
-    path: A path or collection of paths to image files. If `path` is a string, then the appropriate reader will be
-          selected based on the extension of the path, and the file will be read. If `path` is a collection of strings,
-          it is assumed that each string is a path to an image and each will be read sequentially.
+    path: A path or collection of paths to image files. If `path` is a string, it is assumed to be a path, then the appropriate access function will be
+          selected based on the extension of the path, and the file will be accessed. To access a Zarr or N5 containers, the path to the root container must end with .zarr or .n5
 
-    lazy: A boolean, defaults to False. If True, this function returns the native file reader wrapped by
-    dask.delayed. This is advantageous for distributed computing.
+          For reading .zarr containers, this function dispatches to `zarr.open`
 
-    mode: The access mode for the file. e.g. 'r' for read-only access.
+          For reading n5 containers, this function uses storage routines found in `fibsem_tools.io.storage`
 
-    Returns an array-like object, a collection of array-like objects, a chunked store, or
-    a dask.delayed object.
+          For reading .dat files (Janelia-native binary image format), this function uses routines found in `fibsem_tools.io.fibsem`
+
+          If `path` is a collection of strings,
+          it is assumed that each element of the collection represents a path, and this function will return the result of calling itself on each element of the collection.
+
+    mode: The access mode for the file. e.g. 'r' for read-only access, 'w' for writable access.
+
+    Additional kwargs are passed to the format-specific access function.
+
+    Returns an array-like object, a collection of array-like objects, or an instance of zarr.hierarchy.Group
     -------
 
     """
     if isinstance(path, (str, Path)):
-        path_outer, path_inner, suffix = split_path_at_suffix(path, _suffixes)
+        path_outer, path_inner, suffix = split_by_suffix(path, _suffixes)
         is_container = suffix in _container_extensions
 
         try:
@@ -152,106 +174,88 @@ def access(
 def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     """
 
-    Access data on disk with read-only permissions
+    Read-only access for data (arrays and groups) from a variety of hierarchical array storage formats.
 
     Parameters
     ----------
-    path: A path or collection of paths to image files. If `path` is a string, then the appropriate image reader will be
-          selected based on the extension of the path, and the file will be read. If `path` is a collection of strings,
-          it is assumed that each string is a path to an image and each will be read sequentially.
+    path: A path or collection of paths to image files. If `path` is a string, it is assumed to be a path, then the appropriate access function will be
+          selected based on the extension of the path, and the file will be accessed. To access a Zarr or N5 containers, the path to the root container must end with .zarr or .n5
 
-    lazy: A boolean, defaults to False. If True, this function returns the native file reader wrapped by
-    dask.delayed. This is advantageous for distributed computing.
+          For reading .zarr containers, this function dispatches to `zarr.open`
 
-    Returns an array-like object, a collection of array-like objects, a chunked store, or
-    a dask.delayed object.
+          For reading n5 containers, this function uses storage routines found in `fibsem_tools.io.storage`
+
+          For reading .dat files (Janelia-native binary image format), this function uses routines found in `fibsem_tools.io.fibsem`
+
+          If `path` is a collection of strings,
+          it is assumed that each element of the collection represents a path, and this function will return the result of calling itself on each element of the collection.
+
+    Additional kwargs are passed to the format-specific access function.
+
+    Returns an array-like object, a collection of array-like objects, or an instance of zarr.hierarchy.Group
     -------
 
     """
     return access(path, mode="r", **kwargs)
 
 
-def daskify(urlpath, chunks, **kwargs):
+def read_dask(uri: str, 
+             chunks: Union[str, Tuple[int, ...]] = "auto", 
+            **kwargs: Dict[str, Any]) -> da.core.Array:
     """
-    Create a dask array from a path
+    Create a dask array from a uri
     """
-    path_outer, path_inner, suffix = split_path_at_suffix(urlpath, _suffixes)
-    return daskifiers[suffix](path_outer, path_inner, chunks, **kwargs)
+    _, _, suffix = split_by_suffix(uri, _suffixes)
+    return daskifiers[suffix](uri, chunks, **kwargs)
 
 
-def infer_coordinates_3d(arr: Any, default_unit="nm") -> List[DataArray]:
+def read_xarray(
+    url: str,
+    chunks: Union[str, Tuple[int, ...]] = "auto",
+    coords: Any = "auto",
+    storage_options: Dict[str, Any] = {},
+    **kwargs: Dict[str, Any],
+) -> DataArray:
     """
-    Infer the coordinates and units from a 3D volume.
-
+    Create an xarray.DataArray from data found at a path.
     """
+    raw_array = read(url, storage_options=storage_options)
+    dask_array = read_dask(url, 
+                           chunks=chunks, storage_options=storage_options)
+    cleaned_attrs = None
+    if coords == "auto":
+        coords, cleaned_attrs = infer_coordinates(raw_array)
 
-    units: Dict[str, str]
-    coords: List[DataArray]
-    scaleDict: Dict[str, float]
+    if hasattr(raw_array, "attrs"):
+        if not kwargs.get("attrs"):
+            raw_attrs = dict(raw_array.attrs)
+            if cleaned_attrs is not None:
+                keys = (set(raw_attrs) - set(cleaned_attrs))
+                [raw_attrs.pop(key) for key in keys]
+            kwargs.update({"attrs": raw_attrs})
+    if kwargs.get("attrs"):
+        kwargs["attrs"].update({"url": url})
+    result = DataArray(dask_array, coords=coords, **kwargs)
+    return result
 
-    assert arr.ndim == 3
 
-    # DataArray: get coords attribute directly from the data
-    if hasattr(arr, "coords"):
-        coords = arr.coords
-
-    # zarr array or hdf5 array: get coords from attrs
-    elif hasattr(arr, "attrs"):
-        if arr.attrs.get("pixelResolution") or arr.attrs.get("resolution"):
-            if pixelResolution := arr.attrs.get("pixelResolution"):
-                scale: List[float] = pixelResolution["dimensions"]
-                unit: str = pixelResolution["unit"]
-            elif scale := arr.attrs.get("resolution"):
-                unit = default_unit
-
-            scaleDict = {k: scale[v] for k, v in _n5_axes.items()}
-        else:
-            scaleDict = {k: 1 for k, v in _n5_axes.items()}
-            unit = default_unit
-
-        coords = [
-            DataArray(
-                np.arange(arr.shape[v]) * scaleDict[k], dims=k, attrs={"units": unit}
-            )
-            for k, v in _zarr_axes.items()
-        ]
-
+def infer_coordinates(
+    arr: Any, default_unit: str = "nm"
+) -> Tuple[List[DataArray], Dict[str, Any]]:
+    attrs = {}
+    if isinstance(arr, zarr.core.Array):
+        coords, attrs = zarr_n5_coordinate_inference(arr.shape,
+                                                     dict(arr.attrs))
+    elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
+        coords = mrc_coordinate_inference(arr)
     else:
-        # check if this is a dask array constructed from a zarr array
-        if isinstance(arr, da.Array) and isinstance(
-            zarr_array_from_dask(arr), zarr.core.Array
-        ):
-            arr_source: zarr.core.Array = zarr_array_from_dask(arr)
-            coords = infer_coordinates_3d(arr_source)
-        else:
-            coords = [
-                DataArray(np.arange(arr.shape[v]), dims=k, attrs={"units": defaultUnit})
-                for k, v in _zarr_axes.items()
-            ]
-
-    return coords
+        raise ValueError(
+            f"No coordinate inference possible for array of type {type(arr)}"
+        )
+    return coords, attrs
 
 
-def DataArrayFromFile(source_path: Pathlike) -> DataArray:
-    if Path(source_path).suffix == ".mrc":
-        arr = mrc_to_dask(source_path, chunks=(1, -1, -1))
-    else:
-        arr = read(source_path)
-        arr = da.from_array(arr, chunks=arr.chunks)
-        if not hasattr(arr, "chunks"):
-            raise ValueError(
-                f'{arr} does not have a "chunks" attribute. Is it really a distributed array-like?'
-            )
-    coords = infer_coordinates_3d(arr)
-    data = DataArrayFactory(
-        arr,
-        attrs={"source": str(source_path)},
-        coords=coords,
-    )
-    return data
-
-
-def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
+def DataArrayFactory(arr: Any, **kwargs: Dict[str, Any]) -> DataArray:
     """
     Create an xarray.DataArray from an array-like input (e.g., zarr array, dask array). This is a very light
     wrapper around the xarray.DataArray constructor that checks for cosem/n5 metadata attributes and uses those to
@@ -264,7 +268,7 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
     arr: Array-like object (dask array or zarr array)
 
     """
-    attrs: Optional[Dict]
+    attrs: Optional[Dict[str, Any]]
     extra_attrs = {}
 
     # if we pass in a zarr array, daskify it first
@@ -275,11 +279,8 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
         extra_attrs["source"] = source
         arr = da.from_array(arr, chunks=arr.chunks)
 
-    coords = infer_coordinates_3d(arr)
-    if "coords" not in kwargs:
-        kwargs.update({"coords": coords})
-
-    if attrs := kwargs.get("attrs"):
+    if kwargs.get("attrs"):
+        attrs = kwargs.get("attrs")
         out_attrs = attrs.copy()
         out_attrs.update(extra_attrs)
         kwargs["attrs"] = out_attrs
@@ -290,43 +291,47 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
     return data
 
 
-def populate_group(
-    container_path: Pathlike,
+def initialize_group(
     group_path: Pathlike,
-    arrays: Sequence[DataArray],
+    arrays: Sequence[NDArray[Any]],
     array_paths: Sequence[str],
     chunks: Sequence[int],
     group_attrs: Dict[str, Any] = {},
-    compressor: Any = GZip(-1),
+    compressor: Codec = numcodecs.GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
-) -> Tuple[zarr.hierarchy.group, Tuple[zarr.core.Array]]:
+    modes: Tuple[AccessMode, AccessMode] = ("w", "w"),
+    group_kwargs: Dict[str, Any] = {},
+    array_kwargs: Dict[str, Any] = {},
+) -> zarr.hierarchy.Group:
+    group_access_mode, array_access_mode = modes
+    group = access(group_path,
+                   mode=group_access_mode,
+                   attrs=group_attrs,
+                   **group_kwargs)
 
-    zgroup = access(
-        os.path.join(container_path, group_path), mode="w", attrs=group_attrs
-    )
-    zarrays = []
-    if array_attrs == None:
-        _array_attrs = ({},) * len(arrays)
+    if array_attrs is None:
+        _array_attrs: Tuple[Dict[str, Any], ...] = ({},) * len(arrays)
     else:
         _array_attrs = array_attrs
 
-    for idx, arr in enumerate(arrays):
-        path = os.path.join(container_path, group_path, array_paths[idx])
-        chunking = chunks[idx]
-        compressor = compressor
-        attrs = _array_attrs[idx]
-        zarrays.append(
-            access(
-                path,
-                shape=arr.shape,
-                dtype=arr.dtype,
-                chunks=chunking,
-                compressor=compressor,
-                attrs=attrs,
-                mode="w",
-            )
-        )
-    return zgroup, zarrays
+    for name, arr, attrs, chnks in zip(array_paths,
+                                       arrays,
+                                       _array_attrs,
+                                       chunks):
+        path = os.path.join(group.path, name)
+        z_arr = zarr.open_array(
+            store=group.store,
+            mode=array_access_mode,
+            fill_value=0,
+            path=path,
+            shape=arr.shape,
+            dtype=arr.dtype,
+            chunks=chnks,
+            compressor=compressor,
+            **array_kwargs)
+        z_arr.attrs.update(attrs)
+
+    return group
 
 
 def infer_dtype(path: str) -> str:
@@ -339,21 +344,3 @@ def infer_dtype(path: str) -> str:
     else:
         raise ValueError(f"Cannot infer dtype of data located at {path}")
     return dtype
-
-
-def sequential_rechunk(source: Any, target: Any, slab_size: Tuple[int], intermediate_chunks: Tuple[int], client: distributed.Client, num_workers: int) -> List[None]:
-    """
-    Load slabs of an array into local memory, then create a dask array and rechunk that dask array, then store into 
-    chunked array storage.
-    """
-    results = []
-    slices = da.core.slices_from_chunks(source.rechunk(slab_size).chunks)
-    
-    for sl in slices:
-        arr_in = source[sl].compute(scheduler='threads')
-        darr_in = da.from_array(arr_in, chunks=intermediate_chunks)
-        store_op = da.store(darr_in,target, regions=sl, compute=False, lock=None)
-        client.cluster.scale(num_workers)
-        results.extend(client.compute(store_op).result())
-        client.cluster.scale(0)
-    return results

@@ -1,15 +1,19 @@
 import dask.array as da
 import numpy as np
-from typing import Union, Tuple
+from typing import Union, Tuple, List, Sequence
+import mrcfile
 from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
 from dask.array.core import normalize_chunks
+from numpy.typing import ArrayLike
+from xarray import DataArray
 
 Pathlike = Union[str, Path]
 
 
 def access_mrc(path: Pathlike, mode: str, **kwargs):
-    return MrcMemmap(path, mode=mode, **kwargs)
+    # todo: add warning when kwargs are passed to this function
+    return MrcMemmap(path, mode=mode)
 
 
 def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
@@ -27,20 +31,56 @@ def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
     return shape, dtype
 
 
-def mrc_to_dask(fname: Pathlike, chunks: tuple):
+def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
+    header = mem.header
+    grid_size_angstroms = header.cella
+    coords = []
+    # round to this many decimal places when calculting the grid spacing, in nm
+    grid_spacing_decimals = 2
+
+    if mem.data.flags["C_CONTIGUOUS"]:
+        # we reverse the keys from (x,y,z) to (z,y,x) so the order matches
+        # numpy indexing order
+        keys = reversed(header.cella.dtype.fields.keys())
+    else:
+        keys = header.cella.dtype.fields.keys()
+    for key in keys:
+        grid_spacing = np.round((grid_size_angstroms[key] / 10) / header[f"n{key}"], grid_spacing_decimals)
+        axis = np.arange(header[f"n{key}start"], header[f"n{key}"]) * grid_spacing
+        coords.append(DataArray(data=axis, dims=(key,), attrs={"units": "nm"}))
+
+    return coords
+
+
+def mrc_chunk_loader(fname, block_info=None):
+    dtype = block_info[None]["dtype"]
+    chunk_location = block_info[None]["chunk-location"]
+    shape = block_info[None]["chunk-shape"]
+    chunk_bytes = np.prod(shape) * np.dtype(dtype).itemsize
+    # block_info[None] contains the output specification
+    mrc = mrcfile.open(fname, header_only=True)
+    chunk_offset = chunk_location[0]
+    offset = mrc.header.nbytes + mrc.header.nsymbt + chunk_bytes * chunk_offset
+    with np.memmap(fname, dtype, 'r', offset, shape) as mem:
+        result = np.array(mem).astype(dtype)
+    return result
+
+
+def mrc_to_dask(urlpath: Pathlike,
+                chunks: Union[str, Sequence[int]],
+                **kwargs):
     """
-    Generate a dask array backed by a memory-mapped .mrc file
+    Generate a dask array backed by a memory-mapped .mrc file.
     """
-    with access_mrc(fname, mode="r") as mem:
+    with access_mrc(urlpath, mode="r") as mem:
         shape, dtype = mrc_shape_dtype_inference(mem)
 
-    chunks_ = normalize_chunks(chunks, shape)
+    if chunks == "auto":
+        _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)),
+                                   shape,
+                                   dtype=dtype)
+    else:
+        _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
-    def chunk_loader(fname, block_info=None):
-        idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
-        result = np.array(access_mrc(fname, mode="r").data[idx]).astype(dtype)
-        return result
-
-    arr = da.map_blocks(chunk_loader, fname, chunks=chunks_, dtype=dtype)
-
+    arr = da.map_blocks(mrc_chunk_loader, urlpath, chunks=_chunks, dtype=dtype)
     return arr
