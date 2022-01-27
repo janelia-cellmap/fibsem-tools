@@ -1,16 +1,21 @@
-from scipy.stats import mode
+import os
 import numpy as np
+<<<<<<< HEAD
 from numpy.typing import ArrayLike
 from typing import Any, Dict, Sequence, Tuple, Optional
 from distributed import Lock
 import numpy as np
+=======
+from numpy.typing import NDArray
+from typing import Any, Dict, Tuple, Optional
+>>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
 from fibsem_tools.io.zarr import lock_array
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform, ScaleMeta
+from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
-
+from xarray_multiscale.reducers import windowed_mode
 from fibsem_tools.io import initialize_group
-from fibsem_tools.io.dask import store_blocks
+from fibsem_tools.io.dask import store_blocks, write_blocks
 
 
 from itertools import combinations
@@ -25,16 +30,12 @@ class Multiscales:
     ):
         """
         Create a representation of a multiresolution collection of arrays.
-        This class is basically a string name, a dict-of-arrays representing a multiresolution pyramid,
-        and a dict of attributes associated with the multiresolution pyramid.
+        This class is basically a string name, a dict-of-arrays representing a
+        multiresolution pyramid, and a dict of attributes associated with
+        the multiresolution pyramid.
 
         Parameters
         ----------
-
-        name : str,
-            The name associated with this multiscale collection. When storing the collection,
-            `name` is used as the name of the group or folder in storage that contains the collection
-            of arrays.
 
         arrays : dict of xarray.DataArray
             The keys of this dict will be used as the names of the individual arrays when serialized to storage.
@@ -79,12 +80,17 @@ class Multiscales:
 
     def store(
         self,
-        store: str,
-        chunks: Optional[Tuple[int]] = None,
+        uri: str,
+        chunks: Optional[Tuple[int, ...]] = None,
         multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
+<<<<<<< HEAD
         locking: bool =False,
+=======
+        locking: bool = False,
+>>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
         client=None,
+        access_modes=("a", "a"),
         **kwargs
     ):
         """
@@ -93,10 +99,8 @@ class Multiscales:
         Parameters
         ----------
 
-        store : str
-            Path to the root storage location.
-            When saving to zarr or n5 (the only two modes currently supported),
-            `store` should be the root of the zarr / n5 hierarchy, e.g. `store='foo/bar.n5'`
+        uri : str
+            Path to the storage location.
 
         chunks : tuple of ints, or dict of tuples of ints
             The chunking used for the arrays in storage. If a single tuple of ints is provided,
@@ -146,19 +150,19 @@ class Multiscales:
 
         if chunks is None:
             _chunks = {key: v.data.chunksize for key, v in self.arrays.items()}
-        elif isinstance(chunks, (tuple, list)):
+        else:
             _chunks = {key: chunks for key in self.arrays}
-
-        store_group, store_arrays = initialize_group(
-            store,
-            self.name,
-            tuple(self.arrays.values()),
-            array_paths=tuple(self.arrays.keys()),
-            chunks=tuple(_chunks.values()),
+        store_group = initialize_group(
+            uri,
+            self.arrays.values(),
+            array_paths=self.arrays.keys(),
+            chunks=_chunks.values(),
             group_attrs=group_attrs,
-            array_attrs=tuple(array_attrs.values()),
+            array_attrs=array_attrs.values(),
+            modes=access_modes,
             **kwargs
         )
+        store_arrays = [store_group[key] for key in self.arrays.keys()]
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
@@ -183,6 +187,7 @@ class Multiscales:
         return store_group, store_arrays, storage_ops
 
 
+<<<<<<< HEAD
 def mean_reduce(array: ArrayLike, **kwargs) -> ArrayLike:
     return np.mean(array, **kwargs, dtype='float32')
 
@@ -204,10 +209,18 @@ def mode_reduce(array: ArrayLike, axis: Optional[int] = None) -> ArrayLike:
                 reshaped = transposed.reshape(*transposed.shape[: array.ndim // 2], -1)
                 modes = mode(reshaped, axis=reshaped.ndim - 1).mode
                 result = modes.squeeze(axis=-1)
+=======
+def mode_reduce(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
+    if np.all(np.array(window_size) == 2):
+        result = countless(array, window_size)
+    else:
+        result = windowed_mode(array, window_size)
+
+>>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
     return result
 
 
-def countless(data, factor):
+def countless(data, factor) -> NDArray[Any]:
     """
     countless downsamples labeled images (segmentations)
     by finding the mode using vectorized instructions.
@@ -221,13 +234,14 @@ def countless(data, factor):
     2x2x1 (N=4), 2x2x2 (N=8), 4x4x1 (N=16), 3x2x1 (N=6)
     and various other configurations of a similar nature.
     c.f. https://medium.com/@willsilversmith/countless-3d-vectorized-2x-downsampling-of-labeled-volume-images-using-python-and-numpy-59d686c2f75
+
+    This function has been modified from the original
+    to avoid mutation of the input argument.
     """
     sections = []
 
     mode_of = reduce(lambda x, y: x * y, factor)
     majority = int(math.ceil(float(mode_of) / 2))
-
-    # data += 1 # offset from zero
 
     for offset in np.ndindex(factor):
         part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))] + 1
@@ -269,6 +283,7 @@ def countless(data, factor):
     return final_result
 
 
+<<<<<<< HEAD
 def generate_output_indices(arrays: Sequence[DataArray], scale_factors: Sequence[int], offset: Sequence[int]) -> Tuple[Tuple[int,...], ...]:
     """
     Generate array indices for storing partial multresolution pyramids in 
@@ -287,3 +302,13 @@ def generate_output_indices(arrays: Sequence[DataArray], scale_factors: Sequence
             subresults.append((o // scale, o // scale + shp))
         results.append(tuple(subresults))
     return tuple(results)
+=======
+def rechunked_move(source, target, read_chunks, write_chunks="auto"):
+    # insert signed chunk alignment validation
+    if write_chunks == "auto":
+        write_chunks = source.chunks
+
+    input_array = da.from_array(source, chunks=read_chunks).rechunk(write_chunks)
+    save_op = write_blocks(input_array, target)
+    return save_op
+>>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3

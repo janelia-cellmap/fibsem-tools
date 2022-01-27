@@ -1,5 +1,6 @@
 from .fibsem import read_fibsem
 from pathlib import Path
+from numpy.typing import NDArray
 from typing import (
     Union,
     Iterable,
@@ -10,8 +11,8 @@ from typing import (
     Tuple,
     Sequence,
     Any,
+    Literal,
 )
-from dask import delayed
 import dask.array as da
 import os
 from itertools import groupby
@@ -20,17 +21,14 @@ import zarr
 import h5py
 import mrcfile
 from xarray import DataArray
-import numpy as np
-from dask import bag
 from .mrc import (
     mrc_coordinate_inference,
     mrc_shape_dtype_inference,
     access_mrc,
     mrc_to_dask,
 )
-from .util import split_path_at_suffix
+from .util import split_by_suffix
 from .zarr import (
-    zarr_array_from_dask,
     access_n5,
     access_zarr,
     n5_to_dask,
@@ -38,11 +36,9 @@ from .zarr import (
     zarr_to_dask,
 )
 from .tensorstore import access_precomputed, precomputed_to_dask
-from numcodecs import GZip
-import fsspec
-import toolz as tz
-from glob import glob
-import distributed
+import numcodecs
+from numcodecs.abc import Codec
+from enum import Enum
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -54,6 +50,14 @@ _suffixes = (*_formats, *_container_extensions)
 
 Pathlike = Union[str, Path]
 defaultUnit = "nm"
+
+
+class AccessMode(str, Enum):
+    w = "w"
+    w_minus = "w-"
+    r = "r"
+    r_plus = "r+"
+    a = "a"
 
 
 def broadcast_kwargs(**kwargs) -> Dict:
@@ -81,7 +85,9 @@ def broadcast_kwargs(**kwargs) -> Dict:
     return result
 
 
-def access_fibsem(path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: str):
+def access_fibsem(
+    path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: AccessMode
+):
     if mode != "r":
         raise ValueError(
             f".dat files can only be accessed in read-only mode, not {mode}."
@@ -115,12 +121,12 @@ daskifiers[".precomputed"] = precomputed_to_dask
 
 def access(
     path: Union[Pathlike, Iterable[str], Iterable[Path]],
-    mode: str,
-    **kwargs,
+    mode: AccessMode,
+    **kwargs: Dict[str, Any],
 ) -> Any:
     """
 
-    Access data (arrays and groups) from a variety of hierarchical array storage formats.
+    Access a variety of hierarchical array storage formats.
 
     Parameters
     ----------
@@ -145,7 +151,7 @@ def access(
 
     """
     if isinstance(path, (str, Path)):
-        path_outer, path_inner, suffix = split_path_at_suffix(path, _suffixes)
+        path_outer, path_inner, suffix = split_by_suffix(path, _suffixes)
         is_container = suffix in _container_extensions
 
         try:
@@ -194,26 +200,28 @@ def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
     return access(path, mode="r", **kwargs)
 
 
-def read_dask(urlpath: str, chunks="auto", **kwargs) -> da.core.Array:
+def read_dask(
+    uri: str, chunks: Union[str, Tuple[int, ...]] = "auto", **kwargs: Dict[str, Any]
+) -> da.core.Array:
     """
-    Create a dask array from a path
+    Create a dask array from a uri
     """
-    _, _, suffix = split_path_at_suffix(urlpath, _suffixes)
-    return daskifiers[suffix](urlpath, chunks, **kwargs)
+    _, _, suffix = split_by_suffix(uri, _suffixes)
+    return daskifiers[suffix](uri, chunks, **kwargs)
 
 
 def read_xarray(
-    urlpath: str,
+    url: str,
     chunks: Union[str, Tuple[int, ...]] = "auto",
     coords: Any = "auto",
     storage_options: Dict[str, Any] = {},
-    **kwargs,
+    **kwargs: Dict[str, Any],
 ) -> DataArray:
     """
     Create an xarray.DataArray from data found at a path.
     """
-    raw_array = read(urlpath, storage_options=storage_options)
-    dask_array = read_dask(urlpath, chunks=chunks, storage_options=storage_options)
+    raw_array = read(url, storage_options=storage_options)
+    dask_array = read_dask(url, chunks=chunks, storage_options=storage_options)
     cleaned_attrs = None
     if coords == "auto":
         coords, cleaned_attrs = infer_coordinates(raw_array)
@@ -222,10 +230,11 @@ def read_xarray(
         if not kwargs.get("attrs"):
             raw_attrs = dict(raw_array.attrs)
             if cleaned_attrs is not None:
-                [raw_attrs.pop(key) for key in (set(raw_attrs) - set(cleaned_attrs))]
+                keys = set(raw_attrs) - set(cleaned_attrs)
+                [raw_attrs.pop(key) for key in keys]
             kwargs.update({"attrs": raw_attrs})
     if kwargs.get("attrs"):
-        kwargs["attrs"].update({"urlpath": urlpath})
+        kwargs["attrs"].update({"url": url})
     result = DataArray(dask_array, coords=coords, **kwargs)
     return result
 
@@ -245,7 +254,7 @@ def infer_coordinates(
     return coords, attrs
 
 
-def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
+def DataArrayFactory(arr: Any, **kwargs: Dict[str, Any]) -> DataArray:
     """
     Create an xarray.DataArray from an array-like input (e.g., zarr array, dask array). This is a very light
     wrapper around the xarray.DataArray constructor that checks for cosem/n5 metadata attributes and uses those to
@@ -258,7 +267,7 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
     arr: Array-like object (dask array or zarr array)
 
     """
-    attrs: Optional[Dict]
+    attrs: Optional[Dict[str, Any]]
     extra_attrs = {}
 
     # if we pass in a zarr array, daskify it first
@@ -282,43 +291,43 @@ def DataArrayFactory(arr: Any, **kwargs) -> DataArray:
 
 
 def initialize_group(
-    container_path: Pathlike,
     group_path: Pathlike,
-    arrays: Sequence[DataArray],
+    arrays: Sequence[NDArray[Any]],
     array_paths: Sequence[str],
     chunks: Sequence[int],
     group_attrs: Dict[str, Any] = {},
-    compressor: Any = GZip(-1),
+    compressor: Codec = numcodecs.GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
-    mode: str = "w",
-    **kwargs,
-) -> Tuple[zarr.hierarchy.group, Tuple[zarr.core.Array]]:
-
-    zgroup = access(
-        os.path.join(container_path, group_path), mode=mode, attrs=group_attrs, **kwargs
+    modes: Tuple[AccessMode, AccessMode] = ("w", "w"),
+    group_kwargs: Dict[str, Any] = {},
+    array_kwargs: Dict[str, Any] = {},
+) -> zarr.hierarchy.Group:
+    group_access_mode, array_access_mode = modes
+    group = access(
+        group_path, mode=group_access_mode, attrs=group_attrs, **group_kwargs
     )
-    zarrays = []
-    if array_attrs == None:
-        _array_attrs = ({},) * len(arrays)
+
+    if array_attrs is None:
+        _array_attrs: Tuple[Dict[str, Any], ...] = ({},) * len(arrays)
     else:
         _array_attrs = array_attrs
 
-    for idx, arr in enumerate(arrays):
-        chunking = chunks[idx]
-        compressor = compressor
-        attrs = _array_attrs[idx]
-        z_arr = zgroup.require_dataset(
+    for name, arr, attrs, chnks in zip(array_paths, arrays, _array_attrs, chunks):
+        path = os.path.join(group.path, name)
+        z_arr = zarr.open_array(
+            store=group.store,
+            mode=array_access_mode,
             fill_value=0,
-            name=array_paths[idx],
+            path=path,
             shape=arr.shape,
             dtype=arr.dtype,
-            chunks=chunking,
+            chunks=chnks,
             compressor=compressor,
-            write_empty_chunks=False,
+            **array_kwargs,
         )
         z_arr.attrs.update(attrs)
-        zarrays.append(z_arr)
-    return zgroup, zarrays
+
+    return group
 
 
 def infer_dtype(path: str) -> str:

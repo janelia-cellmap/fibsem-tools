@@ -1,6 +1,7 @@
 import dask.array as da
 import numpy as np
 from typing import Union, Tuple, List, Sequence
+import mrcfile
 from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
 from dask.array.core import normalize_chunks
@@ -44,7 +45,9 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
     else:
         keys = header.cella.dtype.fields.keys()
     for key in keys:
-        grid_spacing = np.round((grid_size_angstroms[key] / 10) / header[f"n{key}"], 2)
+        grid_spacing = np.round(
+            (grid_size_angstroms[key] / 10) / header[f"n{key}"], grid_spacing_decimals
+        )
         axis = np.arange(header[f"n{key}start"], header[f"n{key}"]) * grid_spacing
         coords.append(DataArray(data=axis, dims=(key,), attrs={"units": "nm"}))
 
@@ -52,12 +55,16 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
 
 
 def mrc_chunk_loader(fname, block_info=None):
-    import ctypes
-    idx = tuple(slice(*idcs) for idcs in block_info[None]["array-location"])
-    # block_info[None] contains the output specification
     dtype = block_info[None]["dtype"]
-    with access_mrc(fname, mode="r") as memmap:
-        result = np.array(memmap.data[idx]).astype(dtype)
+    chunk_location = block_info[None]["chunk-location"]
+    shape = block_info[None]["chunk-shape"]
+    chunk_bytes = np.prod(shape) * np.dtype(dtype).itemsize
+    # block_info[None] contains the output specification
+    mrc = mrcfile.open(fname, header_only=True)
+    chunk_offset = chunk_location[0]
+    offset = mrc.header.nbytes + mrc.header.nsymbt + chunk_bytes * chunk_offset
+    with np.memmap(fname, dtype, "r", offset, shape) as mem:
+        result = np.array(mem).astype(dtype)
     return result
 
 

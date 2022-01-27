@@ -1,49 +1,34 @@
-from typing import Any, Sequence, Tuple, List
+from typing import Any, Callable, Literal, Sequence, Tuple, List
 import dask
 import distributed
 import dask.array as da
 import numpy as np
+from numpy.typing import NDArray
 from dask.array.core import slices_from_chunks
 import backoff
 from dask.array.optimization import fuse_slice
+<<<<<<< HEAD
 
+=======
+from typing import Any, Tuple, Optional
+>>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
 from aiohttp import ServerDisconnectedError
 from dask.utils import is_arraylike
+from dask.optimization import fuse
+from dask.delayed import Delayed
+from dask.core import flatten
+from dask.base import tokenize
+from dask.highlevelgraph import HighLevelGraph
 
 
-def _blocks(self, index, key_array):
+def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
     """
-    This only exists until a performance issue in the dask.array.block is sorted out
+    Apply task fusion optimization to tasks. Useful (or even required)
+    because dask.delayed optimization doesn't do this step.
     """
-    from numbers import Number
-    from dask.array.slicing import normalize_index
-    from dask.base import tokenize
-
-    from itertools import product
-    from dask.highlevelgraph import HighLevelGraph
-    from dask.array import Array
-
-    if not isinstance(index, tuple):
-        index = (index,)
-    if sum(isinstance(ind, (np.ndarray, list)) for ind in index) > 1:
-        raise ValueError("Can only slice with a single list")
-    if any(ind is None for ind in index):
-        raise ValueError("Slicing with np.newaxis or None is not supported")
-    index = normalize_index(index, self.numblocks)
-    index = tuple(slice(k, k + 1) if isinstance(k, Number) else k for k in index)
-
-    name = "blocks-" + tokenize(self, index)
-
-    new_keys = key_array[index]
-
-    chunks = tuple(tuple(np.array(c)[i].tolist()) for c, i in zip(self.chunks, index))
-
-    keys = product(*(range(len(c)) for c in chunks))
-
-    layer = {(name,) + key: tuple(new_keys[key].tolist()) for key in keys}
-
-    graph = HighLevelGraph.from_collections(name, layer, dependencies=[self])
-    return Array(graph, name, chunks, meta=self)
+    dsk_fused, deps = fuse(dask.utils.ensure_dict(tasks.dask))
+    fused = Delayed(tasks._key, dsk_fused)
+    return fused
 
 
 def sequential_rechunk(
@@ -71,9 +56,14 @@ def sequential_rechunk(
     return results
 
 
+<<<<<<< HEAD
 # consider adding some exceptions to the function signature instead of grabbing everything
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(x, out, index):
+=======
+@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> Literal[0]:
+>>>>>>> d94789429f6eb4f88b0672d631b44dce33bf51f3
     """
     A function inserted in a Dask graph for storing a chunk.
 
@@ -82,7 +72,7 @@ def store_chunk(x, out, index):
     x: array-like
         An array (potentially a NumPy one)
     out: array-like
-        Where to store results too.
+        Where to store results to.
     index: slice-like
         Where to store result from ``x`` in ``out``.
 
@@ -94,34 +84,65 @@ def store_chunk(x, out, index):
     >>> load_store_chunk(a, b, (slice(None), slice(None)), False, False, False)
     """
 
-    result = None
-
     if is_arraylike(x):
         out[index] = x
     else:
         out[index] = np.asanyarray(x)
 
-    return result
+    return 0
 
 
-def write_blocks(source, target, region):
+def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
     """
-    For each chunk in `source`, write that data to `target`
+    Wrap the result of `func` in a rank-`ndim` numpy array
+    """
+    return np.array([func(*args, **kwargs)]).reshape((1,) * ndim)
+
+
+def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
+    """
+    Return a dask array with where each chunk contains the result of writing
+    each chunk of `source` to `target`.
     """
 
-    storage_op = []
-    key_array = np.array(source.__dask_keys__(), dtype=object)
     slices = slices_from_chunks(source.chunks)
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]
-    for lidx, aidx in enumerate(np.ndindex(tuple(map(len, source.chunks)))):
-        region = slices[lidx]
-        source_block = _blocks(source, aidx, key_array)
-        storage_op.append(dask.delayed(store_chunk)(source_block, target, region))
-    return storage_op
+
+    source_name = "store-source-" + tokenize(source)
+    store_name = "store-" + tokenize(source)
+
+    layers = {source_name: source.__dask_graph__()}
+    deps = {source_name: set()}
+
+    dsk = {}
+    chunks = tuple((1,) * s for s in source.blocks.shape)
+
+    for slice, key in zip(slices, flatten(source.__dask_keys__())):
+        dsk[(store_name,) + key[1:]] = (
+            ndwrapper,
+            store_chunk,
+            source.ndim,
+            key,
+            target,
+            slice,
+        )
+
+    layers[store_name] = dsk
+    deps[store_name] = {source_name}
+    store_dsk = HighLevelGraph(layers, deps)
+
+    return da.Array(
+        store_dsk, store_name, shape=source.blocks.shape, chunks=chunks, dtype=int
+    )
 
 
-def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
+def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.Array]:
+    """
+    Write dask array(s) to sliceable storage. Like `da.store` but instead of
+    returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,
+    which allows saving a subset of the data by slicing these arrays.
+    """
     result = []
 
     if isinstance(sources, dask.array.core.Array):
@@ -142,12 +163,12 @@ def store_blocks(sources, targets, regions=None) -> List[List[dask.delayed]]:
 
     if len(sources) != len(regions):
         raise ValueError(
-            "Different number of sources [%d] and targets [%d] than regions [%d]"
-            % (len(sources), len(targets), len(regions))
+            f"Different number of sources [{len(sources)}] and targets [{len(targets)}] than regions [{len(regions)}]"
         )
 
     for source, target, region in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region))
+
     return result
 
 

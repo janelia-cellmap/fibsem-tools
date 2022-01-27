@@ -479,7 +479,7 @@ def _read_header(path):
                 ],
             )
 
-        if fibsem_header.FileVersion in {5, 6, 7, 8}:
+        if fibsem_header.FileVersion >= 5:
             header_dtype.update(
                 [
                     "MillingXResolution",  # FIB milling X resolution
@@ -543,14 +543,14 @@ def _read_header(path):
                 ],
             )
 
-        if fibsem_header.FileVersion in {6, 7}:
+        if fibsem_header.FileVersion >= 6:
             header_dtype.update(
                 [
                     "Temperature",  # Temperature (F)
                     "FaradayCupI",  # Faraday cup current (nA)
                     "FIBSpecimenI",  # FIB specimen current (nA)
                     "BeamDump1I",  # Beam dump 1 current (nA)
-                    "SEMSpecimenI",  # SEM specimen current (nA)
+                    "SEMSpecimenICurrent",  # SEM specimen current (nA)
                     "MillingYVoltage",  # Milling Y voltage (V)
                     "FocusIndex",  # Focus index
                     "FIBSliceNum",  # FIB slice #
@@ -558,7 +558,7 @@ def _read_header(path):
                 [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u4"],
                 [850, 854, 858, 862, 866, 870, 874, 878],
             )
-        if fibsem_header.FileVersion == 8:
+        if fibsem_header.FileVersion >= 8:
             header_dtype.update(
                 [
                     "BeamDump2I",  # Beam dump 2 current (nA)

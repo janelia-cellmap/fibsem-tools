@@ -1,5 +1,6 @@
 import numpy as np
 from xarray import DataArray
+from xarray_multiscale.reducers import windowed_mean
 from fibsem_tools.metadata.neuroglancer import (
     NeuroglancerN5GroupMetadata,
     PixelResolution,
@@ -42,7 +43,7 @@ def test_neuroglancer_metadata():
     ]
 
     data = DataArray(np.zeros((16, 16, 16)), coords=coords)
-    multi = multiscale(data, np.mean, (2, 2, 2))[:4]
+    multi = multiscale(data, windowed_mean, (2, 2, 2))[:4]
     neuroglancer_metadata = NeuroglancerN5GroupMetadata.fromDataArrays(multi)
 
     assert neuroglancer_metadata == NeuroglancerN5GroupMetadata(
@@ -72,7 +73,7 @@ def test_cosem_ome():
     ]
 
     data = DataArray(np.zeros(shape_base), coords=coords, name="data")
-    multi = multiscale(data, np.mean, (2, 2, 2))[:2]
+    multi = multiscale(data, windowed_mean, (2, 2, 2))[:2]
     paths = ["s0", "s1"]
     cosem_ome_group_metadata = COSEMGroupMetadata.fromDataArrays(
         multi, paths=paths, name="data"

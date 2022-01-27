@@ -10,7 +10,7 @@ import os
 from dask.array.core import normalize_chunks
 from dask.array import map_blocks
 
-from fibsem_tools.io.util import split_path_at_suffix
+from fibsem_tools.io.util import split_by_suffix
 
 DRIVERS = {"n5", "neuroglancer_precomputed"}
 KVSTORE_DRIVERS = {"file", "gcs"}
@@ -364,7 +364,7 @@ def access_precomputed(
 def precomputed_to_dask(
     urlpath: str, chunks: Union[str, Sequence[int]], channel: int = 0
 ):
-    store_path, key, _ = split_path_at_suffix(urlpath, (".precomputed",))
+    store_path, key, _ = split_by_suffix(urlpath, (".precomputed",))
     tsa = access_precomputed(store_path, key, mode="r")[ts.d["channel"][channel]]
     shape = tuple(tsa.shape)
     dtype = tsa.dtype.numpy_dtype
