@@ -1,20 +1,27 @@
 import os
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Tuple, Optional, Union
+from fibsem_tools.io import read_xarray
 from fibsem_tools.io.zarr import lock_array
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
-from xarray_multiscale.reducers import windowed_mode
+from xarray_multiscale import multiscale
 from fibsem_tools.io import initialize_group
 from fibsem_tools.io.dask import store_blocks, write_blocks
-
-
+import logging
+from fibsem_tools.metadata.multiscale_generation import MultiscaleStorageSpec, ChunkMode, AccessMode, MutableAccessMode
+import time
 from itertools import combinations
 from functools import reduce
-
+from distributed import performance_report, Client
+from datetime import datetime
+import dask
 import math
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class Multiscales:
@@ -176,7 +183,11 @@ class Multiscales:
         return store_group, store_arrays, storage_ops
 
 
-def mode_reduce(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
+def windowed_mode(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
+    """
+    Windowed mode with a hot path for 2x2x2 downsampling
+    """
+    from xarray_multiscale.reducers import windowed_mode
     if np.all(np.array(window_size) == 2):
         result = countless(array, window_size)
     else:
@@ -256,3 +267,146 @@ def rechunked_move(source, target, read_chunks, write_chunks="auto"):
     input_array = da.from_array(source, chunks=read_chunks).rechunk(write_chunks)
     save_op = write_blocks(input_array, target)
     return save_op
+
+
+def windowed_mean(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
+    """
+    Windowed mean where the output is saved as float32 instead of the default 
+    float64
+    """
+    from xarray_multiscale.reducers import windowed_mean
+    return windowed_mean(array, window_size, dtype='float32')
+
+
+def prepare_multiscale_storage(
+    source: str,
+    source_chunks: Union[Tuple[int, ...], ChunkMode],
+    dest: str,
+    dest_chunks: Union[Tuple[int, ...], ChunkMode],
+    dest_access_mode: Union[
+        MutableAccessMode, Tuple[MutableAccessMode, MutableAccessMode]
+    ],
+    downsampling_method: str,
+    downsampling_factors: Tuple[int, ...],
+    downsampling_levels: Tuple[int, ...],
+    downsampling_chunks: Tuple[int, ...],
+    storage_options: Dict[str, Any] = {},
+):
+
+    chunk_mode = "minimum"
+    source_xr = read_xarray(source, chunks=source_chunks, name=source)
+    logger = logging.getLogger(__name__)
+    logger.info(f"Found array {source_xr} at {source}")
+    if downsampling_method == "mean":
+        reducer = windowed_mean
+    elif downsampling_method == "mode":
+        reducer = windowed_mode
+    else:
+        raise ValueError(
+            f'Invalid downsampling method. Must be one of ("mean", "mode"), got {downsampling_method}'
+        )
+
+    access_modes = (dest_access_mode,) * 2
+
+    arrays = multiscale(
+        source_xr,
+        reducer,
+        scale_factors=downsampling_factors,
+        chunks=downsampling_chunks,
+        chunk_mode=chunk_mode,
+    )
+
+    if len(downsampling_levels) == 0:
+        downsampling_levels = tuple(range(len(arrays)))
+    arrays = [arrays[idx] for idx in downsampling_levels]
+    array_dict = {f"s{idx}": array for idx, array in zip(downsampling_levels, arrays)}
+    logger.info(f"Prepared {len(array_dict)} arrays: {array_dict}")
+    ms = Multiscales(name="foo", arrays=array_dict)
+    store_group, store_arrays, storage = ms.store(
+        dest, chunks=dest_chunks, access_modes=access_modes, group_kwargs={'storage_options' : storage_options}
+    )
+
+    data_volume = dask.utils.memory_repr(sum(a.nbytes for a in store_arrays))
+    logger.info("Preparing to write to arrays:")
+    for array in store_arrays:
+        logger.info(array.info)
+    logger.info(f"Total data volume: {data_volume}")
+    return storage
+
+
+def save_multiscale(spec: MultiscaleStorageSpec,
+                    dry: bool = False,
+                    scheduler: str = ""):
+
+    now_str = datetime.now().strftime("%Y:%m:%d:%H:%M:%S")
+    if spec.logging_dir is not None:
+        if not os.path.exists(spec.logging_dir):
+            os.makedirs(spec.logging_dir)
+
+        logger.addHandler(
+            logging.FileHandler(
+                filename=os.path.join(
+                    spec.logging_dir, f"multiscale_generation_{now_str}.log"
+                )
+            )
+        )
+    
+    logger.addHandler(logging.StreamHandler())
+    logger.info(f"Loaded MultiscaleStorageSpec: {spec.json(indent=2)}")
+
+    store_op = prepare_multiscale_storage(
+        source=spec.source.url,
+        source_chunks=spec.source.chunks,
+        dest=spec.destination.url,
+        dest_chunks=spec.destination.chunks,
+        dest_access_mode=spec.destination.access_mode,
+        downsampling_method=spec.downsampling_spec.method,
+        downsampling_factors=spec.downsampling_spec.factors,
+        downsampling_levels=spec.downsampling_spec.levels,
+        downsampling_chunks=spec.downsampling_spec.chunks,
+        storage_options=spec.destination.storage_options
+    )
+
+    if spec.cluster_spec.deployment == "dask_local":
+        from distributed import LocalCluster
+
+        clusterClass = LocalCluster
+    elif spec.cluster_spec.deployment == "dask_lsf":
+        from dask_jobqueue import LSFCluster
+        from functools import partial
+
+        clusterClass = partial(
+            LSFCluster,
+            ncpus=spec.cluster_spec.worker.num_cores,
+            mem=f"{15 * spec.cluster_spec.worker.num_cores}GB",
+            processes=spec.cluster_spec.worker.num_cores,
+        )
+        clusterClass.__name__ = LSFCluster.__name__
+
+    if not dry:
+        logger.info(
+            f"Creating an instance of {clusterClass.__name__} and scaling to {spec.cluster_spec.worker.num_workers} workers"
+        )
+        if spec.logging_dir is not None:
+            perf_report_path = os.path.join(
+                    spec.logging_dir, f"dask_distributed_perf_report_{now_str}.html"
+                )
+        else:
+            perf_report_path = None
+        
+        with clusterClass() as clust, Client(clust) as cl:
+
+            cl.cluster.scale(spec.cluster_spec.worker.num_workers)
+            logger.info(f"Cluster dashboard url: {cl.cluster.dashboard_link}")
+            logger.info(f"Begin saving multiscale data to {spec.destination.url}")
+
+            start = time.time()
+            if perf_report_path is not None:
+                with performance_report(filename=perf_report_path):
+                    futures = cl.compute(store_op)
+                    results = cl.gather(futures)
+            else:
+                futures = cl.compute(store_op)
+                results = cl.gather(futures)
+            end = time.time()
+            logger.info(f"Done saving multiscale data after {end - start}s")
