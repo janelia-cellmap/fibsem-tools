@@ -6,14 +6,13 @@ authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.7.1, <4"
+python = ">=3.8, <4"
 distributed = ">=2021.10.0"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
-fsspec = "2021.07.0"
+fsspec = ">=2021.07.0"
 zarr = "^2.10.3"
 mrcfile = "^1.2.0"
-dacite = "^1.6.0"
 numpy = "^1.20.0"
 pandas = "^1.2.3"
 xarray = "^0.20.0"
@@ -22,6 +21,7 @@ backoff = "^1.10.0"
 xarray-multiscale = "^0.3.0"
 dask-jobqueue = "0.7.3"
 s3fs = "^2021.7.0"
+hdf5plugin = {extras = ["--user"], version = "^3.2.0"}
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
