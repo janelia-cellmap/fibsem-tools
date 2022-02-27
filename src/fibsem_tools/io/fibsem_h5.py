@@ -1,7 +1,14 @@
 import h5py
 import numpy as np
 from typing import Iterable, Union, Sequence
-from .fibsem import FibsemDataset, FIBSEMData, FIBSEMHeader, OFFSET, MAGIC_NUMBER, read_fibsem
+from .fibsem import (
+    FibsemDataset,
+    FIBSEMData,
+    FIBSEMHeader,
+    OFFSET,
+    MAGIC_NUMBER,
+    read_fibsem,
+)
 import re
 import os.path
 
@@ -91,7 +98,11 @@ def load_fibsem_from_h5_dataset(ds: h5py.Dataset):
 
 
 def create_aggregate_fibsem_h5_file(
-        h5_filename: str, dataset_names: Sequence[str], data: Sequence[FIBSEMData], raw_headers: Sequence[bytes],**kwargs
+    h5_filename: str,
+    dataset_names: Sequence[str],
+    data: Sequence[FIBSEMData],
+    raw_headers: Sequence[bytes],
+    **kwargs
 ):
     """
     Create aggregate FIBSEM HDF5 File
@@ -121,4 +132,6 @@ def create_aggregate_fibsem_h5_files_from_dat_files(dat_files: Sequence[str], **
     data = read_fibsem(dat_files)
     dat_file_dir = os.path.dirname(dat_files[0])
     h5_filename = os.path.join(dat_file_dir, prefix_name + ".h5")
-    create_aggregate_fibsem_h5_file(h5_filename, dataset_names, data, raw_headers, **kwargs)
+    create_aggregate_fibsem_h5_file(
+        h5_filename, dataset_names, data, raw_headers, **kwargs
+    )
