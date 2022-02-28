@@ -114,20 +114,6 @@ def create_fibsem_h5_file(
     f.close()
 
 
-def _extract_raw_header(dat_filename: str):
-    """
-    Extract first kilobyte of dat file
-
-    :param dat_filename: Name of the .dat file from which to extract the header
-
-    See also `fibsem.OFFSET`.
-    """
-    with open(dat_filename, "rb") as rawfile:
-        rawbytes = rawfile.read(OFFSET)
-    assert np.frombuffer(rawbytes, ">u4", count=1)[0] == MAGIC_NUMBER
-    return rawbytes
-
-
 def add_raw_header_attr(dataset: h5py.Dataset, filename: str):
     """
     Extract header from filename and add it as an attribute to a HDF5 dataset

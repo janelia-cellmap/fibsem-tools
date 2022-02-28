@@ -577,6 +577,27 @@ def _read_header(path):
     return fibsem_header
 
 
+def _extract_raw_header(dat_filename: str) -> bytes:
+    """
+    Extract first kilobyte of dat file
+
+    Parameters
+    ----------
+    dat_filename
+        string denoting the file name of the .dat file from which to extract the header
+
+    Returns
+    -------
+    bytes
+        The first 1024 (OFFSET) bytes of the file
+
+    """
+    with open(dat_filename, "rb") as rawfile:
+        rawbytes = rawfile.read(OFFSET)
+    assert np.frombuffer(rawbytes, ">u4", count=1)[0] == MAGIC_NUMBER
+    return rawbytes
+
+
 def _read(path: Union[str, Path]) -> FIBSEMData:
     """
 
