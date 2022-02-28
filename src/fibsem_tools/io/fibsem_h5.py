@@ -146,9 +146,8 @@ def create_fibsem_h5_file(
     """
     # Use 'x' file permissions so we do not overwrite files
     mode = "w" if overwrite else "x"
-    f = h5py.File(h5_filename, mode)
-    create_fibsem_h5_dataset(f, dataset_name, data, **kwargs)
-    f.close()
+    with h5py.File(h5_filename, mode) as f:
+        create_fibsem_h5_dataset(f, dataset_name, data, **kwargs)
 
 
 def add_raw_header_attr(dataset: h5py.Dataset, filename: str) -> None:
@@ -221,15 +220,15 @@ def create_aggregate_fibsem_h5_file(
     """
     # Use 'x' permissions so we do not overwrite files
     mode = "w" if overwrite else "x"
-    f = h5py.File(h5_filename, mode)
-    if raw_headers is not None:
-        for n, d, h in zip(dataset_names, data, raw_headers):
-            dataset = create_fibsem_h5_dataset(f, n, d, **kwargs)
-            dataset.attrs["RawHeader"] = np.frombuffer(h, dtype="u1")
-    else:
-        for n, d in zip(dataset_names, data):
-            dataset = create_fibsem_h5_dataset(f, n, d, **kwargs)
-    f.close()
+    with h5py.File(h5_filename, mode) as f:
+        if raw_headers is not None:
+            for n, d, h in zip(dataset_names, data, raw_headers):
+                dataset = create_fibsem_h5_dataset(f, n, d, **kwargs)
+                dataset.attrs["RawHeader"] = np.frombuffer(h, dtype="u1")
+        else:
+            for n, d in zip(dataset_names, data):
+                dataset = create_fibsem_h5_dataset(f, n, d, **kwargs)
+
     return h5_filename
 
 
