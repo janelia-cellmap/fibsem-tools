@@ -121,7 +121,11 @@ def create_fibsem_h5_dataset_external(
 
 
 def create_fibsem_h5_file(
-    h5_filename: str, dataset_name: str, data: FIBSEMData, overwrite: bool = False, **kwargs
+    h5_filename: str,
+    dataset_name: str,
+    data: FIBSEMData,
+    overwrite: bool = False,
+    **kwargs
 ) -> None:
     """
     Create HDF5 file with a single dataset
@@ -186,6 +190,27 @@ def load_fibsem_from_h5_dataset(dataset: h5py.Dataset) -> FIBSEMData:
         # Dimensions may be in this order if using an external dataset
         data = FIBSEMData(np.rollaxis(dataset[:], 2), header)
     return data
+
+
+def load_fibsem_from_h5_file(h5_filename: str) -> Sequence[FIBSEMData]:
+    """
+    Create a list of FIBSEMData instances from a HDF5 file
+
+    Parameters
+    ----------
+    h5_filename
+        Name of HDF5 file containing datasets
+
+    Returns
+    -------
+    datasets
+        List of FIBSEMData
+    """
+    datasets = []
+    with h5py.File(h5_filename, "r") as f:
+        for dataset in f:
+            datasets.append(load_fibsem_from_h5_dataset(f[dataset]))
+    return datasets
 
 
 def create_aggregate_fibsem_h5_file(
