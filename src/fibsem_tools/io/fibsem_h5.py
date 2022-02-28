@@ -121,7 +121,7 @@ def create_fibsem_h5_dataset_external(
 
 
 def create_fibsem_h5_file(
-    h5_filename: str, dataset_name: str, data: FIBSEMData, force: bool = False, **kwargs
+    h5_filename: str, dataset_name: str, data: FIBSEMData, overwrite: bool = False, **kwargs
 ) -> None:
     """
     Create HDF5 file with a single dataset
@@ -145,7 +145,7 @@ def create_fibsem_h5_file(
 
     """
     # Use 'x' file permissions so we do not overwrite files
-    mode = "w" if force else "x"
+    mode = "w" if overwrite else "x"
     f = h5py.File(h5_filename, mode)
     create_fibsem_h5_dataset(f, dataset_name, data, **kwargs)
     f.close()
@@ -194,7 +194,7 @@ def create_aggregate_fibsem_h5_file(
     dataset_names: Sequence[str],
     data: Sequence[FIBSEMData],
     raw_headers: Sequence[bytes] = None,
-    force: bool = False,
+    overwrite: bool = False,
     **kwargs
 ) -> str:
     """
@@ -220,7 +220,7 @@ def create_aggregate_fibsem_h5_file(
 
     """
     # Use 'x' permissions so we do not overwrite files
-    mode = "w" if force else "x"
+    mode = "w" if overwrite else "x"
     f = h5py.File(h5_filename, mode)
     if raw_headers is not None:
         for n, d, h in zip(dataset_names, data, raw_headers):
