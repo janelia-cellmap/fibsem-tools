@@ -30,7 +30,7 @@ def create_fibsem_h5_dataset(
     parent: Union[h5py.File, h5py.Group],
     name: str,
     data: FIBSEMData,
-    chunks: chunk_type = (128, 128),
+    chunks: chunk_type = None,
     **kwargs
 ):
     """
@@ -45,7 +45,7 @@ def create_fibsem_h5_dataset(
     """
 
     # If chunks has length 2, add a 1 for the ChanNum dimension
-    if len(chunks) == 2:
+    if isinstance(chunks, tuple) and len(chunks) == 2:
         if data.shape[0] == data.header.ChanNum:
             chunks = (1, *chunks)
         elif data.shape[2] == data.header.ChanNum:
@@ -122,9 +122,8 @@ def _extract_raw_header(dat_filename: str):
 
     See also `fibsem.OFFSET`.
     """
-    rawfile = open(dat_filename, "rb")
-    rawbytes = rawfile.read(OFFSET)
-    rawfile.close()
+    with open(dat_filename, "rb") as rawfile:
+        rawbytes = rawfile.read(OFFSET)
     assert np.frombuffer(rawbytes, ">u4", count=1)[0] == MAGIC_NUMBER
     return rawbytes
 
