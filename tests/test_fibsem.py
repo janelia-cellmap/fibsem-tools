@@ -2,7 +2,7 @@ from fibsem_tools.io import read
 
 
 def test_fibsem_v9_header_parse():
-    test_dat_paths = ['../tests/fixtures/v9_header_with_truncated_pixels.dat']
+    test_dat_paths = ['tests/fixtures/v9_header_with_truncated_pixels.dat']
     records = read(test_dat_paths)
     assert len(records) == 1
 
