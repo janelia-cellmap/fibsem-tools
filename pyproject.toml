@@ -22,6 +22,7 @@ xarray-multiscale = "^0.3.0"
 dask-jobqueue = "0.7.3"
 s3fs = "^2021.7.0"
 hdf5plugin = {extras = ["--user"], version = "^3.2.0"}
+dacite = "^1.6.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
