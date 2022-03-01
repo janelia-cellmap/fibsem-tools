@@ -5,7 +5,7 @@ Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem
 
 import os
 import numpy as np
-from typing import Iterable, Union, Sequence
+from typing import Any, Iterable, Union, Sequence
 from pathlib import Path
 import dask.array as da
 from xarray import DataArray
@@ -13,22 +13,39 @@ from xarray import DataArray
 Pathlike = Union[str, Path]
 
 # This value is used to ensure that the endianness of the data is correct
-MAGIC_NUMBER = 3555587570
+MAGIC_NUMBER = 3_555_587_570
 # This is the size of the header, in bytes. Everything beyond this number of bytes is data.
 OFFSET = 1024
 
 
-class FIBSEMHeader(object):
-    """Structure to hold header info"""
+class FIBSEMHeader():
+    """Structure to hold header info. Note: this object is deprecated and will soon be removed."""
 
     def __init__(self, **kwargs):
         self.__dict__ = kwargs
+
+    def __setitem__(self, *args: Any):
+        return self.__dict__.__setitem__(*args)
+
+
+    def __getitem__(self, *args: Any):
+        return self.__dict__.__getitem__(*args)
+
+    @property
+    def keys(self):
+        return self.__dict__.keys
+
 
     def update(self, **kwargs):
         """update internal dictionary"""
         self.__dict__.update(kwargs)
 
+
     def to_native_types(self):
+        """
+        Replace numpy numeric types with stdlib equivalents
+        """
+
         for k, v in self.__dict__.items():
             if isinstance(v, np.integer):
                 self.__dict__[k] = int(v)
@@ -43,14 +60,14 @@ class FIBSEMHeader(object):
 
 
 class FIBSEMData(np.ndarray):
-    """Subclass of ndarray to attach header data to fibsem data"""
+    """Subclass of ndarray to attach header data to fibsem data. Note: this object is deprecated and will soon be removed."""
 
-    def __new__(cls, input_array, header=None):
+    def __new__(cls, input_array, attrs=None):
         # Input array is an already formed ndarray instance
         # We first cast to be our class type
         obj = np.asarray(input_array).view(cls)
         # add the new attribute to the created instance
-        obj.header = header
+        obj.attrs = attrs
         # Finally, we must return the newly created object:
         return obj
 
@@ -58,11 +75,11 @@ class FIBSEMData(np.ndarray):
         # see InfoArray.__array_finalize__ for comments
         if obj is None:
             return
-        self.header = getattr(obj, "header", None)
+        self.atrs = getattr(obj, "attrs", None)
 
 
 class _DTypeDict(object):
-    """Handle dtype dict manipulations"""
+    """Handle dtype dict manipulations. Note: this object is deprecated and will soon be removed."""
 
     def __init__(self, names=None, formats=None, offsets=None):
         # initialize internals to empty lists
@@ -616,7 +633,6 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
         # todo: read what data is available
         raw_data = np.zeros(dtype=dtype, shape=shape)
 
-    raw_data = np.rollaxis(raw_data, 2)
     # Once read into the FIBSEMData structure it will be in memory, not memmap.
     result = FIBSEMData(raw_data, fibsem_header)
     del raw_data
