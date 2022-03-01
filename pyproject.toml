@@ -22,7 +22,6 @@ backoff = "^1.10.0"
 xarray-multiscale = "^0.3.0"
 dask-jobqueue = "0.7.3"
 s3fs = "^2022.2.0"
-jfibsem-dat = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"

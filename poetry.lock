@@ -353,23 +353,6 @@ optional = false
 python-versions = "*"
 
 [[package]]
-name = "jfibsem-dat"
-version = "0.2.0"
-description = ""
-category = "main"
-optional = false
-python-versions = ">=3.8, <4.0"
-
-[package.dependencies]
-numpy = ">=1.22"
-scipy = "*"
-
-[package.extras]
-all = ["matplotlib", "matplotlib-scalebar", "scikit-image"]
-skimage = ["scikit-image"]
-vis = ["matplotlib", "matplotlib-scalebar"]
-
-[[package]]
 name = "jinja2"
 version = "3.0.3"
 description = "A very fast and expressive template engine."
@@ -874,7 +857,7 @@ heapdict = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8, <4"
-content-hash = "f728d0875d3fdf127869d1e08a3329fde22c9590a1119d88ee51ee2dda3ed526"
+content-hash = "ee5abe40d1efe78f40677df4a282448e94bffa152e19727f9a72e7eda0785aaf"
 
 [metadata.files]
 aiobotocore = [
@@ -1165,10 +1148,6 @@ idna = [
 iniconfig = [
     {file = "iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3"},
     {file = "iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32"},
-]
-jfibsem-dat = [
-    {file = "jfibsem_dat-0.2.0-py3-none-any.whl", hash = "sha256:150d85fc9226304d78c6ce0e96e348ce12bbd0b3d33bb3e775bf01da9dcadd04"},
-    {file = "jfibsem_dat-0.2.0.tar.gz", hash = "sha256:569970e0e84491062667e34ac53bc60f729e75577b4725022c253939a5863a1b"},
 ]
 jinja2 = [
     {file = "Jinja2-3.0.3-py3-none-any.whl", hash = "sha256:077ce6014f7b40d03b47d1f1ca4b0fc8328a692bd284016f806ed0eaca390ad8"},
