@@ -19,13 +19,13 @@ def partition_h5_kwargs(**kwargs) -> Dict[str, Any]:
     if (data := kwargs.get("data")) is not None:
         if "dtype" in kwargs and (dtype := data.dtype) != kwargs["dtype"]:
             warnings.warn(
-                f"{dtype=} and {data=} were provided as a keyword arguments but they conflict. dtype will be inferred from `data`"
+                f"{dtype=} and {data=} were provided as keyword arguments but they conflict. dtype will be inferred from `data`"
             )
         dataset_kwargs["dtype"] = data.dtype
 
         if "shape" in kwargs and (shape := data.shape) != kwargs["shape"]:
             warnings.warn(
-                f"{shape=} and {data=} were provided as a keyword arguments but they conflict. shape will be inferred from `data`"
+                f"{shape=} and {data=} were provided as keyword arguments but they conflict. shape will be inferred from `data`"
             )
 
         dataset_kwargs["shape"] = data.shape
