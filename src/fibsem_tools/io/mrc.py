@@ -63,8 +63,9 @@ def mrc_chunk_loader(fname, block_info=None):
     mrc = mrcfile.open(fname, header_only=True)
     chunk_offset = chunk_location[0]
     offset = mrc.header.nbytes + mrc.header.nsymbt + chunk_bytes * chunk_offset
-    with np.memmap(fname, dtype, "r", offset, shape) as mem:
-        result = np.array(mem).astype(dtype)
+    mem = np.memmap(fname, dtype, "r", offset, shape)
+    result = np.array(mem).astype(dtype)
+    del mem
     return result
 
 
