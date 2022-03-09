@@ -6,7 +6,7 @@ authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.7.1, <4"
+python = ">=3.8, <4"
 distributed = ">=2021.10.0"
 tensorstore = "^0.1.8"
 h5py = "^3.1.0"
