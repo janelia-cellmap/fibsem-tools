@@ -12,7 +12,7 @@ def partition_h5_kwargs(**kwargs) -> Dict[str, Any]:
     """
     file_kwargs = kwargs.copy()
     dataset_kwargs = {}
-    for key in ("shape", "dtype", "data", "chunks", "compressor"):
+    for key in ("name", "shape", "dtype", "data", "chunks", "compression", "compression_opts", "shuffle", "fletcher32", "external", "allow_unknown_filter"):
         if key in file_kwargs:
             dataset_kwargs[key] = file_kwargs.pop(key)
 
