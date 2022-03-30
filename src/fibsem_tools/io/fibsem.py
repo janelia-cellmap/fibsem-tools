@@ -75,7 +75,7 @@ class FIBSEMData(np.ndarray):
         # see InfoArray.__array_finalize__ for comments
         if obj is None:
             return
-        self.atrs = getattr(obj, "attrs", None)
+        self.attrs = getattr(obj, "attrs", None)
 
 
 class _DTypeDict(object):
