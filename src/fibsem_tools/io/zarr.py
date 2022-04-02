@@ -5,7 +5,7 @@ from dask import bag
 import dask.array as da
 import zarr
 import os
-from fibsem_tools.io.util import rmtree_parallel, split_by_suffix
+from fibsem_tools.io.util import split_by_suffix
 from toolz import concat
 from xarray import DataArray
 import numpy as np
@@ -23,6 +23,8 @@ ZARR_AXES_3D = ["z", "y", "x"]
 N5_AXES_3D = ZARR_AXES_3D[::-1]
 DEFAULT_ZARR_STORE = zarr.NestedDirectoryStore
 logger = logging.getLogger(__name__)
+
+Pathlike = Union[str, Path]
 
 
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
@@ -133,7 +135,7 @@ def zarr_array_from_dask(arr: Any) -> Any:
     return arr.dask[keys[-1]]
 
 
-def access_zarr(store: Union[str, Path], path: Union[str, Path], **kwargs) -> Any:
+def access_zarr(store: Pathlike, path: Pathlike, **kwargs) -> Any:
     if isinstance(store, Path):
         store = str(store)
 
@@ -165,7 +167,7 @@ def access_zarr(store: Union[str, Path], path: Union[str, Path], **kwargs) -> An
     return array_or_group
 
 
-def access_n5(store: Union[str, Path], path: Union[str, Path], **kwargs) -> Any:
+def access_n5(store: Pathlike, path: Pathlike, **kwargs) -> Any:
     store = zarr.N5FSStore(store, **kwargs.get("storage_options", {}))
     return access_zarr(store, path, **kwargs)
 
