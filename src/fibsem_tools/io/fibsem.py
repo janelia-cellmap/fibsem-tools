@@ -33,7 +33,7 @@ class FIBSEMHeader(object):
             if isinstance(v, np.integer):
                 self.__dict__[k] = int(v)
             elif isinstance(v, np.bytes_):
-                self.__dict__[k] = v.tostring().decode("utf-8")
+                self.__dict__[k] = v.tobytes().decode("utf-8")
             elif isinstance(v, np.ndarray):
                 self.__dict__[k] = v.tolist()
             elif isinstance(v, np.floating):
