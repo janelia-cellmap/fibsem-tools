@@ -1,3 +1,4 @@
+import h5py
 import zarr
 import dask
 import dask.array as da
@@ -105,13 +106,11 @@ def test_access_precomputed():
 
 
 def test_access_array_h5():
-    key = "s0"
+    key = "foo/s0"
     data = np.random.randint(0, 255, size=(10, 10, 10), dtype="uint8")
     attrs = {"resolution": "1000"}
-    chunks = (2,) * data.ndim
-
     with tempfile.TemporaryFile(suffix=".h5") as store:
-        arr = access_h5(store, key, chunks=chunks, data=data, attrs=attrs, mode="w")
+        arr = access_h5(store, key, data=data, attrs=attrs, mode="w")
         assert dict(arr.attrs) == attrs
         assert np.array_equal(arr[:], data)
         arr.file.close()
