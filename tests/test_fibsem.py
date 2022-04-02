@@ -6,7 +6,7 @@ def test_fibsem_v9_header_parse():
     records = read(test_dat_paths)
     assert len(records) == 1
 
-    header_dict = records[0].header.__dict__
+    header_dict = records[0].attrs
     header_keys = header_dict.keys()
 
     assert len(header_keys) == 99
