@@ -111,14 +111,14 @@ def test_access_array_h5():
     attrs = {"resolution": "1000"}
     with tempfile.TemporaryFile(suffix=".h5") as store:
         arr = access_h5(store, key, data=data, attrs=attrs, mode="w")
-        assert dict(arr.attrs) == attrs
-        assert np.array_equal(arr[:], data)
-        arr.file.close()
+        with arr.file:
+            assert dict(arr.attrs) == attrs
+            assert np.array_equal(arr[:], data)
 
         arr2 = access_h5(store, key, mode="r")
-        assert dict(arr2.attrs) == attrs
-        assert np.array_equal(arr2[:], data)
-        arr2.file.close()
+        with arr2.file:
+            assert dict(arr2.attrs) == attrs
+            assert np.array_equal(arr2[:], data)
 
 
 def test_access_group_h5():
@@ -127,12 +127,12 @@ def test_access_group_h5():
 
     with tempfile.TemporaryFile(suffix=".h5") as store:
         grp = access_h5(store, key, attrs=attrs, mode="w")
-        assert dict(grp.attrs) == attrs
-        grp.file.close()
+        with grp.file:
+            assert dict(grp.attrs) == attrs
 
         grp2 = access_h5(store, key, mode="r")
-        assert dict(grp2.attrs) == attrs
-        grp2.file.close()
+        with grp2.file:
+            assert dict(grp2.attrs) == attrs
 
 
 def test_list_files():
