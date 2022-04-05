@@ -118,8 +118,7 @@ def test_access_array_h5():
             assert dict(arr2.attrs) == attrs
             assert np.array_equal(arr2[:], data)
 
-
-        with access_h5(store, key, mode='r') as arr3:
+        with access_h5(store, key, mode="r") as arr3:
             h5d = arr3.file[key]
             assert h5d.shape == arr3.shape
             assert h5d.attrs == arr3.attrs
