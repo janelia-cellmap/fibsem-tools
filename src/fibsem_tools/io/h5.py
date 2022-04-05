@@ -5,8 +5,6 @@ import warnings
 
 Pathlike = Union[str, Path]
 
-MPI = h5py.h5.get_config().mpi
-
 H5_ACCESS_MODES = ("r", "r+", "w", "w-", "x", "a")
 
 H5_DATASET_KWDS = ("name",
