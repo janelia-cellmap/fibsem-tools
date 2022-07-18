@@ -1,3 +1,4 @@
+from fibsem_tools.metadata.transform import SpatialTransform
 from .fibsem import read_fibsem
 from pathlib import Path
 from numpy.typing import NDArray
@@ -225,7 +226,8 @@ def read_xarray(
     cleaned_attrs = None
     if coords == "auto":
         coords, cleaned_attrs = infer_coordinates(raw_array)
-
+    elif isinstance(coords, SpatialTransform):
+        coords = coords.to_coords(dict(zip(coords.axes, dask_array.shape)))
     if hasattr(raw_array, "attrs"):
         if not kwargs.get("attrs"):
             raw_attrs = dict(raw_array.attrs)

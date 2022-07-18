@@ -35,7 +35,7 @@ class SpatialTransform(BaseModel):
         Given an array shape (represented as a dict with dimension names as keys), return a dict of 
         numpy arrays representing a bounded coordinate grid derived from this transform. 
         """
-        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}) for idx, k in enumerate(self.axes)}
+        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}, dims=(k,)) for idx, k in enumerate(self.axes)}
 
 
     @classmethod
