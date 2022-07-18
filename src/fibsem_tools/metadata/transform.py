@@ -1,5 +1,7 @@
+import numpy.typing as npt
+import numpy as np
 from pydantic import BaseModel, root_validator
-from typing import Sequence, Union, Dict
+from typing import Sequence, Union, Dict, Any
 from xarray import DataArray
 
 
@@ -26,6 +28,15 @@ class SpatialTransform(BaseModel):
                 f"The length of all arguments must match. len(axes) = {len(axes)},  len(units) = {len(units)}, len(translate) = {len(translate)}, len(scale) = {len(scale)}"
             )
         return values
+
+
+    def to_coords(self, shape: Dict[str, int]) -> Dict[str, DataArray]:
+        """
+        Given an array shape (represented as a dict with dimension names as keys), return a dict of 
+        numpy arrays representing a bounded coordinate grid derived from this transform. 
+        """
+        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}) for idx, k in enumerate(self.axes)}
+
 
     @classmethod
     def fromDataArray(
