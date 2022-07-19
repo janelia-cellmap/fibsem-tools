@@ -149,6 +149,11 @@ class Multiscales:
             **kwargs
         )
         store_arrays = [store_group[key] for key in self.arrays.keys()]
+        # todo: remove this when we can control the write-empty-chunksness of arrays
+        # obtained via a Group
+        if "write_empty_chunks" in kwargs:
+            for s in store_arrays:
+                s._write_empty_chunks = kwargs.get("write_empty_chunks")
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
