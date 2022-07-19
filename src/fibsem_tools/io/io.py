@@ -298,15 +298,13 @@ def initialize_group(
     array_paths: Sequence[str],
     chunks: Sequence[int],
     group_attrs: Dict[str, Any] = {},
-    compressor: Codec = numcodecs.GZip(-1),
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
     modes: Tuple[AccessMode, AccessMode] = ("w", "w"),
-    group_kwargs: Dict[str, Any] = {},
-    array_kwargs: Dict[str, Any] = {},
+    **kwargs
 ) -> zarr.hierarchy.Group:
     group_access_mode, array_access_mode = modes
     group = access(
-        group_path, mode=group_access_mode, attrs=group_attrs, **group_kwargs
+        group_path, mode=group_access_mode, attrs=group_attrs
     )
 
     if array_attrs is None:
@@ -324,8 +322,7 @@ def initialize_group(
             shape=arr.shape,
             dtype=arr.dtype,
             chunks=chnks,
-            compressor=compressor,
-            **array_kwargs,
+            **kwargs,
         )
         z_arr.attrs.update(attrs)
 
