@@ -1,5 +1,11 @@
 from pydantic import BaseModel
 from typing import List
+from enum import Enum
+
+
+class AnnotationType(Enum):
+    semantic: "semantic"
+    instance: "instance"
 
 
 class InstanceName(BaseModel):
@@ -20,6 +26,7 @@ class Label(BaseModel):
 
 class LabelList(BaseModel):
     labels: List[Label]
+    annotation_type: AnnotationType = AnnotationType.semantic
 
 
 classNameDict = {
