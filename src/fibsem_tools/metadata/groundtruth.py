@@ -65,10 +65,5 @@ classNameDict = {
     35: InstanceName(short="Cytosol", long="Cytosol"),
     36: InstanceName(short="Microtubules in", long="Microtubules in"),
     37: InstanceName(short="Nucleus combined", long="Nucleus combined"),
-    38: InstanceName(short="Actin", long="Actin"),
-    39: InstanceName(short="T bar", long="T bar"),
-    40: InstanceName(
-        short="HChrom Point Annot.", long="Heterochromatin point annotation"
-    ),
-    41: InstanceName(short="EChrom Point Annot.", long="Euchromatin point annotation"),
+    38: InstanceName(short="Vimentin", long="Vimentin"),
 }
