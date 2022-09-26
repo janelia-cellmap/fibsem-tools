@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 class InstanceName(BaseModel):
@@ -16,6 +16,7 @@ class Label(BaseModel):
     value: int
     name: InstanceName
     annotationState: AnnotationState
+    num_voxels: Optional[int]
 
 
 class LabelList(BaseModel):
