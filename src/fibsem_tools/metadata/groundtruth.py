@@ -16,7 +16,7 @@ class Label(BaseModel):
     value: int
     name: InstanceName
     annotationState: AnnotationState
-    num_voxels: Optional[int]
+    count: Optional[int]
 
 
 class LabelList(BaseModel):
