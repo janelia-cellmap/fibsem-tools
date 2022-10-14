@@ -2,6 +2,7 @@ import os
 import numpy as np
 from numpy.typing import NDArray
 from typing import Any, Dict, Tuple, Optional
+from fibsem_tools.io.io import AccessMode
 from fibsem_tools.io.zarr import lock_array
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
@@ -75,11 +76,11 @@ class Multiscales:
         self,
         uri: str,
         chunks: Optional[Tuple[int, ...]] = None,
-        multiscale_metadata: bool = True,
+        create_multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
         locking: bool = False,
-        client=None,
-        access_modes=("a", "a"),
+        client: distributed.Client =None,
+        access_modes: Tuple[AccessMode, AccessMode] = ("a", "a"),
         **kwargs
     ):
         """
