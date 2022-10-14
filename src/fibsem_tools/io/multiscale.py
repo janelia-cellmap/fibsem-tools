@@ -7,16 +7,8 @@ from fibsem_tools.io.zarr import lock_array
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
-from xarray_multiscale.reducers import windowed_mode
 from fibsem_tools.io import initialize_group
 from fibsem_tools.io.dask import store_blocks, write_blocks
-
-
-from itertools import combinations
-from functools import reduce
-
-import math
-
 
 class Multiscales:
     def __init__(
@@ -76,7 +68,7 @@ class Multiscales:
         self,
         uri: str,
         chunks: Optional[Tuple[int, ...]] = None,
-        create_multiscale_metadata: bool = True,
+        multiscale_metadata: bool = True,
         propagate_array_attrs: bool = True,
         locking: bool = False,
         client: distributed.Client =None,
@@ -177,78 +169,6 @@ class Multiscales:
 
         storage_ops = store_blocks([v.data for v in self.arrays.values()], store_arrays)
         return store_group, store_arrays, storage_ops
-
-
-def mode_reduce(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
-    if np.all(np.array(window_size) == 2):
-        result = countless(array, window_size)
-    else:
-        result = windowed_mode(array, window_size)
-
-    return result
-
-
-def countless(data, factor) -> NDArray[Any]:
-    """
-    countless downsamples labeled images (segmentations)
-    by finding the mode using vectorized instructions.
-    It is ill advised to use this O(2^N-1) time algorithm
-    and O(NCN/2) space for N > about 16 tops.
-    This means it's useful for the following kinds
-    of downsampling.
-    This could be implemented for higher performance in
-    C/Cython more simply, but at least this is easily
-    portable.
-    2x2x1 (N=4), 2x2x2 (N=8), 4x4x1 (N=16), 3x2x1 (N=6)
-    and various other configurations of a similar nature.
-    c.f. https://medium.com/@willsilversmith/countless-3d-vectorized-2x-downsampling-of-labeled-volume-images-using-python-and-numpy-59d686c2f75
-
-    This function has been modified from the original
-    to avoid mutation of the input argument.
-    """
-    sections = []
-
-    mode_of = reduce(lambda x, y: x * y, factor)
-    majority = int(math.ceil(float(mode_of) / 2))
-
-    for offset in np.ndindex(factor):
-        part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))] + 1
-        sections.append(part)
-
-    pick = lambda a, b: a * (a == b)
-    lor = lambda x, y: x + (x == 0) * y  # logical or
-
-    subproblems = [{}, {}]
-    results2 = None
-    for x, y in combinations(range(len(sections) - 1), 2):
-        res = pick(sections[x], sections[y])
-        subproblems[0][(x, y)] = res
-        if results2 is not None:
-            results2 = lor(results2, res)
-        else:
-            results2 = res
-
-    results = [results2]
-    for r in range(3, majority + 1):
-        r_results = None
-        for combo in combinations(range(len(sections)), r):
-            res = pick(subproblems[0][combo[:-1]], sections[combo[-1]])
-
-            if combo[-1] != len(sections) - 1:
-                subproblems[1][combo] = res
-
-            if r_results is not None:
-                r_results = lor(r_results, res)
-            else:
-                r_results = res
-        results.append(r_results)
-        subproblems[0] = subproblems[1]
-        subproblems[1] = {}
-
-    results.reverse()
-    final_result = lor(reduce(lor, results), sections[-1]) - 1
-
-    return final_result
 
 
 def rechunked_move(source, target, read_chunks, write_chunks="auto"):
