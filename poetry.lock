@@ -231,18 +231,6 @@ distributed = ["distributed (==2022.10.2)"]
 test = ["pandas", "pytest", "pytest-rerunfailures", "pytest-xdist", "pre-commit"]
 
 [[package]]
-name = "dask-jobqueue"
-version = "0.7.3"
-description = "Deploy Dask on job queuing systems like PBS, Slurm, SGE or LSF"
-category = "main"
-optional = false
-python-versions = ">=3.6"
-
-[package.dependencies]
-dask = ">=2.19"
-distributed = ">=2.19"
-
-[[package]]
 name = "distributed"
 version = "2022.10.2"
 description = "Distributed scheduler for Dask"
@@ -870,7 +858,7 @@ heapdict = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8, <4"
-content-hash = "6910a5366a178f4fb86a19864fbb4085181a9c9e30b004879c8e4bdd25ae5b99"
+content-hash = "08ac2b820d873cff5f52c701553e2ee16d91060cbc4a2e65c6cd2d25d6dea7b5"
 
 [metadata.files]
 aiobotocore = []
@@ -929,10 +917,6 @@ dacite = [
     {file = "dacite-1.6.0.tar.gz", hash = "sha256:d48125ed0a0352d3de9f493bf980038088f45f3f9d7498f090b50a847daaa6df"},
 ]
 dask = []
-dask-jobqueue = [
-    {file = "dask-jobqueue-0.7.3.tar.gz", hash = "sha256:682d7cc0e6b319b6ab83a7a898680c12e9c77ddc77df380b40041290f55d4e79"},
-    {file = "dask_jobqueue-0.7.3-py2.py3-none-any.whl", hash = "sha256:435b8a77a95f82326b3b18a3f60358754ea3f7ac4d62950ab8fed0f56f223c71"},
-]
 distributed = []
 entrypoints = []
 fasteners = []
