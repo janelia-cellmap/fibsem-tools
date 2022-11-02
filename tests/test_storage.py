@@ -13,8 +13,11 @@ from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.io import read_dask, initialize_group
 from fibsem_tools.io.tensorstore import access_precomputed, precomputed_to_dask
 from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
+from fibsem_tools.io.mrc import access_mrc
 from pathlib import Path
 import tempfile
+import mrcfile
+import pytest
 
 
 def _make_local_files(files):
@@ -74,6 +77,20 @@ def test_access_group_zarr_n5():
 
     assert dict(access(store, mode="r").attrs) == {"foo": "bar"}
     assert np.array_equal(access(store, mode="r")["foo"][:], data)
+
+
+def test_access_mrc():
+    with tempfile.NamedTemporaryFile(suffix=".mrc") as store:
+        data = np.arange(27, dtype="uint8").reshape((3, 3, 3))
+        mrcfile.new(store.name, data=data, overwrite=True)
+        original = mrcfile.open(store.name)
+        assert np.array_equal(access_mrc(store.name, mode="r").data, original.data)
+        assert np.array_equal(read_dask(store.name).compute(), original.data)
+        assert np.array_equal(
+            read_dask(store.name, chunks=(2, -1, -1)).compute(), original.data
+        )
+        with pytest.raises(ValueError):
+            read_dask(store.name, chunks=(1, 1, 1))
 
 
 def test_access_precomputed():
