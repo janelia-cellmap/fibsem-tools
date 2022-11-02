@@ -57,14 +57,13 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
 def mrc_chunk_loader(fname, block_info=None):
     dtype = block_info[None]["dtype"]
     array_location = block_info[None]["array-location"]
-    chunk_location = block_info[None]["chunk-location"]
     shape = block_info[None]["chunk-shape"]
     # mrc files are unchunked and c-contiguous, so the
-    # offset will always be a multiple of the last N dimensions
-    # scaled by the position along the first dimension
-    slice_bytes = np.prod(shape[1:]) * np.dtype(dtype).itemsize
+    # offset will always be a product of the last N dimensions, the
+    # size of the datatype, and the position along the first dimension
+    offset_bytes = np.prod(shape[1:]) * np.dtype(dtype).itemsize * array_location[0][0]
     mrc = mrcfile.open(fname, header_only=True)
-    offset = mrc.header.nbytes + mrc.header.nsymbt + slice_bytes * array_location[0][0]
+    offset = mrc.header.nbytes + mrc.header.nsymbt + offset_bytes
     mem = np.memmap(fname, dtype, "r", offset, shape)
     result = np.array(mem).astype(dtype)
     return result
