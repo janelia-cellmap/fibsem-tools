@@ -56,20 +56,21 @@ def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
 
 def mrc_chunk_loader(fname, block_info=None):
     dtype = block_info[None]["dtype"]
+    array_location = block_info[None]["array-location"]
     chunk_location = block_info[None]["chunk-location"]
     shape = block_info[None]["chunk-shape"]
-    chunk_bytes = np.prod(shape) * np.dtype(dtype).itemsize
-    # block_info[None] contains the output specification
+    # mrc files are unchunked and c-contiguous, so the
+    # offset will always be a multiple of the last N dimensions
+    # scaled by the position along the first dimension
+    slice_bytes = np.prod(shape[1:]) * np.dtype(dtype).itemsize
     mrc = mrcfile.open(fname, header_only=True)
-    chunk_offset = chunk_location[0]
-    offset = mrc.header.nbytes + mrc.header.nsymbt + chunk_bytes * chunk_offset
+    offset = mrc.header.nbytes + mrc.header.nsymbt + slice_bytes * array_location[0][0]
     mem = np.memmap(fname, dtype, "r", offset, shape)
     result = np.array(mem).astype(dtype)
-    del mem
     return result
 
 
-def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]], **kwargs):
+def mrc_to_dask(urlpath, chunks: Union[str, Sequence[int]], **kwargs):
     """
     Generate a dask array backed by a memory-mapped .mrc file.
     """
@@ -79,7 +80,11 @@ def mrc_to_dask(urlpath: Pathlike, chunks: Union[str, Sequence[int]], **kwargs):
     if chunks == "auto":
         _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)
     else:
+        # ensure that the last axes are complete
+        for idx, shpe in enumerate(shape):
+            if idx > 0:
+                if (chunks[idx] != shpe) and (chunks[idx] != -1) :
+                    raise ValueError(f'Chunk sizes of non-leading axes must match the shape of the array. Got chunk_size={chunks[idx]}, expected {shpe}')
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
-
     arr = da.map_blocks(mrc_chunk_loader, urlpath, chunks=_chunks, dtype=dtype)
     return arr
