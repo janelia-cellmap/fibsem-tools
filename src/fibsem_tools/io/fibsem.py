@@ -18,7 +18,7 @@ MAGIC_NUMBER = 3_555_587_570
 OFFSET = 1024
 
 
-class FIBSEMHeader():
+class FIBSEMHeader:
     """Structure to hold header info. Note: this object is deprecated and will soon be removed."""
 
     def __init__(self, **kwargs):
@@ -27,7 +27,6 @@ class FIBSEMHeader():
     def __setitem__(self, *args: Any):
         return self.__dict__.__setitem__(*args)
 
-
     def __getitem__(self, *args: Any):
         return self.__dict__.__getitem__(*args)
 
@@ -35,11 +34,9 @@ class FIBSEMHeader():
     def keys(self):
         return self.__dict__.keys
 
-
     def update(self, **kwargs):
         """update internal dictionary"""
         self.__dict__.update(kwargs)
-
 
     def to_native_types(self):
         """

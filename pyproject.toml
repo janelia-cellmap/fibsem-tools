@@ -20,7 +20,6 @@ xarray = ">=2022.03.0"
 pydantic = "^1.8.2"
 backoff = "^1.10.0"
 xarray-multiscale = "^0.3.0"
-dask-jobqueue = "0.7.3"
 s3fs = ">=2022.2.0"
 
 [tool.poetry.dev-dependencies]

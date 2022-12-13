@@ -37,6 +37,7 @@ class Multiscales:
         else:
             if not all(isinstance(x, DataArray) for x in arrays.values()):
                 raise ValueError("`arrays` must be a dict of xarray.DataArray")
+        
         self.arrays: Dict[str, DataArray] = arrays
         self.attrs = attrs
         self.name = name
@@ -69,9 +70,9 @@ class Multiscales:
         uri: str,
         chunks: Optional[Tuple[int, ...]] = None,
         multiscale_metadata: bool = True,
-        propagate_array_attrs: bool = True,
+        propagate_array_attrs: bool = False,
         locking: bool = False,
-        client: distributed.Client =None,
+        client: distributed.Client = None,
         access_modes: Tuple[AccessMode, AccessMode] = ("a", "a"),
         **kwargs
     ):
@@ -94,7 +95,7 @@ class Multiscales:
             Whether to add multiscale-specific metadata the zarr / n5 group and arrays created in storage. If True,
             both cosem/ome-style metadata (for the group and the arrays) and neuroglancer-style metadata will be created.
 
-        propagate_array_attrs : bool, default=True
+        propagate_array_attrs : bool, default=False
             Whether to propagate the values in the .attrs property of each array to the attributes
             of the serialized arrays. Note that the process of copying array attrs before after the creation
             of multiscale metadata (governed by the `multiscale_metadata` keyword argument), so any
@@ -127,15 +128,13 @@ class Multiscales:
             for k in self.arrays:
                 array_attrs[k].update(_array_meta[k])
 
-        if chunks is None:
-            _chunks = {key: v.data.chunksize for key, v in self.arrays.items()}
-        else:
-            _chunks = {key: chunks for key in self.arrays}
+        _chunks = _normalize_chunks(self.arrays.values(), chunks)
+       
         store_group = initialize_group(
             uri,
             self.arrays.values(),
             array_paths=self.arrays.keys(),
-            chunks=_chunks.values(),
+            chunks=_chunks,
             group_attrs=group_attrs,
             array_attrs=array_attrs.values(),
             modes=access_modes,
@@ -147,6 +146,7 @@ class Multiscales:
         if "write_empty_chunks" in kwargs:
             for s in store_arrays:
                 s._write_empty_chunks = kwargs.get("write_empty_chunks")
+        
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
@@ -171,11 +171,9 @@ class Multiscales:
         return store_group, store_arrays, storage_ops
 
 
-def rechunked_move(source, target, read_chunks, write_chunks="auto"):
-    # insert signed chunk alignment validation
-    if write_chunks == "auto":
-        write_chunks = source.chunks
-
-    input_array = da.from_array(source, chunks=read_chunks).rechunk(write_chunks)
-    save_op = write_blocks(input_array, target)
-    return save_op
+def _normalize_chunks(arrays: Sequence[DataArray], 
+                      chunks: Optional[Tuple[Tuple[int, ...], ...]]) -> Tuple[Tuple[int, ...], ...]:
+        if chunks is None:
+            return tuple(v.data.chunksize for v in arrays)
+        else:
+            return chunks
