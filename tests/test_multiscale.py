@@ -34,7 +34,7 @@ def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bo
         store,
         multiscale_metadata=multiscale_metadata,
         propagate_array_attrs=propagate_array_attrs,
-        write_empty_chunks=False
+        write_empty_chunks=False,
     )
     assert all([a.write_empty_chunks == False for a in arrays])
     dask.delayed(storage).compute()

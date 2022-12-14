@@ -4,8 +4,8 @@ from enum import Enum
 
 
 class AnnotationType(Enum):
-    semantic: "semantic"
-    instance: "instance"
+    semantic: str = "semantic"
+    instance: str = "instance"
 
 
 class InstanceName(BaseModel):
@@ -74,4 +74,5 @@ classNameDict = {
     36: InstanceName(short="Microtubules in", long="Microtubules in"),
     37: InstanceName(short="Nucleus combined", long="Nucleus combined"),
     38: InstanceName(short="Vimentin", long="Vimentin"),
+    39: InstanceName(short="Glycogen", long="Glycogen"),
 }
