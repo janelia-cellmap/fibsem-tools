@@ -97,15 +97,20 @@ def test_access_array_h5():
     data = np.random.randint(0, 255, size=(10, 10, 10), dtype="uint8")
     attrs = {"resolution": "1000"}
     with tempfile.TemporaryFile(suffix=".h5") as store:
-        arr = access_h5(store, key, data=data, attrs=attrs, mode="w")
-        assert dict(arr.attrs) == attrs
-        assert np.array_equal(arr[:], data)
-        arr.file.close()
+        with access_h5(store, key, data=data, attrs=attrs, mode="w") as arr1:
+            assert dict(arr1.attrs) == attrs
+            assert np.array_equal(arr1[:], data)
 
-        arr2 = access_h5(store, key, mode="r")
-        assert dict(arr2.attrs) == attrs
-        assert np.array_equal(arr2[:], data)
-        arr2.file.close()
+        with access_h5(store, key, mode="r") as arr2:
+            assert dict(arr2.attrs) == attrs
+            assert np.array_equal(arr2[:], data)
+
+        with access_h5(store, key, mode="r") as arr3:
+            h5d = arr3.file[key]
+            assert h5d.shape == arr3.shape
+            assert h5d.attrs == arr3.attrs
+            assert h5d.chunks == arr3.chunks
+            assert h5d.compression == arr3.compression
 
 
 def test_access_group_h5():
@@ -113,13 +118,15 @@ def test_access_group_h5():
     attrs = {"resolution": "1000"}
 
     with tempfile.TemporaryFile(suffix=".h5") as store:
-        grp = access_h5(store, key, attrs=attrs, mode="w")
-        assert dict(grp.attrs) == attrs
-        grp.file.close()
+        with access_h5(store, key, attrs=attrs, mode="w") as grp1:
+            assert dict(grp1.attrs) == attrs
 
-        grp2 = access_h5(store, key, mode="r")
-        assert dict(grp2.attrs) == attrs
-        grp2.file.close()
+        with access_h5(store, key, mode="r") as grp2:
+            assert dict(grp2.attrs) == attrs
+
+        with access_h5(store, key, mode="r") as grp3:
+            h5g = grp3.file[key]
+            assert h5g.attrs == grp3.attrs
 
 
 def test_list_files():
