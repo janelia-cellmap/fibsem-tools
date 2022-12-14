@@ -1,5 +1,5 @@
 from pydantic import BaseModel, PositiveInt
-from typing import Sequence
+from typing import Sequence, List
 from xarray import DataArray
 from .transform import SpatialTransform
 import numpy as np
@@ -7,7 +7,8 @@ import numpy as np
 
 class PixelResolution(BaseModel):
     """
-    PixelResolution attribute used by the Saalfeld lab. The dimensions attribute contains a list of scales that define the
+    PixelResolution attribute used by the Saalfeld lab. 
+    The dimensions attribute contains a list of scales that define the
     grid spacing of the data, in F-order.
     """
 
@@ -18,7 +19,8 @@ class PixelResolution(BaseModel):
 # todo: validate argument lengths
 class NeuroglancerN5GroupMetadata(BaseModel):
     """
-    Metadata to enable displaying an N5 group containing several datasets as a multiresolution dataset in neuroglancer.
+    Metadata to enable displaying an N5 group containing several datasets 
+    as a multiresolution dataset in neuroglancer.
     see https://github.com/google/neuroglancer/issues/176#issuecomment-553027775
     Axis properties will be indexed in the opposite order of C-contiguous axis indexing.
     """
@@ -30,7 +32,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
 
     @classmethod
     def fromDataArrays(
-        cls, dataarrays: Sequence[DataArray]
+        cls, arrays: Sequence[DataArray]
     ) -> "NeuroglancerN5GroupMetadata":
         """
         Create neuroglancer-compatibled N5 metadata from a collection of DataArrays.
@@ -38,7 +40,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         Parameters
         ----------
 
-        dataarrays : list or tuple of xarray.DataArray
+        arrays : list or tuple of xarray.DataArray
             The collection of arrays from which to generate multiscale metadata. These arrays are assumed to share the same `dims` attributes, albeit with varying `coords`.
 
         Returns
@@ -48,7 +50,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         """
         transforms = [
             SpatialTransform.fromDataArray(array, reverse_axes=True)
-            for array in dataarrays
+            for array in arrays
         ]
         pixelresolution = PixelResolution(
             dimensions=transforms[0].scale, unit=transforms[0].units[0]

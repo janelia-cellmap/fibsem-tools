@@ -1,8 +1,14 @@
 import numpy.typing as npt
 import numpy as np
 from pydantic import BaseModel, root_validator
-from typing import Sequence, Union, Dict, Any
+from typing import Sequence, Union, Dict, Optional
 from xarray import DataArray
+from enum import Enum
+
+
+class ArrayOrder(str, Enum):
+    C = "C"
+    F = "F"
 
 
 class SpatialTransform(BaseModel):
@@ -10,10 +16,12 @@ class SpatialTransform(BaseModel):
     Representation of an N-dimensional scaling + translation transform for labelled axes with units.
     """
 
+    order: Optional[ArrayOrder] = "C"
     axes: Sequence[str]
     units: Sequence[str]
     translate: Sequence[float]
     scale: Sequence[float]
+
 
     @root_validator
     def validate_argument_length(
@@ -35,12 +43,16 @@ class SpatialTransform(BaseModel):
         Given an array shape (represented as a dict with dimension names as keys), return a dict of 
         numpy arrays representing a bounded coordinate grid derived from this transform. 
         """
-        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}, dims=(k,)) for idx, k in enumerate(self.axes)}
+        if self.order == 'C':
+            axes = self.axes
+        else:
+            axes = reversed(self.axes)
+        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}, dims=(k,)) for idx, k in enumerate(axes)}
 
 
     @classmethod
     def fromDataArray(
-        cls, dataarray: DataArray, reverse_axes: bool = False
+        cls, array: DataArray, reverse_axes: bool = False
     ) -> "SpatialTransform":
         """
         Generate a spatial transform from a DataArray.
@@ -48,11 +60,13 @@ class SpatialTransform(BaseModel):
         Parameters
         ----------
 
-        dataarray: DataArray
+        array: DataArray
 
         reverse_axes: boolean, default=False
-            If True, the order of the `axes` in the spatial transform will be reversed relative to the order of the dimensions of `dataarray`.
+            If True, the order of the `axes` in the spatial transform will 
+            be reversed relative to the order of the dimensions of `array`.
 
+ 
         Returns
         -------
 
@@ -61,21 +75,24 @@ class SpatialTransform(BaseModel):
         """
 
         orderer = slice(None)
+        output_order = "C"
         if reverse_axes:
             orderer = slice(-1, None, -1)
-        axes = [str(d) for d in dataarray.dims[orderer]]
-        units = [dataarray.coords[ax].attrs.get("units") for ax in axes]
-        translate = [float(dataarray.coords[ax][0]) for ax in axes]
+            output_order = "F"
+        
+        axes = [str(d) for d in array.dims[orderer]]
+        units = [array.coords[ax].attrs.get("units") for ax in axes]
+        translate = [float(array.coords[ax][0]) for ax in axes]
         scale = []
         for ax in axes:
-            if len(dataarray.coords[ax]) > 1:
+            if len(array.coords[ax]) > 1:
                 scale_estimate = abs(
-                    float(dataarray.coords[ax][1]) - float(dataarray.coords[ax][0])
+                    float(array.coords[ax][1]) - float(array.coords[ax][0])
                 )
             else:
                 raise ValueError(
-                    f"Cannot infer scale parameter along dimension {ax} with length {len(dataarray.coords[ax])}"
+                    f"Cannot infer scale parameter along dimension {ax} with length {len(array.coords[ax])}"
                 )
             scale.append(scale_estimate)
 
-        return cls(axes=axes, units=units, translate=translate, scale=scale)
+        return cls(axes=axes, units=units, translate=translate, scale=scale, order=output_order)

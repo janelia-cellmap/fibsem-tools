@@ -1,4 +1,3 @@
-from numpy.random.mtrand import f
 from fibsem_tools.io.multiscale import Multiscales
 from xarray import DataArray
 import shutil
@@ -58,20 +57,20 @@ def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bo
             cosem_meta = COSEMGroupMetadata.fromDataArrays(
                 name=ms.name,
                 paths=tuple(multi.keys()),
-                dataarrays=tuple(multi.values()),
+                arrays=tuple(multi.values()),
             ).dict()
             for mkey, mvalue in cosem_meta.items():
                 assert group.attrs[mkey] == mvalue
 
             neuroglancer_meta = NeuroglancerN5GroupMetadata.fromDataArrays(
-                dataarrays=tuple(multi.values())
+                arrays=tuple(multi.values())
             ).dict()
             for mkey, mvalue in neuroglancer_meta.items():
                 assert group.attrs[mkey] == mvalue
 
             assert (
                 arrays[idx].attrs["transform"]
-                == SpatialTransform.fromDataArray(dataarray=multi[k]).dict()
+                == SpatialTransform.fromDataArray(array=multi[k]).dict()
             )
         else:
             assert "multiscales" not in group.attrs

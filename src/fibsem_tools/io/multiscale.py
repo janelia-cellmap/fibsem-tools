@@ -1,21 +1,16 @@
 import os
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Tuple, Optional, Sequence
+from fibsem_tools.io.io import AccessMode
 from fibsem_tools.io.zarr import lock_array
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
+from fibsem_tools.metadata.cosem import COSEMGroupMetadata
+from fibsem_tools.metadata.transform import SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
-from xarray_multiscale.reducers import windowed_mode
+import distributed
 from fibsem_tools.io import initialize_group
 from fibsem_tools.io.dask import store_blocks, write_blocks
-
-
-from itertools import combinations
-from functools import reduce
-
-import math
-
 
 class Multiscales:
     def __init__(
@@ -44,6 +39,7 @@ class Multiscales:
         else:
             if not all(isinstance(x, DataArray) for x in arrays.values()):
                 raise ValueError("`arrays` must be a dict of xarray.DataArray")
+        
         self.arrays: Dict[str, DataArray] = arrays
         self.attrs = attrs
         self.name = name
@@ -54,7 +50,7 @@ class Multiscales:
     def _group_metadata(self):
         cosem_meta = COSEMGroupMetadata.fromDataArrays(
             name=self.name,
-            dataarrays=tuple(self.arrays.values()),
+            arrays=tuple(self.arrays.values()),
             paths=tuple(self.arrays.keys()),
         ).dict()
 
@@ -76,10 +72,10 @@ class Multiscales:
         uri: str,
         chunks: Optional[Tuple[int, ...]] = None,
         multiscale_metadata: bool = True,
-        propagate_array_attrs: bool = True,
+        propagate_array_attrs: bool = False,
         locking: bool = False,
-        client=None,
-        access_modes=("a", "a"),
+        client: distributed.Client = None,
+        access_modes: Tuple[AccessMode, AccessMode] = ("a", "a"),
         **kwargs
     ):
         """
@@ -95,13 +91,13 @@ class Multiscales:
             The chunking used for the arrays in storage. If a single tuple of ints is provided,
             all output arrays will be created with a uniform same chunking scheme. If a dict of tuples
             of ints is provided, then the chunking scheme for an array with key K will be specified by
-            output_chunks[K]
+            chunks[K]
 
         multiscale_metadata : bool, default=True
             Whether to add multiscale-specific metadata the zarr / n5 group and arrays created in storage. If True,
             both cosem/ome-style metadata (for the group and the arrays) and neuroglancer-style metadata will be created.
 
-        propagate_array_attrs : bool, default=True
+        propagate_array_attrs : bool, default=False
             Whether to propagate the values in the .attrs property of each array to the attributes
             of the serialized arrays. Note that the process of copying array attrs before after the creation
             of multiscale metadata (governed by the `multiscale_metadata` keyword argument), so any
@@ -134,15 +130,13 @@ class Multiscales:
             for k in self.arrays:
                 array_attrs[k].update(_array_meta[k])
 
-        if chunks is None:
-            _chunks = {key: v.data.chunksize for key, v in self.arrays.items()}
-        else:
-            _chunks = {key: chunks for key in self.arrays}
+        _chunks = _normalize_chunks(self.arrays.values(), chunks)
+       
         store_group = initialize_group(
             uri,
             self.arrays.values(),
             array_paths=self.arrays.keys(),
-            chunks=_chunks.values(),
+            chunks=_chunks,
             group_attrs=group_attrs,
             array_attrs=array_attrs.values(),
             modes=access_modes,
@@ -154,6 +148,7 @@ class Multiscales:
         if "write_empty_chunks" in kwargs:
             for s in store_arrays:
                 s._write_empty_chunks = kwargs.get("write_empty_chunks")
+        
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
@@ -178,83 +173,9 @@ class Multiscales:
         return store_group, store_arrays, storage_ops
 
 
-def mode_reduce(array: NDArray[Any], window_size: Tuple[int, ...]) -> NDArray[Any]:
-    if np.all(np.array(window_size) == 2):
-        result = countless(array, window_size)
-    else:
-        result = windowed_mode(array, window_size)
-
-    return result
-
-
-def countless(data, factor) -> NDArray[Any]:
-    """
-    countless downsamples labeled images (segmentations)
-    by finding the mode using vectorized instructions.
-    It is ill advised to use this O(2^N-1) time algorithm
-    and O(NCN/2) space for N > about 16 tops.
-    This means it's useful for the following kinds
-    of downsampling.
-    This could be implemented for higher performance in
-    C/Cython more simply, but at least this is easily
-    portable.
-    2x2x1 (N=4), 2x2x2 (N=8), 4x4x1 (N=16), 3x2x1 (N=6)
-    and various other configurations of a similar nature.
-    c.f. https://medium.com/@willsilversmith/countless-3d-vectorized-2x-downsampling-of-labeled-volume-images-using-python-and-numpy-59d686c2f75
-
-    This function has been modified from the original
-    to avoid mutation of the input argument.
-    """
-    sections = []
-
-    mode_of = reduce(lambda x, y: x * y, factor)
-    majority = int(math.ceil(float(mode_of) / 2))
-
-    for offset in np.ndindex(factor):
-        part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))] + 1
-        sections.append(part)
-
-    pick = lambda a, b: a * (a == b)
-    lor = lambda x, y: x + (x == 0) * y  # logical or
-
-    subproblems = [{}, {}]
-    results2 = None
-    for x, y in combinations(range(len(sections) - 1), 2):
-        res = pick(sections[x], sections[y])
-        subproblems[0][(x, y)] = res
-        if results2 is not None:
-            results2 = lor(results2, res)
+def _normalize_chunks(arrays: Sequence[DataArray], 
+                      chunks: Optional[Tuple[Tuple[int, ...], ...]]) -> Tuple[Tuple[int, ...], ...]:
+        if chunks is None:
+            return tuple(v.data.chunksize for v in arrays)
         else:
-            results2 = res
-
-    results = [results2]
-    for r in range(3, majority + 1):
-        r_results = None
-        for combo in combinations(range(len(sections)), r):
-            res = pick(subproblems[0][combo[:-1]], sections[combo[-1]])
-
-            if combo[-1] != len(sections) - 1:
-                subproblems[1][combo] = res
-
-            if r_results is not None:
-                r_results = lor(r_results, res)
-            else:
-                r_results = res
-        results.append(r_results)
-        subproblems[0] = subproblems[1]
-        subproblems[1] = {}
-
-    results.reverse()
-    final_result = lor(reduce(lor, results), sections[-1]) - 1
-
-    return final_result
-
-
-def rechunked_move(source, target, read_chunks, write_chunks="auto"):
-    # insert signed chunk alignment validation
-    if write_chunks == "auto":
-        write_chunks = source.chunks
-
-    input_array = da.from_array(source, chunks=read_chunks).rechunk(write_chunks)
-    save_op = write_blocks(input_array, target)
-    return save_op
+            return chunks

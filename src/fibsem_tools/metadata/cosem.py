@@ -1,17 +1,11 @@
 from pydantic import BaseModel
-from typing import Sequence, List, Optional
+from typing import Sequence, Optional
 from xarray import DataArray
-from .transform import SpatialTransform
-
-
-class ScaleMeta(BaseModel):
-    path: str
-    transform: SpatialTransform
 
 
 class MultiscaleMeta(BaseModel):
     name: Optional[str]
-    datasets: Sequence[ScaleMeta]
+    datasets: Sequence[str]
 
 
 class COSEMGroupMetadata(BaseModel):
@@ -24,7 +18,7 @@ class COSEMGroupMetadata(BaseModel):
     @classmethod
     def fromDataArrays(
         cls,
-        dataarrays: Sequence[DataArray],
+        arrays: Sequence[DataArray],
         name: Optional[str] = None,
         paths: Optional[Sequence[str]] = None,
     ):
@@ -41,26 +35,24 @@ class COSEMGroupMetadata(BaseModel):
             The name for the multiresolution collection
 
         paths : list or tuple of str or None, default=None
-            The name on the storage backend for each of the arrays in the multiscale collection. If None, the `name` attribute of each array in `dataarrays` will be used.
+            The name on the storage backend for each of the arrays in the multiscale collection. 
+            If None, the `name` attribute of each array in `dataarrays` will be used.
 
-        Returns
+        Returns an instance of COSEMGroupMetadata
         -------
 
         COSEMGroupMetadata
         """
 
         if paths is None:
-            _paths: Sequence[str] = [str(d.name) for d in dataarrays]
+            _paths: Sequence[str] = [str(d.name) for d in arrays]
         else:
             _paths = paths
 
         multiscales = [
             MultiscaleMeta(
                 name=name,
-                datasets=[
-                    ScaleMeta(path=path, transform=SpatialTransform.fromDataArray(arr))
-                    for path, arr in zip(paths, dataarrays)
-                ],
+                datasets=_paths,
             )
         ]
         return cls(name=name, multiscales=multiscales, paths=_paths)

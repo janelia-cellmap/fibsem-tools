@@ -11,7 +11,6 @@ from fibsem_tools.io.h5 import access_h5
 from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE
 from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.io import read_dask, initialize_group
-from fibsem_tools.io.tensorstore import access_precomputed, precomputed_to_dask
 from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
 from fibsem_tools.io.mrc import access_mrc
 from pathlib import Path
@@ -91,35 +90,6 @@ def test_access_mrc():
         )
         with pytest.raises(ValueError):
             read_dask(store.name, chunks=(1, 1, 1))
-
-
-def test_access_precomputed():
-    store = tempfile.mkdtemp(suffix=".precomputed")
-    atexit.register(shutil.rmtree, store)
-    key = "s0"
-    data = np.random.randint(0, 255, size=(10, 10, 10), dtype="uint8")
-    resolution = [1.0, 2.0, 3.0]
-    chunks = (2,) * data.ndim
-
-    arr_out = access_precomputed(
-        store,
-        key,
-        mode="w",
-        array_type="image",
-        dtype="uint8",
-        shape=data.shape,
-        num_channels=1,
-        resolution=resolution,
-        encoding="raw",
-        chunks=chunks,
-    )
-    arr_out[:] = data.reshape(*data.shape, 1)
-
-    arr_in = access_precomputed(store, key, mode="r")
-    assert np.all(np.array(arr_in[:]) == data.reshape(*data.shape, 1))
-
-    darr = precomputed_to_dask(os.path.join(store, key), chunks=(2, 2, 2))
-    assert (darr.compute() == data).all
 
 
 def test_access_array_h5():

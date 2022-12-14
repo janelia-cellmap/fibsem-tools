@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fibsem-tools"
-version = "0.3.2"
+version = "1.0.0"
 description = "Tools for processing FIBSEM datasets"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
@@ -13,14 +13,11 @@ h5py = "^3.1.0"
 fsspec = ">=2022.2.0"
 zarr = "^2.10.3"
 mrcfile = "^1.2.0"
-dacite = "^1.6.0"
 numpy = "^1.20.0"
-pandas = "^1.2.3"
 xarray = ">=2022.03.0"
 pydantic = "^1.8.2"
 backoff = "^1.10.0"
-xarray-multiscale = "^0.3.0"
-s3fs = "^2022.10.0"
+s3fs = ">=2022.2.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
