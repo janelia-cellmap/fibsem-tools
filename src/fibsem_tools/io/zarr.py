@@ -211,7 +211,10 @@ def zarr_n5_coordinate_inference(
     if output_attrs.get("transform"):
         transform_meta = output_attrs.pop("transform")
         input_axes = transform_meta["axes"]
-        output_axes = input_axes
+        if transform_meta.get('order') == 'F':
+            output_axes = input_axes[::-1]
+        else:
+            output_axes = input_axes
         units = dict(zip(output_axes, transform_meta["units"]))
         scales = dict(zip(output_axes, transform_meta["scale"]))
         translates = dict(zip(output_axes, transform_meta["translate"]))

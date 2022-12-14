@@ -91,7 +91,7 @@ class Multiscales:
             The chunking used for the arrays in storage. If a single tuple of ints is provided,
             all output arrays will be created with a uniform same chunking scheme. If a dict of tuples
             of ints is provided, then the chunking scheme for an array with key K will be specified by
-            output_chunks[K]
+            chunks[K]
 
         multiscale_metadata : bool, default=True
             Whether to add multiscale-specific metadata the zarr / n5 group and arrays created in storage. If True,

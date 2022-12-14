@@ -1,7 +1,7 @@
 import numpy.typing as npt
 import numpy as np
 from pydantic import BaseModel, root_validator
-from typing import Sequence, Union, Dict, Any
+from typing import Sequence, Union, Dict, Optional
 from xarray import DataArray
 from enum import Enum
 
@@ -16,7 +16,7 @@ class SpatialTransform(BaseModel):
     Representation of an N-dimensional scaling + translation transform for labelled axes with units.
     """
 
-    order: ArrayOrder = "C"
+    order: Optional[ArrayOrder] = "C"
     axes: Sequence[str]
     units: Sequence[str]
     translate: Sequence[float]

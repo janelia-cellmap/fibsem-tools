@@ -36,7 +36,6 @@ from .zarr import (
     zarr_n5_coordinate_inference,
     zarr_to_dask,
 )
-from .tensorstore import access_precomputed, precomputed_to_dask
 import numcodecs
 from numcodecs.abc import Codec
 from enum import Enum
@@ -46,7 +45,7 @@ _zarr_axes = {"z": 0, "y": 1, "x": 2}
 # encode the fact that the first axis in n5 is the x axis
 _n5_axes = {"z": 2, "y": 1, "x": 0}
 _formats = (".dat", ".mrc")
-_container_extensions = (".zarr", ".n5", ".h5", ".precomputed")
+_container_extensions = (".zarr", ".n5", ".h5")
 _suffixes = (*_formats, *_container_extensions)
 
 Pathlike = Union[str, Path]
@@ -111,13 +110,11 @@ accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
 accessors[".h5"] = access_h5
 accessors[".mrc"] = access_mrc
-accessors[".precomputed"] = access_precomputed
 
 daskifiers: Dict[str, Callable[..., da.core.Array]] = {}
 daskifiers[".mrc"] = mrc_to_dask
 daskifiers[".n5"] = n5_to_dask
 daskifiers[".zarr"] = zarr_to_dask
-daskifiers[".precomputed"] = precomputed_to_dask
 
 
 def access(
