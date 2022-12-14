@@ -1,14 +1,12 @@
 import numpy as np
 from xarray import DataArray
-from xarray_multiscale.reducers import windowed_mean
+
 from fibsem_tools.metadata.neuroglancer import (
     NeuroglancerN5GroupMetadata,
     PixelResolution,
 )
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata, MultiscaleMeta, ScaleMeta
+from fibsem_tools.metadata.cosem import COSEMGroupMetadata, MultiscaleMeta
 from fibsem_tools.metadata.transform import SpatialTransform
-from xarray_multiscale import multiscale
-
 
 def test_SpatialTransform():
     coords = [
@@ -20,6 +18,7 @@ def test_SpatialTransform():
     data = DataArray(np.zeros((10, 10, 10)), coords=coords)
     transform = SpatialTransform.fromDataArray(data)
     assert transform == SpatialTransform(
+        order="C",
         axes=["z", "y", "x"],
         units=["nm", "m", "km"],
         translate=[0.0, 5.0, 10.0],
@@ -28,6 +27,7 @@ def test_SpatialTransform():
 
     transform = SpatialTransform.fromDataArray(data, reverse_axes=True)
     assert transform == SpatialTransform(
+        order="F",
         axes=["x", "y", "z"],
         units=["km", "m", "nm"],
         translate=[10.0, 5.0, 0.0],
@@ -43,7 +43,12 @@ def test_neuroglancer_metadata():
     ]
 
     data = DataArray(np.zeros((16, 16, 16)), coords=coords)
-    multi = multiscale(data, windowed_mean, (2, 2, 2))[:4]
+    coarsen_kwargs = {'z': 2, 'y': 2, 'x': 2, 'boundary': 'trim'}
+    multi = [data]
+    
+    for idx in range(3):
+        multi.append(multi[-1].coarsen(**coarsen_kwargs).mean()) 
+    
     neuroglancer_metadata = NeuroglancerN5GroupMetadata.fromDataArrays(multi)
 
     assert neuroglancer_metadata == NeuroglancerN5GroupMetadata(
@@ -73,15 +78,16 @@ def test_cosem_ome():
     ]
 
     data = DataArray(np.zeros(shape_base), coords=coords, name="data")
-    multi = multiscale(data, windowed_mean, (2, 2, 2))[:2]
+    coarsen_kwargs = {'z': 2, 'y': 2, 'x': 2, 'boundary': 'trim'}
+    multi = [data.coarsen(**coarsen_kwargs).mean()]
+    multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
+    
     paths = ["s0", "s1"]
+    
     cosem_ome_group_metadata = COSEMGroupMetadata.fromDataArrays(
         multi, paths=paths, name="data"
     )
-    scale_metas = [
-        ScaleMeta(path=p, transform=SpatialTransform.fromDataArray(m))
-        for p, m in zip(paths, multi)
-    ]
+    
     assert cosem_ome_group_metadata == COSEMGroupMetadata(
-        multiscales=[MultiscaleMeta(name="data", datasets=scale_metas)]
+        multiscales=[MultiscaleMeta(name="data", datasets=paths)]
     )

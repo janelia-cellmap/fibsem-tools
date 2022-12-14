@@ -195,17 +195,6 @@ tomli = {version = "*", optional = true, markers = "python_full_version <= \"3.1
 toml = ["tomli"]
 
 [[package]]
-name = "dacite"
-version = "1.6.0"
-description = "Simple creation of data classes from dictionaries."
-category = "main"
-optional = false
-python-versions = ">=3.6"
-
-[package.extras]
-dev = ["pytest (>=5)", "pytest-cov", "coveralls", "black", "mypy", "pylint"]
-
-[[package]]
 name = "dask"
 version = "2022.12.0"
 description = "Parallel PyData with Task Scheduling"
@@ -503,7 +492,7 @@ complete = ["numpy (>=1.9.0)", "pandas (>=0.19.0)", "pyzmq", "blosc"]
 
 [[package]]
 name = "pathspec"
-version = "0.10.2"
+version = "0.10.3"
 description = "Utility library for gitignore style pattern matching of file paths."
 category = "dev"
 optional = false
@@ -648,22 +637,6 @@ awscli = ["aiobotocore[awscli] (>=2.4.0,<2.5.0)"]
 boto3 = ["aiobotocore[boto3] (>=2.4.0,<2.5.0)"]
 
 [[package]]
-name = "scipy"
-version = "1.9.3"
-description = "Fundamental algorithms for scientific computing in Python"
-category = "main"
-optional = false
-python-versions = ">=3.8"
-
-[package.dependencies]
-numpy = ">=1.18.5,<1.26.0"
-
-[package.extras]
-test = ["pytest", "pytest-cov", "pytest-xdist", "asv", "mpmath", "gmpy2", "threadpoolctl", "scikit-umfpack"]
-doc = ["sphinx (!=4.1.0)", "pydata-sphinx-theme (==0.9.0)", "sphinx-panels (>=0.5.2)", "matplotlib (>2)", "numpydoc", "sphinx-tabs"]
-dev = ["mypy", "typing-extensions", "pycodestyle", "flake8"]
-
-[[package]]
 name = "six"
 version = "1.16.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -789,20 +762,6 @@ parallel = ["dask"]
 viz = ["matplotlib", "seaborn", "nc-time-axis"]
 
 [[package]]
-name = "xarray-multiscale"
-version = "0.3.3"
-description = ""
-category = "main"
-optional = false
-python-versions = ">=3.8,<4"
-
-[package.dependencies]
-dask = ">=2020.12.0"
-numpy = ">=1.19.4,<2.0.0"
-scipy = ">=1.5.4,<2.0.0"
-xarray = ">=2022.03.0"
-
-[[package]]
 name = "yarl"
 version = "1.8.2"
 description = "Yet another URL library"
@@ -845,7 +804,7 @@ heapdict = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8, <4"
-content-hash = "f04c50b23a34a98f128fa167a7533bc8a48a9b15dd92d3d4b202e58f8bfe5cc9"
+content-hash = "757ee9d56ac223f4dbe12c829ab2e9a6f9d1e937b7f8168b21a302be35d23465"
 
 [metadata.files]
 aiobotocore = []
@@ -944,7 +903,6 @@ coverage = [
     {file = "coverage-6.5.0-pp36.pp37.pp38-none-any.whl", hash = "sha256:1431986dac3923c5945271f169f59c45b8802a114c8f548d611f2015133df77a"},
     {file = "coverage-6.5.0.tar.gz", hash = "sha256:f642e90754ee3e06b0e7e51bce3379590e76b7f76b708e1a71ff043f87025c84"},
 ]
-dacite = []
 dask = []
 distributed = []
 entrypoints = []
@@ -990,7 +948,10 @@ packaging = [
 ]
 pandas = []
 partd = []
-pathspec = []
+pathspec = [
+    {file = "pathspec-0.10.3-py3-none-any.whl", hash = "sha256:3c95343af8b756205e2aba76e843ba9520a24dd84f68c22b9f93251507509dd6"},
+    {file = "pathspec-0.10.3.tar.gz", hash = "sha256:56200de4077d9d0791465aa9095a01d421861e405b5096955051deefd697d6f6"},
+]
 platformdirs = [
     {file = "platformdirs-2.6.0-py3-none-any.whl", hash = "sha256:1a89a12377800c81983db6be069ec068eee989748799b946cce2a6e80dcc54ca"},
     {file = "platformdirs-2.6.0.tar.gz", hash = "sha256:b46ffafa316e6b83b47489d240ce17173f123a9b9c83282141c3daf26ad9ac2e"},
@@ -1017,7 +978,6 @@ python-dateutil = []
 pytz = []
 pyyaml = []
 s3fs = []
-scipy = []
 six = []
 sortedcontainers = []
 tblib = []
@@ -1065,7 +1025,6 @@ typing-extensions = []
 urllib3 = []
 wrapt = []
 xarray = []
-xarray-multiscale = []
 yarl = []
 zarr = []
 zict = []

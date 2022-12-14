@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Union, List
 import tensorstore as ts
 import json
+from pydantic import BaseModel, Field
+from enum import Enum
 from pathlib import Path
 from xarray.core.dataarray import DataArray
-from dacite import from_dict
 import fsspec
 import os
 from dask.array.core import normalize_chunks
@@ -12,49 +13,38 @@ from dask.array import map_blocks
 
 from fibsem_tools.io.util import split_by_suffix
 
-DRIVERS = {"n5", "neuroglancer_precomputed"}
-KVSTORE_DRIVERS = {"file", "gcs"}
 
 
-@dataclass
-class StripNullFields:
-    def asdict(self):
-        result = {}
-        for k, v in self.__dict__.items():
-            if v is not None:
-                if hasattr(v, "asdict"):
-                    result[k] = v.asdict()
-                elif isinstance(v, list):
-                    result[k] = []
-                    for element in v:
-                        if hasattr(element, "asdict"):
-                            result[k].append(element.asdict())
-                        else:
-                            result[k].append(element)
-                else:
-                    result[k] = v
-        return result
+class KVStoreDriver(str, Enum):
+    http = "http"
+    file = "file"
+    gcs = "gcs"
+    memory = "memory"
+    neuroglancer_uint64_sharded = "neuroglancer_uint64_sharded"
 
 
-@dataclass
-class KVStore(StripNullFields):
-    driver: str
+class ChunkedStorageDriver(str, Enum):
+    n5 = "n5"
+    zarr = "zarr"
+    neuroglancer_precomputed = "neuroglancer_precomputed"
+
+
+class KVStore(BaseModel):
+    driver: KVStoreDriver
     path: str
 
 
-@dataclass
-class Sharding(StripNullFields):
+class Sharding(BaseModel):
     preshift_bits: int
     hash: str
     minishard_bits: int
     shard_bits: int
     minishard_index_encoding: str = "raw"
     data_index_encoding: str = "raw"
-    at_type: str = "neuroglancer_uint64_sharded_v1"
+    type: str = Field("neuroglancer_uint64_sharded_v1", alias="@type")
 
 
-@dataclass
-class ScaleMetadata(StripNullFields):
+class ScaleMetadata(BaseModel):
     size: Optional[Sequence[int]]
     encoding: Optional[str]
     chunk_size: Optional[List[int]]
@@ -71,16 +61,14 @@ class ScaleMetadata(StripNullFields):
                 self.key = "_".join(map(str, self.resolution))
 
 
-@dataclass
-class MultiscaleMetadata(StripNullFields):
+class MultiscaleMetadata(BaseModel):
     type: str
     data_type: str
     num_channels: int
 
 
-@dataclass
-class TensorStoreSpec(StripNullFields):
-    driver: str
+class TensorStoreSpec(BaseModel):
+    driver: ChunkedStorageDriver
     kvstore: KVStore
     path: str
     scale_index: Optional[int] = 0
@@ -88,56 +76,15 @@ class TensorStoreSpec(StripNullFields):
     multiscale_metadata: Optional[MultiscaleMetadata] = None
 
 
-@dataclass
-class PrecomputedMetadata(StripNullFields):
+class PrecomputedMetadata(BaseModel):
     type: str
     data_type: str
     num_channels: int
     scales: Sequence[ScaleMetadata]
-    at_type: Optional[str] = None
-
-    @staticmethod
-    def from_json(json) -> "PrecomputedMetadata":
-        _json = json.copy()
-        if "@type" in _json:
-            at_type = _json.pop("@type")
-            _json["at_type"] = at_type
-        return from_dict(PrecomputedMetadata, _json)
-
-    def __post_init__(self):
-        _scales = []
-        for scale in self.scales:
-            if isinstance(scale, dict):
-                _scales.append(ScaleMetadata(**scale))
-            else:
-                _scales.append(scale)
-        self.scales = _scales
-
-
-def parse_info(json_data: Dict[str, Any]) -> PrecomputedMetadata:
-    at_type = json_data["@type"]
-    volume_type = json_data["type"]
-    data_type = json_data["data_type"]
-    num_channels = json_data["num_channels"]
-    scales = []
-    for scale in json_data["scales"]:
-        scale_copy = dict(**scale)
-        chunk_sizes = scale_copy.pop("chunk_sizes")
-        # take the first element from chunk_sizes
-        scale_copy["chunk_size"] = chunk_sizes[0]
-        scales.append(ScaleMetadata(**scale_copy))
-
-    return PrecomputedMetadata(
-        at_type=at_type,
-        type=volume_type,
-        data_type=data_type,
-        num_channels=num_channels,
-        scales=scales,
-    )
-
+    type: Optional[str] = Field(None, alias='@type')
 
 def PrecomputedFromDataArray(
-    dataarray,
+    array,
     path,
     encoding,
     volume_type,
@@ -147,12 +94,12 @@ def PrecomputedFromDataArray(
     chunk_size=None,
     **kwargs,
 ):
-    assert len(dataarray.coords) == dataarray.ndim
+    assert len(array.coords) == array.ndim
     if voxel_offset is None:
-        voxel_offset = (0,) * dataarray.ndim
+        voxel_offset = (0,) * aarray.ndim
 
     resolution = [
-        abs(float(a[1].values - a[0].values)) for a in dataarray.coords.values()
+        abs(float(a[1].values - a[0].values)) for a in array.coords.values()
     ]
     tsa = TensorStoreArray(
         driver="neuroglancer_precomputed",
@@ -165,7 +112,7 @@ def PrecomputedFromDataArray(
         voxel_offset=voxel_offset,
         resolution=resolution,
         key=key,
-        template=dataarray,
+        template=array,
         chunk_size=chunk_size,
     )
     return tsa.open(**kwargs).result()
@@ -228,10 +175,11 @@ class TensorStoreArray:
         )
 
         kvstore = KVStore(driver=kvstore_driver, path=kvstore_path)
-
-        multiscale_metadata = MultiscaleMetadata(
-            data_type=dtype, num_channels=num_channels, type=volume_type
-        )
+        
+        if (dtype is not None and num_channels is not None and type is not None): 
+            multiscale_metadata = MultiscaleMetadata(
+                data_type=dtype, num_channels=num_channels, type=volume_type
+            )
 
         self.spec = TensorStoreSpec(
             driver,
@@ -240,7 +188,7 @@ class TensorStoreArray:
             scale_index=scale_index,
             scale_metadata=scale_metadata,
             multiscale_metadata=multiscale_metadata,
-        ).asdict()
+        ).dict()
 
     def __repr__(self) -> str:
         return str(self.spec)
@@ -275,7 +223,7 @@ def access_precomputed(
     else:
         kvstore_path = _store_path.split(os.path.sep)[0]
 
-    if kvstore_driver not in KVSTORE_DRIVERS:
+    if not any(x == kvstore_driver for x in  KVStoreDriver):
         raise ValueError(
             f"File system protocol {kvstore_driver} is not supported by tensorstore."
         )
@@ -380,71 +328,3 @@ def precomputed_to_dask(
 
     arr = map_blocks(chunk_loader, store_path, key, chunks=_chunks, dtype=dtype)
     return arr
-
-
-@dataclass
-class NicerTensorStore:
-    spec: Dict[str, Any]
-    open_kwargs: Dict[str, Any]
-
-    def __getitem__(self, slices):
-        return ts.open(spec=self.spec, **self.open_kwargs).result()[slices]
-
-    def __setitem__(self, slices, values):
-        ts.open(spec=self.spec, **self.open_kwargs).result()[ts.d["channel"][0]][
-            slices
-        ] = values
-        return None
-
-
-def prepare_tensorstore_from_pyramid(
-    pyr: Sequence[DataArray],
-    level_names: Sequence[str],
-    jpeg_quality: int,
-    output_chunks: Sequence[int],
-    root_container_path: Path,
-):
-    store_arrays = []
-    # sharding = {'@type': 'neuroglancer_uint64_sharded_v1',
-    #       'preshift_bits': 9,
-    #        'hash': 'identity',
-    #        'minishard_index_encoding': 'gzip',
-    #       'minishard_bits': 6,
-    #       'shard_bits': 15}
-
-    for p, ln in zip(pyr, level_names):
-        res = [abs(float(p.coords[k][1] - p.coords[k][0])) for k in p.dims]
-        spec: Dict[str, Any] = {
-            "driver": "neuroglancer_precomputed",
-            "kvstore": {
-                "driver": "file",
-                "path": str(Path(root_container_path).parent),
-            },
-            "path": root_container_path.parts[-1],
-            "scale_metadata": {
-                "size": p.shape,
-                "resolution": res,
-                "encoding": "jpeg",
-                "jpeg_quality": jpeg_quality,
-                #'sharding': sharding,
-                "chunk_size": output_chunks,
-                "key": ln,
-                "voxel_offset": (0, 0, 0),
-            },
-            "multiscale_metadata": {
-                "data_type": p.dtype.name,
-                "num_channels": 1,
-                "type": "image",
-            },
-        }
-        try:
-            ts.open(spec=spec, open=True).result()
-        except ValueError:
-            try:
-                ts.open(spec=spec, create=True).result()
-            except ValueError:
-                ts.open(spec=spec, create=True, delete_existing=True).result()
-
-        nicer_array = NicerTensorStore(spec=spec, open_kwargs={"write": True})
-        store_arrays.append(nicer_array)
-    return store_arrays

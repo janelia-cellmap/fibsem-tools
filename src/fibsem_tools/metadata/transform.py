@@ -16,7 +16,7 @@ class SpatialTransform(BaseModel):
     Representation of an N-dimensional scaling + translation transform for labelled axes with units.
     """
 
-    order: ArrayOrder
+    order: ArrayOrder = "C"
     axes: Sequence[str]
     units: Sequence[str]
     translate: Sequence[float]
@@ -43,7 +43,11 @@ class SpatialTransform(BaseModel):
         Given an array shape (represented as a dict with dimension names as keys), return a dict of 
         numpy arrays representing a bounded coordinate grid derived from this transform. 
         """
-        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}, dims=(k,)) for idx, k in enumerate(self.axes)}
+        if self.order == 'C':
+            axes = self.axes
+        else:
+            axes = reversed(self.axes)
+        return {k: DataArray((np.arange(shape[k]) * self.scale[idx]) + self.translate[idx], attrs={'units': self.units[idx]}, dims=(k,)) for idx, k in enumerate(axes)}
 
 
     @classmethod

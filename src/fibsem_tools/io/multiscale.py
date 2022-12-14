@@ -1,12 +1,14 @@
 import os
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Tuple, Optional, Sequence
 from fibsem_tools.io.io import AccessMode
 from fibsem_tools.io.zarr import lock_array
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata, SpatialTransform
+from fibsem_tools.metadata.cosem import COSEMGroupMetadata
+from fibsem_tools.metadata.transform import SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from xarray import DataArray
+import distributed
 from fibsem_tools.io import initialize_group
 from fibsem_tools.io.dask import store_blocks, write_blocks
 
@@ -48,7 +50,7 @@ class Multiscales:
     def _group_metadata(self):
         cosem_meta = COSEMGroupMetadata.fromDataArrays(
             name=self.name,
-            dataarrays=tuple(self.arrays.values()),
+            arrays=tuple(self.arrays.values()),
             paths=tuple(self.arrays.keys()),
         ).dict()
 
