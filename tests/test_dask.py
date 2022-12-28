@@ -1,5 +1,6 @@
-from fibsem_tools.io.dask import ensure_minimum_chunksize
 import dask.array as da
+
+from fibsem_tools.io.dask import ensure_minimum_chunksize
 
 
 def test_ensure_minimum_chunksize():

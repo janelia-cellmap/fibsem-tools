@@ -1,20 +1,28 @@
-from fibsem_tools.io.multiscale import Multiscales
-from xarray import DataArray
-import shutil
-import dask.array as da
-import dask
-import tempfile
 import atexit
+import shutil
+import tempfile
+from typing import Optional, Tuple
+
+import dask
+import dask.array as da
 import numpy as np
 import pytest
+from xarray import DataArray
+
+from fibsem_tools.io.multiscale import Multiscales
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import SpatialTransform
 
 
+@pytest.mark.parametrize("chunks", (None, (2, 2)))
 @pytest.mark.parametrize("multiscale_metadata", (True, False))
 @pytest.mark.parametrize("propagate_array_attrs", (True, False))
-def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bool):
+def test_multiscale_storage(
+    multiscale_metadata: bool,
+    propagate_array_attrs: bool,
+    chunks: Optional[Tuple[int, int]],
+):
     data = da.random.randint(0, 8, (16, 16), chunks=(8, 8), dtype="uint8")
     coords = (
         ("x", da.arange(data.shape[0]), {"units": "nm"}),
@@ -35,6 +43,7 @@ def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bo
         multiscale_metadata=multiscale_metadata,
         propagate_array_attrs=propagate_array_attrs,
         write_empty_chunks=False,
+        chunks=chunks,
     )
     assert all([a.write_empty_chunks == False for a in arrays])
     dask.delayed(storage).compute()
@@ -46,7 +55,11 @@ def test_multiscale_storage(multiscale_metadata: bool, propagate_array_attrs: bo
         assert group[k] == arrays[idx]
         assert arrays[idx].shape == multi[k].shape
         assert arrays[idx].dtype == multi[k].dtype
-        assert arrays[idx].chunks == multi[k].data.chunksize
+
+        if chunks is None:
+            assert arrays[idx].chunks == multi[k].data.chunksize
+        else:
+            assert arrays[idx].chunks == chunks
         assert np.array_equal(arrays[idx][:], multi[k].data.compute())
         if propagate_array_attrs:
             assert arrays[idx].attrs[f"{k}/foo"] == multi[k].attrs[f"{k}/foo"]

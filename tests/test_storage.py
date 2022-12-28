@@ -1,22 +1,25 @@
-import h5py
-import zarr
-import dask
-import dask.array as da
-from fibsem_tools.io import read, access
-import numpy as np
-import shutil
 import atexit
 import os
-from fibsem_tools.io.h5 import access_h5
-from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE
-from fibsem_tools.io.dask import store_blocks
-from fibsem_tools.io.io import read_dask, initialize_group
-from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
-from fibsem_tools.io.mrc import access_mrc
-from pathlib import Path
+import shutil
 import tempfile
+from pathlib import Path
+
+import dask
+import dask.array as da
+import h5py
 import mrcfile
+import numpy as np
 import pytest
+import zarr
+
+from fibsem_tools.io import access, read
+from fibsem_tools.io.dask import store_blocks
+from fibsem_tools.io.h5 import access_h5
+from fibsem_tools.io.io import initialize_group, read_dask
+from fibsem_tools.io.mrc import access_mrc
+from fibsem_tools.io.util import (list_files, list_files_parallel,
+                                  split_by_suffix)
+from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE
 
 
 def _make_local_files(files):

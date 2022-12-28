@@ -1,12 +1,11 @@
 import numpy as np
 from xarray import DataArray
 
-from fibsem_tools.metadata.neuroglancer import (
-    NeuroglancerN5GroupMetadata,
-    PixelResolution,
-)
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, MultiscaleMeta
+from fibsem_tools.metadata.neuroglancer import (NeuroglancerN5GroupMetadata,
+                                                PixelResolution)
 from fibsem_tools.metadata.transform import SpatialTransform
+
 
 def test_SpatialTransform():
     coords = [
@@ -43,12 +42,12 @@ def test_neuroglancer_metadata():
     ]
 
     data = DataArray(np.zeros((16, 16, 16)), coords=coords)
-    coarsen_kwargs = {'z': 2, 'y': 2, 'x': 2, 'boundary': 'trim'}
+    coarsen_kwargs = {"z": 2, "y": 2, "x": 2, "boundary": "trim"}
     multi = [data]
-    
+
     for idx in range(3):
-        multi.append(multi[-1].coarsen(**coarsen_kwargs).mean()) 
-    
+        multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
+
     neuroglancer_metadata = NeuroglancerN5GroupMetadata.fromDataArrays(multi)
 
     assert neuroglancer_metadata == NeuroglancerN5GroupMetadata(
@@ -78,16 +77,16 @@ def test_cosem_ome():
     ]
 
     data = DataArray(np.zeros(shape_base), coords=coords, name="data")
-    coarsen_kwargs = {'z': 2, 'y': 2, 'x': 2, 'boundary': 'trim'}
+    coarsen_kwargs = {"z": 2, "y": 2, "x": 2, "boundary": "trim"}
     multi = [data.coarsen(**coarsen_kwargs).mean()]
     multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
-    
+
     paths = ["s0", "s1"]
-    
+
     cosem_ome_group_metadata = COSEMGroupMetadata.fromDataArrays(
         multi, paths=paths, name="data"
     )
-    
+
     assert cosem_ome_group_metadata == COSEMGroupMetadata(
         multiscales=[MultiscaleMeta(name="data", datasets=paths)]
     )

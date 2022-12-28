@@ -1,7 +1,8 @@
-import pytest
-from fibsem_tools.io.zarr import zarr_n5_coordinate_inference
-from xarray import DataArray
 import numpy as np
+import pytest
+from xarray import DataArray
+
+from fibsem_tools.io.zarr import zarr_n5_coordinate_inference
 
 
 def pixelResolutionAttr(scales, units, **kwargs):
