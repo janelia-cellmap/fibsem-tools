@@ -1,18 +1,19 @@
-from typing import Dict, List, Tuple, Any, Union, Sequence
-from pathlib import Path
-from dask import delayed
-from dask import bag
-import dask.array as da
-import zarr
+import logging
 import os
-from fibsem_tools.io.util import split_by_suffix
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Sequence, Tuple, Union
+
+import dask.array as da
+import numpy as np
+import zarr
+from dask import bag, delayed
+from distributed import Client, Lock
 from toolz import concat
 from xarray import DataArray
-import numpy as np
 from zarr.indexing import BasicIndexer
-from distributed import Lock, Client
-import logging
-import time
+
+from fibsem_tools.io.util import split_by_suffix
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -211,7 +212,7 @@ def zarr_n5_coordinate_inference(
     if output_attrs.get("transform"):
         transform_meta = output_attrs.pop("transform")
         input_axes = transform_meta["axes"]
-        if transform_meta.get('order') == 'F':
+        if transform_meta.get("order") == "F":
             output_axes = input_axes[::-1]
         else:
             output_axes = input_axes

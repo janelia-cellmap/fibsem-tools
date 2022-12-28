@@ -1,13 +1,15 @@
-from pydantic import BaseModel, PositiveInt
-from typing import Sequence, List
-from xarray import DataArray
-from .transform import SpatialTransform
+from typing import List, Sequence
+
 import numpy as np
+from pydantic import BaseModel, PositiveInt
+from xarray import DataArray
+
+from .transform import SpatialTransform
 
 
 class PixelResolution(BaseModel):
     """
-    PixelResolution attribute used by the Saalfeld lab. 
+    PixelResolution attribute used by the Saalfeld lab.
     The dimensions attribute contains a list of scales that define the
     grid spacing of the data, in F-order.
     """
@@ -19,7 +21,7 @@ class PixelResolution(BaseModel):
 # todo: validate argument lengths
 class NeuroglancerN5GroupMetadata(BaseModel):
     """
-    Metadata to enable displaying an N5 group containing several datasets 
+    Metadata to enable displaying an N5 group containing several datasets
     as a multiresolution dataset in neuroglancer.
     see https://github.com/google/neuroglancer/issues/176#issuecomment-553027775
     Axis properties will be indexed in the opposite order of C-contiguous axis indexing.
@@ -49,8 +51,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         NeuroglancerN5GroupMetadata
         """
         transforms = [
-            SpatialTransform.fromDataArray(array, reverse_axes=True)
-            for array in arrays
+            SpatialTransform.fromDataArray(array, reverse_axes=True) for array in arrays
         ]
         pixelresolution = PixelResolution(
             dimensions=transforms[0].scale, unit=transforms[0].units[0]

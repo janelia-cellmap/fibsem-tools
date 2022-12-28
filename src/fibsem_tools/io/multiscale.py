@@ -1,16 +1,19 @@
 import os
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
+
+import distributed
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any, Dict, Tuple, Optional, Sequence
+from xarray import DataArray
+
+from fibsem_tools.io import initialize_group
+from fibsem_tools.io.dask import store_blocks, write_blocks
 from fibsem_tools.io.io import AccessMode
 from fibsem_tools.io.zarr import lock_array
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
-from fibsem_tools.metadata.transform import SpatialTransform
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
-from xarray import DataArray
-import distributed
-from fibsem_tools.io import initialize_group
-from fibsem_tools.io.dask import store_blocks, write_blocks
+from fibsem_tools.metadata.transform import SpatialTransform
+
 
 class Multiscales:
     def __init__(
@@ -39,7 +42,7 @@ class Multiscales:
         else:
             if not all(isinstance(x, DataArray) for x in arrays.values()):
                 raise ValueError("`arrays` must be a dict of xarray.DataArray")
-        
+
         self.arrays: Dict[str, DataArray] = arrays
         self.attrs = attrs
         self.name = name
@@ -76,7 +79,7 @@ class Multiscales:
         locking: bool = False,
         client: distributed.Client = None,
         access_modes: Tuple[AccessMode, AccessMode] = ("a", "a"),
-        **kwargs
+        **kwargs,
     ):
         """
         Prepare to store the multiscale arrays.
@@ -131,7 +134,7 @@ class Multiscales:
                 array_attrs[k].update(_array_meta[k])
 
         _chunks = _normalize_chunks(self.arrays.values(), chunks)
-       
+
         store_group = initialize_group(
             uri,
             self.arrays.values(),
@@ -140,7 +143,7 @@ class Multiscales:
             group_attrs=group_attrs,
             array_attrs=array_attrs.values(),
             modes=access_modes,
-            **kwargs
+            **kwargs,
         )
         store_arrays = [store_group[key] for key in self.arrays.keys()]
         # todo: remove this when we can control the write-empty-chunksness of arrays
@@ -148,7 +151,7 @@ class Multiscales:
         if "write_empty_chunks" in kwargs:
             for s in store_arrays:
                 s._write_empty_chunks = kwargs.get("write_empty_chunks")
-        
+
         # create locks for the arrays with misaligned chunks
         if locking:
             if client is None:
@@ -173,9 +176,24 @@ class Multiscales:
         return store_group, store_arrays, storage_ops
 
 
-def _normalize_chunks(arrays: Sequence[DataArray], 
-                      chunks: Optional[Tuple[Tuple[int, ...], ...]]) -> Tuple[Tuple[int, ...], ...]:
-        if chunks is None:
-            return tuple(v.data.chunksize for v in arrays)
-        else:
-            return chunks
+def _normalize_chunks(
+    arrays: Sequence[DataArray],
+    chunks: Optional[Union[Tuple[Tuple[int, ...], ...], Tuple[int]]],
+) -> Tuple[Tuple[int, ...], ...]:
+    if chunks is None:
+        result: Tuple[Tuple[int, ...]] = tuple(v.data.chunksize for v in arrays)
+    elif all(isinstance(c, tuple) for c in chunks):
+        result = chunks
+    else:
+        try:
+            all_ints = all((isinstance(c, int) for c in chunks))
+            if all_ints:
+                result = (chunks,) * len(arrays)
+            else:
+                raise ValueError(f"All values in chunks must be ints. Got {chunks}")
+        except TypeError as e:
+            raise e
+
+    assert len(result) == len(arrays)
+    assert tuple(map(len, result)) == tuple(x.ndim for x in arrays)
+    return result

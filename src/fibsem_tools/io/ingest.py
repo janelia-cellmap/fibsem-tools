@@ -1,5 +1,5 @@
-import numpy as np
 import dask.array as da
+import numpy as np
 
 
 def pad_arrays(arrays, constant_values, stack=True):

@@ -4,10 +4,11 @@ Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem
 """
 
 import os
-import numpy as np
-from typing import Any, Iterable, Union, Sequence
 from pathlib import Path
+from typing import Any, Iterable, Sequence, Union
+
 import dask.array as da
+import numpy as np
 from xarray import DataArray
 
 Pathlike = Union[str, Path]

@@ -1,44 +1,28 @@
-from fibsem_tools.metadata.transform import SpatialTransform
-from .fibsem import read_fibsem
-from pathlib import Path
-from numpy.typing import NDArray
-from typing import (
-    Union,
-    Iterable,
-    List,
-    Optional,
-    Callable,
-    Dict,
-    Tuple,
-    Sequence,
-    Any,
-    Literal,
-)
-import dask.array as da
 import os
-from itertools import groupby
 from collections import defaultdict
-import zarr
+from enum import Enum
+from itertools import groupby
+from pathlib import Path
+from typing import (Any, Callable, Dict, Iterable, List, Literal, Optional,
+                    Sequence, Tuple, Union)
+
+import dask.array as da
 import h5py
 import mrcfile
-from xarray import DataArray
-from .mrc import (
-    mrc_coordinate_inference,
-    mrc_shape_dtype_inference,
-    access_mrc,
-    mrc_to_dask,
-)
-from .util import split_by_suffix
-from .zarr import (
-    access_n5,
-    access_zarr,
-    n5_to_dask,
-    zarr_n5_coordinate_inference,
-    zarr_to_dask,
-)
 import numcodecs
+import zarr
 from numcodecs.abc import Codec
-from enum import Enum
+from numpy.typing import NDArray
+from xarray import DataArray
+
+from fibsem_tools.metadata.transform import SpatialTransform
+
+from .fibsem import read_fibsem
+from .mrc import (access_mrc, mrc_coordinate_inference,
+                  mrc_shape_dtype_inference, mrc_to_dask)
+from .util import split_by_suffix
+from .zarr import (access_n5, access_zarr, n5_to_dask,
+                   zarr_n5_coordinate_inference, zarr_to_dask)
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -297,12 +281,10 @@ def initialize_group(
     group_attrs: Dict[str, Any] = {},
     array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
     modes: Tuple[AccessMode, AccessMode] = ("w", "w"),
-    **kwargs
+    **kwargs,
 ) -> zarr.hierarchy.Group:
     group_access_mode, array_access_mode = modes
-    group = access(
-        group_path, mode=group_access_mode, attrs=group_attrs
-    )
+    group = access(group_path, mode=group_access_mode, attrs=group_attrs)
 
     if array_attrs is None:
         _array_attrs: Tuple[Dict[str, Any], ...] = ({},) * len(arrays)

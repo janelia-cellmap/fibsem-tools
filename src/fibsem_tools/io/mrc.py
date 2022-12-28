@@ -1,10 +1,11 @@
-import dask.array as da
-import numpy as np
-from typing import Union, Tuple, List, Sequence
-import mrcfile
-from mrcfile.mrcmemmap import MrcMemmap
 from pathlib import Path
+from typing import List, Sequence, Tuple, Union
+
+import dask.array as da
+import mrcfile
+import numpy as np
 from dask.array.core import normalize_chunks
+from mrcfile.mrcmemmap import MrcMemmap
 from numpy.typing import ArrayLike
 from xarray import DataArray
 
@@ -82,8 +83,10 @@ def mrc_to_dask(urlpath, chunks: Union[str, Sequence[int]], **kwargs):
         # ensure that the last axes are complete
         for idx, shpe in enumerate(shape):
             if idx > 0:
-                if (chunks[idx] != shpe) and (chunks[idx] != -1) :
-                    raise ValueError(f'Chunk sizes of non-leading axes must match the shape of the array. Got chunk_size={chunks[idx]}, expected {shpe}')
+                if (chunks[idx] != shpe) and (chunks[idx] != -1):
+                    raise ValueError(
+                        f"Chunk sizes of non-leading axes must match the shape of the array. Got chunk_size={chunks[idx]}, expected {shpe}"
+                    )
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
     arr = da.map_blocks(mrc_chunk_loader, urlpath, chunks=_chunks, dtype=dtype)
     return arr

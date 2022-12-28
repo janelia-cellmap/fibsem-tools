@@ -1,5 +1,6 @@
+from typing import Optional, Sequence
+
 from pydantic import BaseModel
-from typing import Sequence, Optional
 from xarray import DataArray
 
 
@@ -35,7 +36,7 @@ class COSEMGroupMetadata(BaseModel):
             The name for the multiresolution collection
 
         paths : list or tuple of str or None, default=None
-            The name on the storage backend for each of the arrays in the multiscale collection. 
+            The name on the storage backend for each of the arrays in the multiscale collection.
             If None, the `name` attribute of each array in `dataarrays` will be used.
 
         Returns an instance of COSEMGroupMetadata

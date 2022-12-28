@@ -1,12 +1,12 @@
-from dask import delayed, bag
-from shutil import rmtree
-from glob import glob
 import os
-from typing import List, Optional
-import toolz as tz
-from typing import Sequence, Union, Any, Tuple
+from glob import glob
 from pathlib import Path
+from shutil import rmtree
+from typing import Any, List, Optional, Sequence, Tuple, Union
+
 import fsspec
+import toolz as tz
+from dask import bag, delayed
 
 
 @delayed

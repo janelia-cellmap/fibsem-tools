@@ -1,1 +1,1 @@
-from .io import read, access, read_dask, read_xarray, initialize_group
+from .io import access, initialize_group, read, read_dask, read_xarray

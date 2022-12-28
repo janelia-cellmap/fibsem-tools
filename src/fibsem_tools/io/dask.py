@@ -1,20 +1,20 @@
-from typing import Any, Callable, Literal, Sequence, Tuple, List
-import dask
-import distributed
-import dask.array as da
-import numpy as np
-from numpy.typing import NDArray
-from dask.array.core import slices_from_chunks
+from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple
+
 import backoff
-from dask.array.optimization import fuse_slice
-from typing import Any, Tuple, Optional
+import dask
+import dask.array as da
+import distributed
+import numpy as np
 from aiohttp import ServerDisconnectedError
-from dask.utils import is_arraylike
-from dask.optimization import fuse
-from dask.delayed import Delayed
-from dask.core import flatten
+from dask.array.core import slices_from_chunks
+from dask.array.optimization import fuse_slice
 from dask.base import tokenize
+from dask.core import flatten
+from dask.delayed import Delayed
 from dask.highlevelgraph import HighLevelGraph
+from dask.optimization import fuse
+from dask.utils import is_arraylike
+from numpy.typing import NDArray
 
 
 def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
