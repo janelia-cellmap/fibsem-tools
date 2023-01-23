@@ -2,14 +2,16 @@ import numpy as np
 from xarray import DataArray
 
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata, MultiscaleMeta
-from fibsem_tools.metadata.neuroglancer import (NeuroglancerN5GroupMetadata,
-                                                PixelResolution)
+from fibsem_tools.metadata.neuroglancer import (
+    NeuroglancerN5GroupMetadata,
+    PixelResolution,
+)
 from fibsem_tools.metadata.transform import SpatialTransform
 
 
 def test_SpatialTransform():
     coords = [
-        DataArray(np.arange(10), dims=("z"), attrs={"units": "nm"}),
+        DataArray(np.arange(10), dims=("z")),
         DataArray(np.arange(10) + 5, dims=("y",), attrs={"units": "m"}),
         DataArray(10 + (np.arange(10) * 10), dims=("x",), attrs={"units": "km"}),
     ]
@@ -19,7 +21,7 @@ def test_SpatialTransform():
     assert transform == SpatialTransform(
         order="C",
         axes=["z", "y", "x"],
-        units=["nm", "m", "km"],
+        units=["m", "m", "km"],
         translate=[0.0, 5.0, 10.0],
         scale=[1.0, 1.0, 10.0],
     )
@@ -28,7 +30,7 @@ def test_SpatialTransform():
     assert transform == SpatialTransform(
         order="F",
         axes=["x", "y", "z"],
-        units=["km", "m", "nm"],
+        units=["km", "m", "m"],
         translate=[10.0, 5.0, 0.0],
         scale=[10.0, 1.0, 1.0],
     )
