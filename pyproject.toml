@@ -20,12 +20,31 @@ backoff = "^1.10.0"
 s3fs = ">=2022.2.0"
 
 [tool.poetry.dev-dependencies]
-mypy = "^0.790"
-black = "22.3.0"
 pytest = "^6.1.2"
 pytest-cov = "^3.0.0"
-isort = "^5.11.4"
+pre-commit = "2.21.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+plugins = [
+  "pydantic.mypy"
+]
+
+follow_imports = "silent"
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+
+# for strict mypy: (this is the tricky one :-))
+disallow_untyped_defs = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+warn_untyped_fields = true

@@ -1,15 +1,12 @@
 from enum import Enum
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Union, Literal
 
 import numpy as np
 import numpy.typing as npt
 from pydantic import BaseModel, root_validator
 from xarray import DataArray
 
-
-class ArrayOrder(str, Enum):
-    C = "C"
-    F = "F"
+ArrayOrder = Literal["C", "F"]
 
 
 class SpatialTransform(BaseModel):
@@ -86,7 +83,8 @@ class SpatialTransform(BaseModel):
             output_order = "F"
 
         axes = [str(d) for d in array.dims[orderer]]
-        units = [array.coords[ax].attrs.get("units") for ax in axes]
+        # default unit is m
+        units = [array.coords[ax].attrs.get("units", "m") for ax in axes]
         translate = [float(array.coords[ax][0]) for ax in axes]
         scale = []
         for ax in axes:
