@@ -7,12 +7,13 @@ from typing import Any, Dict, List, Sequence, Tuple, Union
 import dask.array as da
 import numpy as np
 import zarr
+from zarr.storage import FSStore, contains_array, contains_group
 from dask import bag, delayed
 from distributed import Client, Lock
 from toolz import concat
 from xarray import DataArray
 from zarr.indexing import BasicIndexer
-
+from zarr.errors import ContainsGroupError
 from fibsem_tools.io.util import split_by_suffix
 
 # default axis order of zarr spatial metadata
@@ -22,7 +23,7 @@ ZARR_AXES_3D = ["z", "y", "x"]
 # default axis order of raw n5 spatial metadata
 # is x,y,z
 N5_AXES_3D = ZARR_AXES_3D[::-1]
-DEFAULT_ZARR_STORE = zarr.NestedDirectoryStore
+DEFAULT_ZARR_STORE = FSStore
 logger = logging.getLogger(__name__)
 
 Pathlike = Union[str, Path]
@@ -80,7 +81,7 @@ def delete_zarray(arr: zarr.core.Array, compute: bool = True):
 
     if not isinstance(arr, zarr.core.Array):
         raise TypeError(
-            f"Cannot use the delete_zarray function on object of type {type(zarray)}"
+            f"Cannot use the delete_zarray function on object of type {type(arr)}"
         )
 
     keys = map(lambda v: os.path.join(arr.chunk_store.path, v), arr.chunk_store.keys())
@@ -147,23 +148,33 @@ def access_zarr(store: Pathlike, path: Pathlike, **kwargs) -> Any:
         path = str(path)
 
     attrs = kwargs.pop("attrs", {})
+    access_mode = kwargs.pop("mode", "a")
 
-    # zarr is extremely slow to delete existing directories, so we do it ourselves
-    if kwargs.get("mode") == "w":
-        tmp_kwargs = kwargs.copy()
-        tmp_kwargs["mode"] = "a"
-        tmp = zarr.open(store, path=path, **tmp_kwargs)
-        # todo: move this logic to methods on the stores themselves
-        if isinstance(
-            tmp.store, (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
-        ):
-            logger.info(f"Beginning parallel rmdir of {tmp.path}...")
-            pre = time.time()
-            delete_zbranch(tmp)
-            post = time.time()
-            logger.info(f"Completed parallel rmdir of {tmp.path} in {post - pre}s.")
-    array_or_group = zarr.open(store, path=path, **kwargs)
-    if kwargs.get("mode") != "r" and len(attrs) > 0:
+    if access_mode == "w":
+        if contains_group(store, path) or contains_array(store, path):
+            # zarr is extremely slow to delete existing directories, so we do it in parallel
+            existing = zarr.open(store, path=path, **kwargs, mode="a")
+            # todo: move this logic to methods on the stores themselves
+            if isinstance(
+                existing.store,
+                (
+                    zarr.N5Store,
+                    zarr.N5FSStore,
+                    zarr.DirectoryStore,
+                    zarr.NestedDirectoryStore,
+                ),
+            ):
+                url = os.path.join(existing.store.path, existing.path)
+                logger.info(f"Beginning parallel deletion of {url}...")
+                pre = time.time()
+                delete_zbranch(existing)
+                logger.info(
+                    f"Completed parallel deletion of {url} in {time.time() - pre}s."
+                )
+
+    array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
+
+    if access_mode != "r":
         array_or_group.attrs.update(attrs)
     return array_or_group
 
