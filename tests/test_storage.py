@@ -17,9 +17,8 @@ from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.h5 import access_h5
 from fibsem_tools.io.io import initialize_group, read_dask
 from fibsem_tools.io.mrc import access_mrc
-from fibsem_tools.io.util import (list_files, list_files_parallel,
-                                  split_by_suffix)
-from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE
+from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
+from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE, delete_zbranch, get_chunk_keys
 
 
 def _make_local_files(files):
@@ -201,3 +200,21 @@ def test_group_initialization():
         assert data[d].shape == group[d].shape
         assert data[d].dtype == group[d].dtype
         assert a_attrs[d] == dict(group[d].attrs)
+
+
+def test_deletion():
+    store_path = tempfile.mkdtemp(suffix=".zarr")
+    atexit.register(shutil.rmtree, store_path)
+    existing = access(f"{store_path}/bar", mode="w", shape=(10,), chunks=(1,))
+    existing[:] = 10
+    keys = tuple(existing.chunk_store.keys())
+
+    for key in keys:
+        assert key in existing.chunk_store
+
+    # delete
+    delete_zbranch(existing)
+
+    for key in keys:
+        if existing.name in key:
+            assert key not in existing.chunk_store

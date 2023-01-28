@@ -15,6 +15,7 @@ from xarray import DataArray
 from zarr.indexing import BasicIndexer
 from zarr.errors import ContainsGroupError
 from fibsem_tools.io.util import split_by_suffix
+from functools import partial
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -76,7 +77,7 @@ def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool = True):
 
 def delete_zarray(arr: zarr.core.Array, compute: bool = True):
     """
-    Delete a zarr array.
+    Delete all the chunks in a zarr array.
     """
 
     if not isinstance(arr, zarr.core.Array):
@@ -84,13 +85,15 @@ def delete_zarray(arr: zarr.core.Array, compute: bool = True):
             f"Cannot use the delete_zarray function on object of type {type(arr)}"
         )
 
-    keys = map(lambda v: os.path.join(arr.chunk_store.path, v), arr.chunk_store.keys())
-    key_bag = bag.from_sequence(keys)
-    delete_op = key_bag.map_partitions(lambda v: [os.remove(f) for f in v])
-    if compute:
-        return delete_op.compute()
-    else:
-        return delete_op
+    key_bag = bag.from_sequence(get_chunk_keys(arr))
+
+    def _remove_by_keys(store, keys: List[str]):
+        for key in keys:
+            del store[key]
+
+    delete_op = key_bag.map_partitions(lambda v: _remove_by_keys(arr.chunk_store, v))
+    delete_op.compute()
+    arr.chunk_store.rmdir(arr.path)
 
 
 def same_compressor(arr: zarr.Array, compressor) -> bool:
@@ -144,6 +147,10 @@ def access_zarr(store: Pathlike, path: Pathlike, **kwargs) -> Any:
     if isinstance(store, str) and kwargs.get("mode") == "w":
         store = DEFAULT_ZARR_STORE(store)
 
+    # set default dimension separator to /
+    if "shape" in kwargs and "dimension_separator" not in kwargs:
+        kwargs["dimension_separator"] = "/"
+
     if isinstance(path, Path):
         path = str(path)
 
@@ -165,11 +172,11 @@ def access_zarr(store: Pathlike, path: Pathlike, **kwargs) -> Any:
                 ),
             ):
                 url = os.path.join(existing.store.path, existing.path)
-                logger.info(f"Beginning parallel deletion of {url}...")
+                logger.info(f"Beginning parallel deletion of chunks in {url}...")
                 pre = time.time()
                 delete_zbranch(existing)
                 logger.info(
-                    f"Completed parallel deletion of {url} in {time.time() - pre}s."
+                    f"Completed parallel deletion of chunks in {url} in {time.time() - pre}s."
                 )
 
     array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
