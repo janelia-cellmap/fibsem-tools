@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple, Union
+from typing import Any, Dict, Generator, List, Sequence, Tuple, Union
 
 import dask.array as da
 import numpy as np
@@ -274,11 +274,17 @@ def is_n5(array: zarr.core.Array) -> bool:
 
 def get_chunk_keys(
     array: zarr.core.Array, region: slice = slice(None)
-) -> Sequence[str]:
+) -> Generator[str, None, None]:
     indexer = BasicIndexer(region, array)
     chunk_coords = (idx.chunk_coords for idx in indexer)
     keys = (array._chunk_key(cc) for cc in chunk_coords)
     return keys
+
+
+def chunk_grid_shape(
+    array_shape: Tuple[int, ...], chunk_shape: Tuple[int, ...]
+) -> Tuple[int, ...]:
+    return tuple(np.ceil(np.divide(array_shape, chunk_shape)).astype("int").tolist())
 
 
 class ChunkLock:
