@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
 import backoff
 import dask
@@ -13,8 +13,9 @@ from dask.core import flatten
 from dask.delayed import Delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.optimization import fuse
-from dask.utils import is_arraylike
-from numpy.typing import NDArray
+from dask.utils import is_arraylike, parse_bytes
+from zarr.util import normalize_chunks as normalize_chunksize
+from numpy.typing import NDArray, DTypeLike
 
 
 def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
@@ -169,3 +170,90 @@ def ensure_minimum_chunksize(array, chunksize):
     if np.any(chunk_fitness):
         new_chunks[chunk_fitness] = np.array(chunksize)[chunk_fitness]
     return array.rechunk(new_chunks.tolist())
+
+
+def autoscale_chunk_shape(
+    chunk_shape: Tuple[int, ...],
+    array_shape: Tuple[int, ...],
+    size_limit: Union[str, int],
+    dtype: DTypeLike,
+):
+
+    """
+    Scale a chunk size by an integer factor along each axis as much as possible without producing a chunk greater than a
+    given size limit. Scaling will be applied to axes in decreasing order of length.
+
+    Parameters
+    ----------
+
+    chunk_shape : type
+        description
+    array_shape : type
+        description
+    size_limit : type
+        description
+    dtype : type
+        description
+
+
+    Returns
+    -------
+
+    tuple of ints
+        The original chunk size after each element has been multiplied by some integer.
+
+
+    Examples
+    --------
+
+    """
+
+    item_size = np.dtype(dtype).itemsize
+
+    if isinstance(size_limit, str):
+        size_limit_bytes = parse_bytes(size_limit)
+    elif isinstance(size_limit, int):
+        size_limit_bytes = size_limit
+    else:
+        raise TypeError(
+            f"Could parse {item_size}, it should be type int or str, got {type(item_size)}"
+        )
+
+    if size_limit_bytes < 1:
+        raise ValueError(f"Chunk size limit {size_limit} is too small.")
+
+    normalized_chunk_shape = normalize_chunksize(chunk_shape, array_shape, item_size)
+    result = normalized_chunk_shape
+    chunk_size_bytes = np.prod(normalized_chunk_shape) * item_size
+
+    size_ratio = size_limit_bytes / chunk_size_bytes
+    chunk_grid_shape = np.ceil(np.divide(array_shape, chunk_shape)).astype("int")
+
+    if size_ratio < 1:
+        return result
+    else:
+        target_nchunks = np.ceil(size_ratio).astype("int")
+
+    # operate in chunk grid coordinates
+    # start with 1 chunk
+    scale_vector = [
+        1,
+    ] * len(chunk_shape)
+    sorted_idx = reversed(np.argsort(chunk_grid_shape))
+    # iterate over axes in order of length
+    for idx in sorted_idx:
+        # compute how many chunks are still needed
+        chunks_needed = target_nchunks - np.prod(scale_vector)
+        # compute number of chunks available along this axis
+        chunks_available = np.prod(scale_vector) * chunk_grid_shape[idx]
+        if chunks_needed > chunks_available:
+            scale_vector[idx] = chunk_grid_shape[idx]
+        else:
+            scale_vector[idx] = max(
+                1, np.floor_divide(chunks_needed, np.prod(scale_vector))
+            )
+            break
+
+    result = tuple(np.multiply(scale_vector, normalized_chunk_shape).tolist())
+
+    return result
