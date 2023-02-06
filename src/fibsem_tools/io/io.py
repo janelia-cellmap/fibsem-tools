@@ -1,10 +1,22 @@
 import os
+from os import PathLike
 from collections import defaultdict
 from enum import Enum
 from itertools import groupby
 from pathlib import Path
-from typing import (Any, Callable, Dict, Iterable, List, Literal, Optional,
-                    Sequence, Tuple, Union)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+from urllib.parse import urlparse
 
 import dask.array as da
 import h5py
@@ -18,11 +30,20 @@ from xarray import DataArray
 from fibsem_tools.metadata.transform import SpatialTransform
 
 from .fibsem import read_fibsem
-from .mrc import (access_mrc, mrc_coordinate_inference,
-                  mrc_shape_dtype_inference, mrc_to_dask)
+from .mrc import (
+    access_mrc,
+    mrc_coordinate_inference,
+    mrc_shape_dtype_inference,
+    mrc_to_dask,
+)
 from .util import split_by_suffix
-from .zarr import (access_n5, access_zarr, n5_to_dask,
-                   zarr_n5_coordinate_inference, zarr_to_dask)
+from .zarr import (
+    access_n5,
+    access_zarr,
+    n5_to_dask,
+    zarr_n5_coordinate_inference,
+    zarr_to_dask,
+)
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -32,8 +53,9 @@ _formats = (".dat", ".mrc")
 _container_extensions = (".zarr", ".n5", ".h5")
 _suffixes = (*_formats, *_container_extensions)
 
-Pathlike = Union[str, Path]
 defaultUnit = "nm"
+
+Attrs = Dict[str, Any]
 
 
 class AccessMode(str, Enum):
@@ -70,7 +92,7 @@ def broadcast_kwargs(**kwargs) -> Dict:
 
 
 def access_fibsem(
-    path: Union[Pathlike, Iterable[str], Iterable[Path]], mode: AccessMode
+    path: Union[PathLike, Iterable[str], Iterable[Path]], mode: AccessMode
 ):
     if mode != "r":
         raise ValueError(
@@ -80,7 +102,7 @@ def access_fibsem(
 
 
 def access_h5(
-    dir_path: Pathlike, container_path: Pathlike, mode: str, **kwargs
+    dir_path: PathLike, container_path: PathLike, mode: str, **kwargs
 ) -> Union[h5py.Dataset, h5py.Group]:
     result = h5py.File(dir_path, mode=mode, **kwargs)
     if container_path != "":
@@ -102,7 +124,7 @@ daskifiers[".zarr"] = zarr_to_dask
 
 
 def access(
-    path: Union[Pathlike, Iterable[str], Iterable[Path]],
+    path: Union[PathLike, Iterable[str], Iterable[Path]],
     mode: AccessMode,
     **kwargs: Dict[str, Any],
 ) -> Any:
@@ -154,7 +176,7 @@ def access(
         raise ValueError("`path` must be a string or iterable of strings")
 
 
-def read(path: Union[Pathlike, Iterable[str], Iterable[Path]], **kwargs):
+def read(path: Union[PathLike, Iterable[str], Iterable[Path]], **kwargs):
     """
 
     Read-only access for data (arrays and groups) from a variety of hierarchical array storage formats.
@@ -274,7 +296,7 @@ def DataArrayFactory(arr: Any, **kwargs: Dict[str, Any]) -> DataArray:
 
 
 def initialize_group(
-    group_path: Pathlike,
+    group_path: PathLike,
     arrays: Sequence[NDArray[Any]],
     array_paths: Sequence[str],
     chunks: Sequence[int],
@@ -318,3 +340,53 @@ def infer_dtype(path: str) -> str:
     else:
         raise ValueError(f"Cannot infer dtype of data located at {path}")
     return dtype
+
+
+def create_group(
+    group_url: PathLike,
+    arrays: Sequence[NDArray[Any]],
+    array_paths: Sequence[str],
+    chunks: Sequence[int],
+    group_attrs: Attrs = {},
+    array_attrs: Optional[Sequence[Attrs]] = None,
+    group_mode: AccessMode = "w-",
+    array_mode: AccessMode = "w-",
+    **array_kwargs,
+) -> Tuple[str, Tuple[str, ...]]:
+
+    bad_paths = []
+    for path in array_paths:
+        if len(Path(path).parts) > 1:
+            bad_paths.append(path)
+
+    if len(bad_paths):
+        raise ValueError(
+            f"Array paths cannot be nested. The following paths violate this rule: {bad_paths}"
+        )
+    protocol = urlparse(group_url).scheme
+    protocol_prefix = ""
+    if protocol != "":
+        protocol_prefix = protocol + "://"
+    group = access(group_url, mode=group_mode, attrs=group_attrs)
+
+    if array_attrs is None:
+        _array_attrs: Tuple[Attrs, ...] = ({},) * len(arrays)
+    else:
+        _array_attrs = array_attrs
+
+    for idx, array in enumerate(arrays):
+        name = array_paths[idx]
+        path = protocol_prefix + os.path.join(group.store.path, group.path, name)
+        z_arr = access(
+            path=path,
+            mode=array_mode,
+            shape=array.shape,
+            dtype=array.dtype,
+            chunks=chunks[idx],
+            attrs=_array_attrs[idx],
+            **array_kwargs,
+        )
+    g_url = protocol_prefix + os.path.join(group.store.path, group.path)
+    a_urls = [os.path.join(g_url, name) for name in array_paths]
+
+    return g_url, a_urls

@@ -1,4 +1,4 @@
-import os
+from os import PathLike
 from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union, List
 from pathlib import Path
 from urllib.parse import urlparse
@@ -8,7 +8,8 @@ import numpy as np
 from numpy.typing import NDArray
 from xarray import DataArray
 
-from fibsem_tools.io import initialize_group, access
+import zarr
+from fibsem_tools.io import initialize_group, access, create_group
 from fibsem_tools.io.dask import store_blocks, write_blocks
 from fibsem_tools.io.io import AccessMode
 from fibsem_tools.io.zarr import lock_array
@@ -18,10 +19,8 @@ from fibsem_tools.metadata.transform import SpatialTransform
 from zarr.errors import ContainsGroupError
 from numcodecs.abc import Codec
 
-Attrs = Dict[str, Any]
 JSON = Union[dict[str, "JSON"], list["JSON"], str, int, float, bool, None]
-
-PathLike = Union[str, Path]
+from fibsem_tools.io.io import Attrs
 
 multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem"]
 
@@ -243,56 +242,6 @@ def create_multiscale_metadata(
     return group_attrs, array_attrs
 
 
-def create_group(
-    group_url: PathLike,
-    arrays: Sequence[NDArray[Any]],
-    array_paths: Sequence[str],
-    chunks: Sequence[int],
-    group_attrs: Attrs = {},
-    array_attrs: Optional[Sequence[Attrs]] = None,
-    group_mode: AccessMode = "w-",
-    array_mode: AccessMode = "w-",
-    **array_kwargs,
-) -> Tuple[str, Tuple[str, ...]]:
-
-    bad_paths = []
-    for path in array_paths:
-        if len(Path(path).parts) > 1:
-            bad_paths.append(path)
-
-    if len(bad_paths):
-        raise ValueError(
-            f"Array paths cannot be nested. The following paths violate this rule: {bad_paths}"
-        )
-    protocol = urlparse(group_url).scheme
-    protocol_prefix = ""
-    if protocol != "":
-        protocol_prefix = protocol + "://"
-    group = access(group_url, mode=group_mode, attrs=group_attrs)
-
-    if array_attrs is None:
-        _array_attrs: Tuple[Attrs, ...] = ({},) * len(arrays)
-    else:
-        _array_attrs = array_attrs
-
-    for idx, array in enumerate(arrays):
-        name = array_paths[idx]
-        path = protocol_prefix + os.path.join(group.store.path, group.path, name)
-        z_arr = access(
-            path=path,
-            mode=array_mode,
-            shape=array.shape,
-            dtype=array.dtype,
-            chunks=chunks[idx],
-            attrs=_array_attrs[idx],
-            **array_kwargs,
-        )
-    g_url = protocol_prefix + os.path.join(group.store.path, group.path)
-    a_urls = [os.path.join(g_url, name) for name in array_paths]
-
-    return g_url, a_urls
-
-
 def create_multiscale_group(
     group_url: str,
     arrays: List[DataArray],
@@ -376,3 +325,16 @@ def prepare_multiscale(
     )
 
     return scratch_array_urls, dest_array_urls
+
+
+# TODO: make this more robust
+def is_multiscale_group(node: Any) -> bool:
+    if isinstance(node, zarr.Group):
+        if (
+            "multiscales" in node.attrs
+            or "scales" in node.attrs
+            or "scale_factors" in node.attrs
+        ):
+            return True
+
+    return False

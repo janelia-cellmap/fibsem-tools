@@ -1,12 +1,17 @@
+from os import PathLike
 from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
 import backoff
 import dask
 import dask.array as da
+from dask.bag import from_sequence
 import distributed
 import numpy as np
 from aiohttp import ServerDisconnectedError
-from dask.array.core import slices_from_chunks
+from dask.array.core import (
+    slices_from_chunks,
+    normalize_chunks as normalize_chunks_dask,
+)
 from dask.array.optimization import fuse_slice
 from dask.base import tokenize
 from dask.core import flatten
@@ -16,6 +21,11 @@ from dask.optimization import fuse
 from dask.utils import is_arraylike, parse_bytes
 from zarr.util import normalize_chunks as normalize_chunksize
 from numpy.typing import NDArray, DTypeLike
+import random
+from fibsem_tools.io.io import access, read
+from fibsem_tools.io.zarr import are_chunks_aligned
+
+random.seed(0)
 
 
 def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
@@ -257,3 +267,51 @@ def autoscale_chunk_shape(
     result = tuple(np.multiply(scale_vector, normalized_chunk_shape).tolist())
 
     return result
+
+
+@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+def setitem(source, dest, sl):
+    dest[sl] = source[sl]
+
+
+def copy_from_slices(slices, source_array, dest_array):
+    for sl in slices:
+        setitem(source_array, dest_array, sl)
+
+
+def copy_array(
+    source_url: PathLike,
+    dest_url: PathLike,
+    read_chunks: Tuple[int, ...],
+    write_empty_chunks: bool = False,
+    npartitions: int = 10000,
+    randomize: bool = True,
+):
+    """
+    Copy data from one chunked array to another
+    """
+
+    source_arr = read(source_url)
+    dest_arr = access(dest_url, mode="a", write_empty_chunks=write_empty_chunks)
+
+    # assume we are given a size in bytes
+    if isinstance(read_chunks, str):
+        chunk_size_limit_bytes = parse_bytes(read_chunks)
+
+        read_chunks = autoscale_chunk_shape(
+            dest_arr.chunks, chunk_size_limit_bytes, dest_arr.dtype, dest_arr.shape
+        )
+
+    assert source_arr.shape == dest_arr.shape
+    assert source_arr.dtype == dest_arr.dtype
+    assert are_chunks_aligned(read_chunks, dest_arr.chunks)
+
+    chunks_normalized = normalize_chunks_dask(read_chunks, shape=dest_arr.shape)
+    slices = slices_from_chunks(chunks_normalized)
+
+    # randomization to ensure that we don't create prefix hotspots when writing to object storage
+    if randomize:
+        slices = random.sample(slices, len(slices))
+    slice_bag = from_sequence(slices, npartitions=min(npartitions, len(slices)))
+
+    return slice_bag.map_partitions(copy_from_slices, source_arr, dest_arr)

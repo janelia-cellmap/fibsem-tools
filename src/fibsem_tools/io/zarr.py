@@ -1,10 +1,12 @@
 import logging
 import os
+from os import PathLike
 import time
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Sequence, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
 
 import dask.array as da
+from dask.utils import parse_bytes
 import numpy as np
 import zarr
 from zarr.storage import FSStore, contains_array, contains_group
@@ -13,9 +15,9 @@ from distributed import Client, Lock
 from toolz import concat
 from xarray import DataArray
 from zarr.indexing import BasicIndexer
-from zarr.errors import ContainsGroupError
 from fibsem_tools.io.util import split_by_suffix
 from functools import partial
+from numpy.typing import NDArray
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -26,8 +28,6 @@ ZARR_AXES_3D = ["z", "y", "x"]
 N5_AXES_3D = ZARR_AXES_3D[::-1]
 DEFAULT_ZARR_STORE = FSStore
 logger = logging.getLogger(__name__)
-
-Pathlike = Union[str, Path]
 
 
 def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
@@ -140,7 +140,7 @@ def zarr_array_from_dask(arr: Any) -> Any:
     return arr.dask[keys[-1]]
 
 
-def access_zarr(store: Pathlike, path: Pathlike, **kwargs) -> Any:
+def access_zarr(store: PathLike, path: PathLike, **kwargs) -> Any:
     if isinstance(store, Path):
         store = str(store)
 
@@ -186,7 +186,7 @@ def access_zarr(store: Pathlike, path: Pathlike, **kwargs) -> Any:
     return array_or_group
 
 
-def access_n5(store: Pathlike, path: Pathlike, **kwargs) -> Any:
+def access_n5(store: PathLike, path: PathLike, **kwargs) -> Any:
     store = zarr.N5FSStore(store, **kwargs.get("storage_options", {}))
     return access_zarr(store, path, **kwargs)
 
@@ -316,3 +316,12 @@ def lock_array(array: zarr.core.Array, client: Client) -> zarr.core.Array:
         store=array.store, path=array.path, synchronizer=lock, mode="a"
     )
     return locked_array
+
+
+def are_chunks_aligned(
+    source_chunks: Tuple[int, ...], dest_chunks: Tuple[int, ...]
+) -> bool:
+    assert len(source_chunks) == len(dest_chunks)
+    return all(
+        s_chunk % d_chunk == 0 for s_chunk, d_chunk in zip(source_chunks, dest_chunks)
+    )
