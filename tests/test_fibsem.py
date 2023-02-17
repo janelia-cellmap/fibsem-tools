@@ -1,4 +1,4 @@
-from fibsem_tools.io import read
+from fibsem_tools import read
 
 
 def test_fibsem_v9_header_parse():

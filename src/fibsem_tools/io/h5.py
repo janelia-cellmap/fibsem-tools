@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Literal, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 
 import h5py
 
@@ -81,7 +81,10 @@ def access_h5(
         if len(dataset_kwargs) > 0:
             if "name" in dataset_kwargs:
                 warnings.warn(
-                    '"Name" was provided to this function as a keyword argument. This value will be replaced with the second argument to this function.'
+                    """
+                    'Name' was provided to this function as a keyword argument. This 
+                    value will be replaced with the second argument to this function.
+                    """
                 )
             dataset_kwargs["name"] = path
             result = h5f.create_dataset(**dataset_kwargs)

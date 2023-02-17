@@ -22,7 +22,7 @@ from dask.utils import is_arraylike, parse_bytes
 from zarr.util import normalize_chunks as normalize_chunksize
 from numpy.typing import NDArray, DTypeLike
 import random
-from fibsem_tools.io.io import access, read
+from fibsem_tools.io.core import access, read
 from fibsem_tools.io.zarr import are_chunks_aligned
 
 random.seed(0)
@@ -30,8 +30,8 @@ random.seed(0)
 
 def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
     """
-    Apply task fusion optimization to tasks. Useful (or even required)
-    because dask.delayed optimization doesn't do this step.
+    Apply task fusion optimization to tasks. Useful (or even required) because
+    dask.delayed optimization doesn't do this step.
     """
     dsk_fused, deps = fuse(dask.utils.ensure_dict(tasks.dask))
     fused = Delayed(tasks._key, dsk_fused)
@@ -47,8 +47,8 @@ def sequential_rechunk(
     num_workers: int,
 ) -> List[None]:
     """
-    Load slabs of an array into local memory, then create a dask array and rechunk that dask array, then store into
-    chunked array storage.
+    Load slabs of an array into local memory, then create a dask array and rechunk that
+    dask array, then store into chunked array storage.
     """
     results = []
     slices = slices_from_chunks(source.rechunk(slab_size).chunks)
@@ -164,7 +164,10 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.A
 
     if len(sources) != len(regions):
         raise ValueError(
-            f"Different number of sources [{len(sources)}] and targets [{len(targets)}] than regions [{len(regions)}]"
+            f"""
+            Different number of sources [{len(sources)}] and targets [{len(targets)}] 
+            than regions [{len(regions)}]
+            """
         )
 
     for source, target, region in zip(sources, targets, regions):
@@ -190,12 +193,12 @@ def autoscale_chunk_shape(
 ):
 
     """
-    Scale a chunk size by an integer factor along each axis as much as possible without producing a chunk greater than a
-    given size limit. Scaling will be applied to axes in decreasing order of length.
+    Scale a chunk size by an integer factor along each axis as much as possible without
+    producing a chunk greater than a given size limit. Scaling will be applied to axes
+    in decreasing order of length.
 
     Parameters
     ----------
-
     chunk_shape : type
         description
     array_shape : type
@@ -208,7 +211,6 @@ def autoscale_chunk_shape(
 
     Returns
     -------
-
     tuple of ints
         The original chunk size after each element has been multiplied by some integer.
 
@@ -226,7 +228,9 @@ def autoscale_chunk_shape(
         size_limit_bytes = size_limit
     else:
         raise TypeError(
-            f"Could parse {item_size}, it should be type int or str, got {type(item_size)}"
+            f"""
+            Could parse {item_size}, it should be type int or str, got 
+            {type(item_size)}"""
         )
 
     if size_limit_bytes < 1:
@@ -309,9 +313,69 @@ def copy_array(
     chunks_normalized = normalize_chunks_dask(read_chunks, shape=dest_arr.shape)
     slices = slices_from_chunks(chunks_normalized)
 
-    # randomization to ensure that we don't create prefix hotspots when writing to object storage
+    # randomization to ensure that we don't create prefix hotspots when writing to
+    # object storage
     if randomize:
         slices = random.sample(slices, len(slices))
     slice_bag = from_sequence(slices, npartitions=min(npartitions, len(slices)))
 
     return slice_bag.map_partitions(copy_from_slices, source_arr, dest_arr)
+
+
+def pad_arrays(arrays, constant_values, stack=True):
+    """
+    Pad arrays with variable axis sizes. A bounding box is calculated across all the
+    arrays and each sub-array is padded to fit within the bounding box. This is a light
+    wrapper around dask.array.pad. If `stack` is True, the arrays will be combined into
+    a larger array via da.stack.
+
+    Parameters
+    ----------
+    arrays : iterable of dask arrays
+
+    constant_values : any
+        A number which specifies the fill value / mode to use when padding.
+
+    stack: boolean
+        Determines whether the result is a single dask array (stack=True) or a list of
+        dask arrays (stack=False).
+
+    Returns
+    -------
+    padded arrays and a list of paddings.
+    """
+
+    shapes = np.array([a.shape for a in arrays])
+    bounds = shapes.max(0)
+    pad_extent = [
+        list(zip([0] * shapes.shape[1], (bounds - np.array(a.shape)).tolist()))
+        for a in arrays
+    ]
+
+    # pad elements of the first axis differently
+    def padfun(array, pad_width, constant_values):
+        return np.stack(
+            [
+                np.pad(a, pad_width, constant_values=cv)
+                for a, cv in zip(array, constant_values)
+            ]
+        )
+
+    # If all the shapes are identical no padding is needed.
+    if np.unique(shapes, axis=0).shape[0] == 1:
+        padded = arrays
+    else:
+        padded = [
+            a.map_blocks(
+                padfun,
+                pad_width=pad_extent[ind][1:],
+                constant_values=constant_values,
+                chunks=tuple(
+                    c + p[1] - p[0] for c, p in zip(a.chunksize, pad_extent[ind])
+                ),
+                dtype=a.dtype,
+            )
+            for ind, a in enumerate(arrays)
+        ]
+
+    return padded, pad_extent

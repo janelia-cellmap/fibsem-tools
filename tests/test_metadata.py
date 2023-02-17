@@ -1,7 +1,9 @@
 import numpy as np
 from xarray import DataArray
-
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata, MultiscaleMeta
+from fibsem_tools.metadata.cosem import (
+    COSEMGroupMetadata,
+    MultiscaleMeta as COSEMMultiscaleMeta,
+)
 from fibsem_tools.metadata.neuroglancer import (
     NeuroglancerN5GroupMetadata,
     PixelResolution,
@@ -90,5 +92,5 @@ def test_cosem_ome():
     )
 
     assert cosem_ome_group_metadata == COSEMGroupMetadata(
-        multiscales=[MultiscaleMeta(name="data", datasets=paths)]
+        multiscales=[COSEMMultiscaleMeta(name="data", datasets=paths)]
     )

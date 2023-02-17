@@ -26,7 +26,7 @@ The bulk of this libary is a collection of python functions that provide a unifo
 Because physical coordinates and metadata are extremely important for imaging data, this library uses the [`DataArray`](http://xarray.pydata.org/en/stable/generated/xarray.DataArray.html) datastructure from [`xarray`](https://github.com/pydata/xarray) to represent FIB-SEM data as arrays with spatial coordinates + metadata. E.g.,
 
 ```python
->>> from fibsem_tools.io import read_xarray
+>>> from fibsem_tools import read_xarray
 >>> uri = 's3://janelia-cosem-datasets/jrc_sum159-1/jrc_sum159-1.n5/labels/gt/0003/crop26/labels/all/s0/'
 # This is lazy, no data will be transferred from s3
 >>> result = read_xarray(uri, storage_options={'anon' : True})

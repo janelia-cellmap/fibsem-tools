@@ -1,8 +1,6 @@
 import os
 from os import PathLike
-from collections import defaultdict
 from enum import Enum
-from itertools import groupby
 from pathlib import Path
 from typing import (
     Any,
@@ -10,7 +8,6 @@ from typing import (
     Dict,
     Iterable,
     List,
-    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -21,29 +18,29 @@ from urllib.parse import urlparse
 import dask.array as da
 import h5py
 import mrcfile
-import numcodecs
 import zarr
-from numcodecs.abc import Codec
 from numpy.typing import NDArray
 from xarray import DataArray
 
 from fibsem_tools.metadata.transform import SpatialTransform
-
-from .fibsem import read_fibsem
-from .mrc import (
+from fibsem_tools.io.types import Attrs
+from fibsem_tools.io.fibsem import read_fibsem
+from fibsem_tools.io.mrc import (
     access_mrc,
     mrc_coordinate_inference,
     mrc_shape_dtype_inference,
     mrc_to_dask,
 )
-from .util import split_by_suffix
-from .zarr import (
+from fibsem_tools.io.util import split_by_suffix
+from fibsem_tools.io.zarr import (
     access_n5,
+    access_parent,
     access_zarr,
     n5_to_dask,
     zarr_n5_coordinate_inference,
     zarr_to_dask,
 )
+
 
 # encode the fact that the first axis in zarr is the z axis
 _zarr_axes = {"z": 0, "y": 1, "x": 2}
@@ -53,10 +50,6 @@ _formats = (".dat", ".mrc")
 _container_extensions = (".zarr", ".n5", ".h5")
 _suffixes = (*_formats, *_container_extensions)
 
-defaultUnit = "nm"
-
-Attrs = Dict[str, Any]
-
 
 class AccessMode(str, Enum):
     w = "w"
@@ -64,31 +57,6 @@ class AccessMode(str, Enum):
     r = "r"
     r_plus = "r+"
     a = "a"
-
-
-def broadcast_kwargs(**kwargs) -> Dict:
-    """
-    For each keyword: arg in kwargs, assert that there are only 2 types of args: sequences with length = 1
-    or sequences with some length = k. Every arg with length 1 will be repeated k times, such that the return value
-    is a dict of kwargs with minimum length = k.
-    """
-    grouped: Dict[str, List] = defaultdict(list)
-    sorter = lambda v: len(v[1])
-    s = sorted(kwargs.items(), key=sorter)
-    for l, v in groupby(s, key=sorter):
-        grouped[l].extend(v)
-
-    assert len(grouped.keys()) <= 2
-    if len(grouped.keys()) == 2:
-        assert min(grouped.keys()) == 1
-        output_length = max(grouped.keys())
-        singletons, nonsingletons = tuple(grouped.values())
-        singletons = ((k, v * output_length) for k, v in singletons)
-        result = {**dict(singletons), **dict(nonsingletons)}
-    else:
-        result = kwargs
-
-    return result
 
 
 def access_fibsem(
@@ -134,24 +102,32 @@ def access(
 
     Parameters
     ----------
-    path: A path or collection of paths to image files. If `path` is a string, it is assumed to be a path, then the appropriate access function will be
-          selected based on the extension of the path, and the file will be accessed. To access a Zarr or N5 containers, the path to the root container must end with .zarr or .n5
+    path: A path or collection of paths to image files.
+        If `path` is a string, it is assumed to be a path, then the appropriate access
+        function will be selected based on the extension of the path, and the file will
+        be accessed. To access a Zarr or N5 containers, the path to the root container
+        must end with .zarr or .n5
 
-          For reading .zarr containers, this function dispatches to `zarr.open`
+        For reading .zarr or n5 containers, this function dispatches to `zarr.open`
 
-          For reading n5 containers, this function uses storage routines found in `fibsem_tools.io.storage`
+        For reading .dat files (Janelia-native binary image format), this function uses
+        routines found in `fibsem_tools.io.fibsem`
 
-          For reading .dat files (Janelia-native binary image format), this function uses routines found in `fibsem_tools.io.fibsem`
+        If `path` is a collection of strings, it is assumed that each element of the
+        collection represents a path, and this function will return the result of
+        calling itself on each element of the collection.
 
-          If `path` is a collection of strings,
-          it is assumed that each element of the collection represents a path, and this function will return the result of calling itself on each element of the collection.
+    mode: string
+        The access mode for the file. e.g. 'r' for read-only access, 'w' for writable
+        access.
 
-    mode: The access mode for the file. e.g. 'r' for read-only access, 'w' for writable access.
+    **kwargs: any
+        Additional kwargs are passed to the format-specific access function.
 
-    Additional kwargs are passed to the format-specific access function.
-
-    Returns an array-like object, a collection of array-like objects, or an instance of zarr.hierarchy.Group
+    Returns
     -------
+    An array-like object, a collection of array-like objects, or an instance of
+    zarr.hierarchy.Group
 
     """
     if isinstance(path, (str, Path)):
@@ -162,7 +138,10 @@ def access(
             accessor = accessors[suffix]
         except KeyError:
             raise ValueError(
-                f"Cannot access images with extension {suffix}. Try one of {list(accessors.keys())}"
+                f"""
+                Cannot access images with extension {suffix}. Try one of 
+                {list(accessors.keys())}
+                """
             )
 
         if is_container:
@@ -179,26 +158,32 @@ def access(
 def read(path: Union[PathLike, Iterable[str], Iterable[Path]], **kwargs):
     """
 
-    Read-only access for data (arrays and groups) from a variety of hierarchical array storage formats.
+    Read-only access for data (arrays and groups) from a variety of hierarchical array
+    storage formats.
 
     Parameters
     ----------
-    path: A path or collection of paths to image files. If `path` is a string, it is assumed to be a path, then the appropriate access function will be
-          selected based on the extension of the path, and the file will be accessed. To access a Zarr or N5 containers, the path to the root container must end with .zarr or .n5
+    path: A path or collection of paths to image files.
+        If `path` is a string, it is assumed to be a path, then the appropriate access
+        function will be selected based on the extension of the path, and the file will
+        be accessed. To access a Zarr or N5 containers, the path to the root container
+        must end with .zarr or .n5
 
-          For reading .zarr containers, this function dispatches to `zarr.open`
+        For reading .zarr or n5 containers, this function dispatches to `zarr.open`
 
-          For reading n5 containers, this function uses storage routines found in `fibsem_tools.io.storage`
+        For reading .dat files (Janelia-native binary image format), this function uses
+        routines found in `fibsem_tools.io.fibsem`
 
-          For reading .dat files (Janelia-native binary image format), this function uses routines found in `fibsem_tools.io.fibsem`
-
-          If `path` is a collection of strings,
-          it is assumed that each element of the collection represents a path, and this function will return the result of calling itself on each element of the collection.
+        If `path` is a collection of strings, it is assumed that each element of the
+        collection represents a path, and this function will return the result of
+        calling itself on each element of the collection.
 
     Additional kwargs are passed to the format-specific access function.
 
-    Returns an array-like object, a collection of array-like objects, or an instance of zarr.hierarchy.Group
+    Returns
     -------
+    An array-like object, a collection of array-like objects, or an instance of
+    zarr.hierarchy.Group
 
     """
     return access(path, mode="r", **kwargs)
@@ -226,73 +211,31 @@ def read_xarray(
     """
     raw_array = read(url, storage_options=storage_options)
     dask_array = read_dask(url, chunks=chunks, storage_options=storage_options)
-    cleaned_attrs = None
+
     if coords == "auto":
-        coords, cleaned_attrs = infer_coordinates(raw_array)
+        coords = infer_coordinates(raw_array)
     elif isinstance(coords, SpatialTransform):
         coords = coords.to_coords(dict(zip(coords.axes, dask_array.shape)))
-    if hasattr(raw_array, "attrs"):
-        if not kwargs.get("attrs"):
-            raw_attrs = dict(raw_array.attrs)
-            if cleaned_attrs is not None:
-                keys = set(raw_attrs) - set(cleaned_attrs)
-                [raw_attrs.pop(key) for key in keys]
-            kwargs.update({"attrs": raw_attrs})
-    if kwargs.get("attrs"):
-        kwargs["attrs"].update({"url": url})
     result = DataArray(dask_array, coords=coords, **kwargs)
     return result
 
 
-def infer_coordinates(
-    arr: Any, default_unit: str = "nm"
-) -> Tuple[List[DataArray], Dict[str, Any]]:
-    attrs = {}
+def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
+
     if isinstance(arr, zarr.core.Array):
-        coords, attrs = zarr_n5_coordinate_inference(arr.shape, dict(arr.attrs))
+        coords = zarr_n5_coordinate_inference(
+            shape=arr.shape,
+            source_attrs=dict(arr.attrs),
+            parent_attrs=dict(access_parent(arr, mode="r").attrs),
+            array_path=arr.basename,
+        )
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
         coords = mrc_coordinate_inference(arr)
     else:
         raise ValueError(
             f"No coordinate inference possible for array of type {type(arr)}"
         )
-    return coords, attrs
-
-
-def DataArrayFactory(arr: Any, **kwargs: Dict[str, Any]) -> DataArray:
-    """
-    Create an xarray.DataArray from an array-like input (e.g., zarr array, dask array). This is a very light
-    wrapper around the xarray.DataArray constructor that checks for cosem/n5 metadata attributes and uses those to
-    generate DataArray.coords and DataArray.dims properties; additionally, metadata about units will be inferred and
-    inserted into the `attrs` kwarg if it is supplied.
-
-    Parameters
-    ----------
-
-    arr: Array-like object (dask array or zarr array)
-
-    """
-    attrs: Optional[Dict[str, Any]]
-    extra_attrs = {}
-
-    # if we pass in a zarr array, daskify it first
-    # maybe later add hdf5 support here
-    if isinstance(arr, zarr.core.Array):
-        source = str(Path(arr.store.path) / arr.path)
-        # save the full path to the array as an attribute
-        extra_attrs["source"] = source
-        arr = da.from_array(arr, chunks=arr.chunks)
-
-    if kwargs.get("attrs"):
-        attrs = kwargs.get("attrs")
-        out_attrs = attrs.copy()
-        out_attrs.update(extra_attrs)
-        kwargs["attrs"] = out_attrs
-    else:
-        kwargs["attrs"] = extra_attrs
-
-    data = DataArray(arr, **kwargs)
-    return data
+    return coords
 
 
 def initialize_group(
@@ -361,7 +304,10 @@ def create_group(
 
     if len(bad_paths):
         raise ValueError(
-            f"Array paths cannot be nested. The following paths violate this rule: {bad_paths}"
+            f"""
+            Array paths cannot be nested. The following paths violate this rule: 
+            {bad_paths}
+            """
         )
     protocol = urlparse(group_url).scheme
     protocol_prefix = ""
@@ -377,7 +323,7 @@ def create_group(
     for idx, array in enumerate(arrays):
         name = array_paths[idx]
         path = protocol_prefix + os.path.join(group.store.path, group.path, name)
-        z_arr = access(
+        access(
             path=path,
             mode=array_mode,
             shape=array.shape,

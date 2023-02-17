@@ -1,8 +1,6 @@
-from enum import Enum
-from typing import Dict, Optional, Sequence, Union, Literal
+from typing import Dict, List, Optional, Sequence, Tuple, Union, Literal
 
 import numpy as np
-import numpy.typing as npt
 from pydantic import BaseModel, root_validator
 from xarray import DataArray
 
@@ -11,7 +9,8 @@ ArrayOrder = Literal["C", "F"]
 
 class SpatialTransform(BaseModel):
     """
-    Representation of an N-dimensional scaling + translation transform for labelled axes with units.
+    Representation of an N-dimensional scaling + translation transform for labelled axes
+    with units.
     """
 
     order: Optional[ArrayOrder] = "C"
@@ -30,27 +29,31 @@ class SpatialTransform(BaseModel):
         translate = values.get("translate")
         if not len(axes) == len(units) == len(translate) == len(scale):
             raise ValueError(
-                f"The length of all arguments must match. len(axes) = {len(axes)},  len(units) = {len(units)}, len(translate) = {len(translate)}, len(scale) = {len(scale)}"
+                f"""
+                The length of all arguments must match. len(axes) = {len(axes)}, 
+                len(units) = {len(units)}, len(translate) = {len(translate)}, 
+                len(scale) = {len(scale)}"""
             )
         return values
 
-    def to_coords(self, shape: Dict[str, int]) -> Dict[str, DataArray]:
+    def to_coords(self, shape: Tuple[int, ...]) -> List[DataArray]:
         """
-        Given an array shape (represented as a dict with dimension names as keys), return a dict of
-        numpy arrays representing a bounded coordinate grid derived from this transform.
+        Given an array shape (represented as a dict with dimension names as keys),
+        return a dict of numpy arrays representing a bounded coordinate grid derived
+        from this transform.
         """
         if self.order == "C":
             axes = self.axes
         else:
             axes = reversed(self.axes)
-        return {
-            k: DataArray(
-                (np.arange(shape[k]) * self.scale[idx]) + self.translate[idx],
+        return [
+            DataArray(
+                (np.arange(shape[idx]) * self.scale[idx]) + self.translate[idx],
                 attrs={"units": self.units[idx]},
                 dims=(k,),
             )
             for idx, k in enumerate(axes)
-        }
+        ]
 
     @classmethod
     def fromDataArray(
@@ -94,7 +97,10 @@ class SpatialTransform(BaseModel):
                 )
             else:
                 raise ValueError(
-                    f"Cannot infer scale parameter along dimension {ax} with length {len(array.coords[ax])}"
+                    f"""
+                    Cannot infer scale parameter along dimension {ax} 
+                    with length {len(array.coords[ax])}
+                    """
                 )
             scale.append(scale_estimate)
 

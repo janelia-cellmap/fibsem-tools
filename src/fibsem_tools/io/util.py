@@ -2,7 +2,7 @@ import os
 from glob import glob
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Sequence, Tuple, Union
 
 import fsspec
 import toolz as tz

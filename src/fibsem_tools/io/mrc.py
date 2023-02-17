@@ -6,7 +6,6 @@ import mrcfile
 import numpy as np
 from dask.array.core import normalize_chunks
 from mrcfile.mrcmemmap import MrcMemmap
-from numpy.typing import ArrayLike
 from xarray import DataArray
 
 Pathlike = Union[str, Path]
@@ -19,10 +18,11 @@ def access_mrc(path: Pathlike, mode: str, **kwargs):
 
 def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
     """
-    Infer the shape and datatype of an MrcMemmap array. We cannot use the dtype attribute
-    because the MRC2014 specification does not officially support the uint8 datatype,
-    but that doesn't stop people from storing uint8 data as int8. This can only be inferred
-    by checking if the header.dmax propert exceeds the upper limit of int8 (127).
+    Infer the shape and datatype of an MrcMemmap array. We cannot use the dtype
+    attribute because the MRC2014 specification does not officially support the uint8
+    datatype, but that doesn't stop people from storing uint8 data as int8. This can
+    only be inferred by checking if the header.dmax propert exceeds the upper limit of
+    int8 (127).
     """
     shape = mem.data.shape
     dtype = mem.data.dtype
@@ -85,7 +85,10 @@ def mrc_to_dask(urlpath, chunks: Union[str, Sequence[int]], **kwargs):
             if idx > 0:
                 if (chunks[idx] != shpe) and (chunks[idx] != -1):
                     raise ValueError(
-                        f"Chunk sizes of non-leading axes must match the shape of the array. Got chunk_size={chunks[idx]}, expected {shpe}"
+                        f"""
+                        Chunk sizes of non-leading axes must match the shape of the 
+                        array. Got chunk_size={chunks[idx]}, expected {shpe}
+                        """
                     )
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
     arr = da.map_blocks(mrc_chunk_loader, urlpath, chunks=_chunks, dtype=dtype)

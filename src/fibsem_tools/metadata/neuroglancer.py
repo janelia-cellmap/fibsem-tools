@@ -9,9 +9,8 @@ from .transform import SpatialTransform
 
 class PixelResolution(BaseModel):
     """
-    PixelResolution attribute used by the Saalfeld lab.
-    The dimensions attribute contains a list of scales that define the
-    grid spacing of the data, in F-order.
+    PixelResolution attribute used by the Saalfeld lab. The dimensions attribute
+    contains a list of scales that define the grid spacing of the data, in F-order.
     """
 
     dimensions: Sequence[float]
@@ -43,7 +42,9 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         ----------
 
         arrays : list or tuple of xarray.DataArray
-            The collection of arrays from which to generate multiscale metadata. These arrays are assumed to share the same `dims` attributes, albeit with varying `coords`.
+            The collection of arrays from which to generate multiscale metadata. These
+            arrays are assumed to share the same `dims` attributes, albeit with varying
+            `coords`.
 
         Returns
         -------

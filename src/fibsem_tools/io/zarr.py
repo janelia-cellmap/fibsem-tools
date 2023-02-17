@@ -3,10 +3,9 @@ import os
 from os import PathLike
 import time
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Generator, List, Sequence, Tuple, Union
 
 import dask.array as da
-from dask.utils import parse_bytes
 import numpy as np
 import zarr
 from zarr.storage import FSStore, contains_array, contains_group
@@ -16,8 +15,10 @@ from toolz import concat
 from xarray import DataArray
 from zarr.indexing import BasicIndexer
 from fibsem_tools.io.util import split_by_suffix
-from functools import partial
-from numpy.typing import NDArray
+from fibsem_tools.metadata.transform import SpatialTransform
+from pydantic_ome_ngff import Multiscale
+from xarray_ome_ngff import create_coords
+from fibsem_tools.io.types import JSON
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -53,7 +54,10 @@ def delete_zbranch(
         return delete_zarray(branch, compute=compute)
     else:
         raise TypeError(
-            f"The first argument to this function my be a zarr group or array, not {type(branch)}"
+            f"""
+            The first argument to this function my be a zarr group or array, not 
+            {type(branch)}
+            """
         )
 
 
@@ -99,12 +103,13 @@ def delete_zarray(arr: zarr.core.Array, compute: bool = True):
 def same_compressor(arr: zarr.Array, compressor) -> bool:
     """
 
-    Determine if the compressor associated with an array is the same as a different compressor.
+    Determine if the compressor associated with an array is the same as a different
+    compressor.
 
     arr: A zarr array
     compressor: a Numcodecs compressor, e.g. GZip(-1)
-    return: True or False, depending on whether the zarr array's compressor matches the parameters (name, level) of the
-    compressor.
+    return: True or False, depending on whether the zarr array's compressor matches the
+    parameters (name, level) of the compressor.
     """
     comp = arr.compressor.compressor_config
     return comp["id"] == compressor.codec_id and comp["level"] == compressor.level
@@ -120,7 +125,8 @@ def same_array_props(
     arr: A zarr array
     shape: A tuple. This will be compared with arr.shape.
     dtype: A numpy dtype. This will be compared with arr.dtype.
-    compressor: A numcodecs compressor, e.g. GZip(-1). This will be compared with the compressor of arr.
+    compressor: A numcodecs compressor, e.g. GZip(-1). This will be compared with the
+      compressor of arr.
     chunks: A tuple. This will be compared with arr.chunks
     return: True if all the properties of arr match the kwargs, False otherwise.
     """
@@ -134,7 +140,8 @@ def same_array_props(
 
 def zarr_array_from_dask(arr: Any) -> Any:
     """
-    Return the zarr array that was used to create a dask array using `da.from_array(zarr_array)`
+    Return the zarr array that was used to create a dask array using
+    `da.from_array(zarr_array)`
     """
     keys = tuple(arr.dask.keys())
     return arr.dask[keys[-1]]
@@ -159,7 +166,8 @@ def access_zarr(store: PathLike, path: PathLike, **kwargs) -> Any:
 
     if access_mode == "w":
         if contains_group(store, path) or contains_array(store, path):
-            # zarr is extremely slow to delete existing directories, so we do it in parallel
+            # zarr is extremely slow to delete existing directories, so we do it in
+            # parallel
             existing = zarr.open(store, path=path, **kwargs, mode="a")
             # todo: move this logic to methods on the stores themselves
             if isinstance(
@@ -176,7 +184,10 @@ def access_zarr(store: PathLike, path: PathLike, **kwargs) -> Any:
                 pre = time.time()
                 delete_zbranch(existing)
                 logger.info(
-                    f"Completed parallel deletion of chunks in {url} in {time.time() - pre}s."
+                    f"""
+                    Completed parallel deletion of chunks in {url} in 
+                    {time.time() - pre}s.
+                    """
                 )
 
     array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
@@ -217,52 +228,80 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
     return darr
 
 
+def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs):
+    """
+    Get the parent (zarr.Group) of a zarr array or group.
+    """
+    parent_path = "/".join(node.path.split("/")[:-1])
+    return access_zarr(store=node.store, path=parent_path, **kwargs)
+
+
 def zarr_n5_coordinate_inference(
-    shape: Tuple[int, ...], attrs: Dict[str, Any], default_unit: str = "nm"
-) -> Tuple[List[DataArray], Dict[str, Any]]:
-    output_attrs = attrs.copy()
-    input_axes: List[str] = [f"dim_{idx}" for idx in range(len(shape))]
-    output_axes: List[str] = input_axes
-    units: Dict[str, str] = {ax: default_unit for ax in output_axes}
-    scales: Dict[str, float] = {ax: 1.0 for ax in output_axes}
-    translates: Dict[str, float] = {ax: 0.0 for ax in output_axes}
-
-    if output_attrs.get("transform"):
-        transform_meta = output_attrs.pop("transform")
-        input_axes = transform_meta["axes"]
-        if transform_meta.get("order") == "F":
-            output_axes = input_axes[::-1]
+    shape: Tuple[int, ...],
+    source_attrs: Dict[str, JSON],
+    parent_attrs: Dict[str, JSON] = {},
+    array_path: str = "",
+) -> List[DataArray]:
+    # this sucks! this kind of code is a sign that something is rotten in the metadata
+    # spec!
+    if "multiscales" in parent_attrs:
+        multiscales_meta = [
+            Multiscale(**entry) for entry in parent_attrs["multiscales"]
+        ]
+        transforms = []
+        axes = []
+        matched_multiscale = None
+        matched_dataset = None
+        # find the correct element in multiscales.datasets for this array
+        for multi in multiscales_meta:
+            for dataset in multi.datasets:
+                if dataset.path == array_path:
+                    matched_multiscale = multi
+                    matched_dataset = dataset
+        if matched_dataset is None or matched_multiscale is None:
+            raise ValueError(
+                f"""
+            Could not find an entry referencing array {array_path} in the `multiscales`
+            metadata of the parent group.
+            """
+            )
         else:
-            output_axes = input_axes
-        units = dict(zip(output_axes, transform_meta["units"]))
-        scales = dict(zip(output_axes, transform_meta["scale"]))
-        translates = dict(zip(output_axes, transform_meta["translate"]))
+            transforms.extend(matched_multiscale.coordinateTransformations)
+            transforms.extend(matched_dataset.coordinateTransformations)
+            axes.extend(matched_multiscale.axes)
+            coords = create_coords(axes, transforms, shape)
 
-    elif output_attrs.get("pixelResolution") or output_attrs.get("resolution"):
+    elif "transform" in source_attrs:
+        transform_meta = source_attrs["transform"]
+        coords = SpatialTransform(**transform_meta).to_coords(shape)
+
+    elif "pixelResolution" in source_attrs or "resolution" in source_attrs:
         input_axes = N5_AXES_3D
         output_axes = input_axes[::-1]
         translates = {ax: 0 for ax in output_axes}
-        units = {ax: default_unit for ax in output_axes}
+        units = {ax: "nm" for ax in output_axes}
 
-        if output_attrs.get("pixelResolution"):
-            pixelResolution = output_attrs.pop("pixelResolution")
+        if "pixelResolution" in source_attrs:
+            pixelResolution = source_attrs["pixelResolution"]
             scales = dict(zip(input_axes, pixelResolution["dimensions"]))
             units = {ax: pixelResolution["unit"] for ax in input_axes}
 
-        elif output_attrs.get("resolution"):
-            _scales = output_attrs.pop("resolution")
+        elif "resolution" in source_attrs:
+            _scales = source_attrs["resolution"]
             scales = dict(zip(N5_AXES_3D, _scales))
 
-    coords = [
-        DataArray(
-            translates[ax] + np.arange(shape[idx]) * scales[ax],
-            dims=ax,
-            attrs={"units": units[ax]},
-        )
-        for idx, ax in enumerate(output_axes)
-    ]
+        coords = [
+            DataArray(
+                translates[ax] + np.arange(shape[idx]) * scales[ax],
+                dims=ax,
+                attrs={"units": units[ax]},
+            )
+            for idx, ax in enumerate(output_axes)
+        ]
+    else:
+        raise ValueError("Could not infer coordinates from the supplied attributes.")
 
-    return coords, output_attrs
+    return coords
 
 
 def is_n5(array: zarr.core.Array) -> bool:
@@ -291,8 +330,8 @@ class ChunkLock:
     def __init__(self, array: zarr.core.Array, client: Client):
         self._locks = get_chunklock(array, client)
         # from the perspective of a zarr array, metadata has this key regardless of the
-        # location on storage. unfortunately, the synchronizer does not get access to the
-        # indirection provided by the the store class.
+        # location on storage. unfortunately, the synchronizer does not get access to
+        # the indirection provided by the the store class.
 
         array_attrs_key = f"{array.path}/.zarray"
         if is_n5(array):

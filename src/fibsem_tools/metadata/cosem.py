@@ -30,13 +30,16 @@ class COSEMGroupMetadata(BaseModel):
         ----------
 
         dataarrays : list or tuple of xarray.DataArray
-            The collection of arrays from which to generate multiscale metadata. These arrays are assumed to share the same `dims` attributes, albeit with varying `coords`.
+            The collection of arrays from which to generate multiscale metadata. These
+            arrays are assumed to share the same `dims` attributes, albeit with varying
+            `coords`.
 
         name : str, optional
             The name for the multiresolution collection
 
         paths : list or tuple of str or None, default=None
-            The name on the storage backend for each of the arrays in the multiscale collection.
+            The name on the storage backend for each of the arrays in the multiscale
+            collection.
             If None, the `name` attribute of each array in `dataarrays` will be used.
 
         Returns an instance of COSEMGroupMetadata

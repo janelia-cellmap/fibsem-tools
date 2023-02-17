@@ -15,12 +15,16 @@ Pathlike = Union[str, Path]
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3_555_587_570
-# This is the size of the header, in bytes. Everything beyond this number of bytes is data.
+# This is the size of the header, in bytes. Everything beyond this number of bytes is
+# data.
 OFFSET = 1024
 
 
 class FIBSEMHeader:
-    """Structure to hold header info. Note: this object is deprecated and will soon be removed."""
+    """
+    Structure to hold header info. Note: this object is deprecated and will soon be
+    removed.
+    """
 
     def __init__(self, **kwargs):
         self.__dict__ = kwargs
@@ -58,7 +62,10 @@ class FIBSEMHeader:
 
 
 class FIBSEMData(np.ndarray):
-    """Subclass of ndarray to attach header data to fibsem data. Note: this object is deprecated and will soon be removed."""
+    """
+    Subclass of ndarray to attach header data to fibsem data. Note: this object is
+    deprecated and will soon be removed.
+    """
 
     def __new__(cls, input_array, attrs=None):
         # Input array is an already formed ndarray instance
@@ -77,7 +84,10 @@ class FIBSEMData(np.ndarray):
 
 
 class _DTypeDict(object):
-    """Handle dtype dict manipulations. Note: this object is deprecated and will soon be removed."""
+    """
+    Handle dtype dict manipulations. Note: this object is deprecated and will soon be
+    removed.
+    """
 
     def __init__(self, names=None, formats=None, offsets=None):
         # initialize internals to empty lists
@@ -142,7 +152,10 @@ def _read_header(path):
         fobj.seek(0, os.SEEK_SET)
         if fibsem_header.FileMagicNum != MAGIC_NUMBER:
             raise RuntimeError(
-                f"FileMagicNum should be {MAGIC_NUMBER} but is {fibsem_header.FileMagicNum}"
+                f"""
+                FileMagicNum should be {MAGIC_NUMBER} but is 
+                {fibsem_header.FileMagicNum}
+                """
             )
 
         _scaling_offset = 36
@@ -155,7 +168,8 @@ def _read_header(path):
                 "Scaling", (">f4", (fibsem_header.ChanNum, 4)), _scaling_offset
             )
         else:
-            # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain, 2nd order, 3rd order)
+            # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain,
+            # 2nd order, 3rd order)
             header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
 
         if fibsem_header.FileVersion >= 9:
@@ -265,7 +279,9 @@ def _read_header(path):
                     "BrightnessB",  # Detector B brightness (
                     "ContrastB",  # Detector B contrast (
                     "Mode",
-                    # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External, 9=External+SEM
+                    # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM
+                    # Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External,
+                    # 9=External+SEM
                     "FIBFocus",  # FIB focus in kV
                     "FIBProb",  # FIB probe number
                     "FIBCurr",  # FIB emission current
@@ -394,7 +410,9 @@ def _read_header(path):
                     "BrightnessB",  # Detector B brightness (#)
                     "ContrastB",  # Detector B contrast (#)
                     "Mode",
-                    # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External, 9=External+SEM
+                    # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM
+                    # Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External,
+                    # 9=External+SEM
                     "FIBFocus",  # FIB focus in kV
                     "FIBProb",  # FIB probe number
                     "FIBCurr",  # FIB emission current
@@ -507,7 +525,8 @@ def _read_header(path):
                     "FIBFOV",  # FIB FOV (um)
                     "MillingLinesPerImage",  # FIB milling lines per image
                     "MillingPIDOn",  # FIB milling PID on
-                    "MillingPIDMeasured",  # FIB milling PID measured (0:specimen, 1:beamdump)
+                    "MillingPIDMeasured",  # FIB milling PID measured (0:specimen,
+                    # 1:beamdump)
                     "MillingPIDTarget",  # FIB milling PID target
                     "MillingPIDTargetSlope",  # FIB milling PID target slope
                     "MillingPIDP",  # FIB milling PID P
@@ -605,7 +624,8 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
     -------
 
     """
-    # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data type
+    # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data
+    # type
     fibsem_header = _read_header(path)
     # read data
     shape = (
@@ -644,8 +664,8 @@ def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
     ----------
     path : string or iterable of strings representing paths to .dat files.
 
-    Returns a single FIBSEMDataset or an iterable of FIBSEMDatasets, depending on whether a single path or multiple
-    paths are supplied as arguments.
+    Returns a single FIBSEMDataset or an iterable of FIBSEMDatasets, depending on
+    whether a single path or multiple paths are supplied as arguments.
     -------
 
     """
@@ -655,7 +675,10 @@ def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
         return [_read(p) for p in path]
     else:
         raise ValueError(
-            f"Path '{path}' must be an instance of string or pathlib.Path, or iterable of strings / pathlib.Paths"
+            f"""
+            Path '{path}' must be an instance of string or pathlib.Path, or iterable of 
+            strings / pathlib.Paths
+            """
         )
 
 
@@ -721,7 +744,7 @@ def _convert_data(fibsem):
                         + fibsem[1] * fibsem.header.Scaling[1, 1]
                     )
                     if fibsem.header.AI3:
-                        detector_c = (
+                        (
                             fibsem.header.Scaling[2, 0]
                             + fibsem[1] * fibsem.header.Scaling[1, 1]
                         )
@@ -839,7 +862,10 @@ class FibsemDataset:
                 raise ValueError("Data must be padded but no pad values were supplied!")
             elif len(pad_values) != num_channels:
                 raise ValueError(
-                    f"Length of pad values {pad_values} does not match the length of the channel axis ({num_channels})"
+                    f"""
+                    Length of pad values {pad_values} does not match the length of the
+                    channel axis ({num_channels})
+                    """
                 )
 
         chunks = (
