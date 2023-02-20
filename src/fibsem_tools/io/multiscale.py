@@ -18,7 +18,7 @@ from xarray_ome_ngff import create_multiscale_metadata as create_omengff_multisc
 
 from fibsem_tools.io.types import Attrs, JSON
 
-multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem"]
+multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem", "ome-ngff"]
 
 
 class Multiscales:

@@ -1358,18 +1358,14 @@ version = "0.1.3"
 description = "Pydantic models for the OME-NGFF"
 category = "main"
 optional = false
-python-versions = "^3.9"
-files = []
-develop = false
+python-versions = ">=3.9,<4.0"
+files = [
+    {file = "pydantic_ome_ngff-0.1.3-py3-none-any.whl", hash = "sha256:88370f3555dcc0d906928cef48e907e2b425b6691780958f343a6dd63722274c"},
+    {file = "pydantic_ome_ngff-0.1.3.tar.gz", hash = "sha256:c478d6d274eccd552cebe4bb7adf27d256c1069aea1807cbe738144974d6d6d9"},
+]
 
 [package.dependencies]
-pydantic = "^1.10.4"
-
-[package.source]
-type = "git"
-url = "https://github.com/JaneliaSciComp/pydantic-ome-ngff"
-reference = "main"
-resolved_reference = "82ec04b58605627a87a95b2c1e94b733dc1a9df4"
+pydantic = ">=1.10.4,<2.0.0"
 
 [[package]]
 name = "pytest"
@@ -1814,14 +1810,14 @@ develop = false
 
 [package.dependencies]
 pydantic = "^1.10.4"
-pydantic-ome-ngff = {git = "https://github.com/JaneliaSciComp/pydantic-ome-ngff", branch = "main"}
+pydantic-ome-ngff = "^0.1.3"
 xarray = "^2023.2.0"
 
 [package.source]
 type = "git"
 url = "https://github.com/JaneliaSciComp/xarray-ome-ngff"
 reference = "main"
-resolved_reference = "fa64f20a85b1679cf29bd0cd68c4ed758508713e"
+resolved_reference = "548ab7842fd10b1c2a1afed10a696443a68e0ef8"
 
 [[package]]
 name = "yarl"
