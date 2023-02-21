@@ -20,6 +20,7 @@ def test_SpatialTransform():
 
     data = DataArray(np.zeros((10, 10, 10)), coords=coords)
     transform = SpatialTransform.fromDataArray(data)
+    assert all(c.equals(t) for c, t in zip(coords, transform.to_coords(data.shape)))
     assert transform == SpatialTransform(
         order="C",
         axes=["z", "y", "x"],

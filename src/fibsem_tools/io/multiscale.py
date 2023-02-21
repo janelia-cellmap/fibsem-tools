@@ -13,7 +13,7 @@ from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import SpatialTransform
 from zarr.errors import ContainsGroupError
 from numcodecs.abc import Codec
-from xarray_ome_ngff import create_multiscale_metadata as create_omengff_multiscale_meta
+from xarray_ome_ngff import create_multiscale as omengff_multiscale_metadata
 
 
 from fibsem_tools.io.types import Attrs, JSON
@@ -211,7 +211,7 @@ def _normalize_chunks(
     return result
 
 
-def create_multiscale_metadata(
+def multiscale_metadata(
     arrays: Sequence[DataArray],
     metadata_types: List[str],
     array_paths: Optional[List[str]] = None,
@@ -241,7 +241,7 @@ def create_multiscale_metadata(
                 }
         elif flavor == "ome-ngff":
             group_attrs["multiscales"] = [
-                create_omengff_multiscale_meta(
+                omengff_multiscale_metadata(
                     arrays, name="", array_paths=array_paths
                 ).dict()
             ]
@@ -255,7 +255,7 @@ def create_multiscale_metadata(
     return group_attrs, array_attrs
 
 
-def create_multiscale_group(
+def multiscale_group(
     group_url: str,
     arrays: List[DataArray],
     array_paths: List[str],
@@ -272,7 +272,7 @@ def create_multiscale_group(
     if group_attrs is None:
         group_attrs = {}
 
-    mgroup_attrs, marray_attrs = create_multiscale_metadata(
+    mgroup_attrs, marray_attrs = multiscale_metadata(
         arrays, metadata_types, array_paths=array_paths
     )
     group_attrs.update(mgroup_attrs)
@@ -295,16 +295,15 @@ def create_multiscale_group(
     except ContainsGroupError:
         raise FileExistsError(
             f"""
-            The resource at {group_url} resolves to an existing group. 
-            Use 'w' or 'a' access modes to enable writable / appendable access to this 
-            group.
+            The resource at {group_url} resolves to an existing group. Use 'w' or 'a' 
+            access modes to enable writable / appendable access to this group.
             """
         )
 
 
 def prepare_multiscale(
     dest_url: str,
-    scratch_url: str,
+    scratch_url: Optional[str],
     arrays: List[DataArray],
     array_names: List[str],
     access_mode: Literal["w", "w-", "a"],
@@ -313,23 +312,26 @@ def prepare_multiscale(
     compressor: Codec,
 ) -> Tuple[str, str]:
 
-    # prepare the temporary storage
-    scratch_names = array_names[1:]
-    scratch_multi = arrays[1:]
+    if scratch_url is not None:
+        # prepare the temporary storage
+        scratch_names = array_names[1:]
+        scratch_multi = arrays[1:]
 
-    scratch_group_url, scratch_array_urls = create_multiscale_group(
-        scratch_url,
-        scratch_multi,
-        scratch_names,
-        chunks=None,
-        metadata_types=metadata_types,
-        group_mode="w",
-        array_mode="w",
-        compressor=None,
-    )
+        scratch_group_url, scratch_array_urls = multiscale_group(
+            scratch_url,
+            scratch_multi,
+            scratch_names,
+            chunks=None,
+            metadata_types=metadata_types,
+            group_mode="w",
+            array_mode="w",
+            compressor=None,
+        )
+    else:
+        scratch_array_urls = []
 
     # prepare final storage
-    dest_group_url, dest_array_urls = create_multiscale_group(
+    dest_group_url, dest_array_urls = multiscale_group(
         dest_url,
         arrays,
         array_names,

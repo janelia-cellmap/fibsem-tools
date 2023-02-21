@@ -12,8 +12,8 @@ from fibsem_tools.io.core import read
 
 from fibsem_tools.io.multiscale import (
     Multiscales,
-    create_multiscale_group,
-    create_multiscale_metadata,
+    multiscale_group,
+    multiscale_metadata,
 )
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
@@ -122,16 +122,19 @@ def test_multiscale_storage_2():
         {dim: multi[1].coords[dim] - 0.5 for dim in multi[1].dims}
     )
     array_paths = ["s0", "s1"]
-    g_meta, a_meta = create_multiscale_metadata(
+    g_meta, a_meta = multiscale_metadata(
         multi, metadata_types=["ome-ngff"], array_paths=array_paths
     )
 
-    group_url, array_urls = create_multiscale_group(
+    chunks = ((8, 8, 8), (8, 8, 8))
+
+    group_url, array_urls = multiscale_group(
         store,
         multi,
         array_paths=array_paths,
         metadata_types=["ome-ngff"],
-        chunks=((8, 8, 8), (8, 8, 8)),
+        chunks=chunks,
     )
 
     assert dict(read(group_url).attrs) == g_meta
+    assert tuple(read(a).chunks for a in array_urls) == chunks
