@@ -18,8 +18,7 @@ xarray = ">=2022.03.0"
 pydantic = "^1.8.2"
 backoff = "^1.10.0"
 s3fs = ">=2022.2.0"
-pydantic-ome-ngff = "^0.1.0"
-xarray-ome-ngff = { git = "https://github.com/JaneliaSciComp/xarray-ome-ngff", branch = "main" }
+xarray-ome-ngff = "^1.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

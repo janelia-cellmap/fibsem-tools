@@ -1804,20 +1804,16 @@ version = "1.0.0"
 description = "xarray and ome-ngff"
 category = "main"
 optional = false
-python-versions = "^3.9"
-files = []
-develop = false
+python-versions = ">=3.9,<4.0"
+files = [
+    {file = "xarray_ome_ngff-1.0.0-py3-none-any.whl", hash = "sha256:812644c814290416160fdf269d27ad617b645bc084de277baf90ef54c4b04085"},
+    {file = "xarray_ome_ngff-1.0.0.tar.gz", hash = "sha256:1930b95e7979c20b217fc439cd1a16e61b247407173f320d57790d38a7917ae0"},
+]
 
 [package.dependencies]
-pydantic = "^1.10.4"
-pydantic-ome-ngff = "^0.1.3"
-xarray = "^2023.2.0"
-
-[package.source]
-type = "git"
-url = "https://github.com/JaneliaSciComp/xarray-ome-ngff"
-reference = "main"
-resolved_reference = "a6b0193a0a6aab7848ead548bc469acadb06724b"
+pydantic = ">=1.10.4,<2.0.0"
+pydantic-ome-ngff = ">=0.1.3,<0.2.0"
+xarray = ">=2023.2.0,<2024.0.0"
 
 [[package]]
 name = "yarl"
@@ -1946,4 +1942,4 @@ heapdict = "*"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "411c59b6c3983bf2f8ed6fe8cc44a4cfef0eba7e455802123260f5eee305861b"
+content-hash = "11d0a7224ddc281aced239644fe06b42c4a4d10141b11bbc6e568f1a0497dd70"

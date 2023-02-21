@@ -259,12 +259,12 @@ def multiscale_group(
     group_url: str,
     arrays: List[DataArray],
     array_paths: List[str],
-    chunks: Tuple[Tuple[int, ...], ...] | Tuple[int, ...] | None,
+    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], None],
     metadata_types: List[str],
     group_mode="w-",
     array_mode="w-",
-    group_attrs: Attrs | None = None,
-    array_attrs: Sequence[Attrs] | None = None,
+    group_attrs: Optional[Attrs] = None,
+    array_attrs: Optional[Sequence[Attrs]] = None,
     **kwargs,
 ) -> Tuple[str, Tuple[str, ...]]:
     if array_attrs is None:
