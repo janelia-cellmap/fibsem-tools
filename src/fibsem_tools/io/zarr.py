@@ -4,6 +4,7 @@ from os import PathLike
 import time
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Sequence, Tuple, Union
+import pint
 
 import dask.array as da
 import numpy as np
@@ -19,6 +20,8 @@ from fibsem_tools.metadata.transform import SpatialTransform
 from pydantic_ome_ngff import Multiscale
 from xarray_ome_ngff import create_coords
 from fibsem_tools.io.types import JSON
+
+ureg = pint.UnitRegistry()
 
 # default axis order of zarr spatial metadata
 # is z,y,x
@@ -238,16 +241,37 @@ def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs):
 
 def zarr_n5_coordinate_inference(
     shape: Tuple[int, ...],
-    source_attrs: Dict[str, JSON],
-    parent_attrs: Dict[str, JSON] = {},
+    array_attrs: Dict[str, JSON],
+    group_attrs: Dict[str, JSON] = {},
     array_path: str = "",
 ) -> List[DataArray]:
-    # this sucks! this kind of code is a sign that something is rotten in the metadata
-    # spec!
-    if "multiscales" in parent_attrs:
-        multiscales_meta = [
-            Multiscale(**entry) for entry in parent_attrs["multiscales"]
+    if (transform := array_attrs.get("transform", None)) is not None:
+        coords = SpatialTransform(**transform).to_coords(shape)
+    elif "pixelResolution" in array_attrs or "resolution" in array_attrs:
+        input_axes = N5_AXES_3D
+        output_axes = input_axes[::-1]
+        translates = {ax: 0 for ax in output_axes}
+        units = {ax: "nanometer" for ax in output_axes}
+
+        if "pixelResolution" in array_attrs:
+            pixelResolution = array_attrs["pixelResolution"]
+            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
+            units = {ax: pixelResolution["unit"] for ax in input_axes}
+
+        elif "resolution" in array_attrs:
+            _scales = array_attrs["resolution"]
+            scales = dict(zip(N5_AXES_3D, _scales))
+
+        coords = [
+            DataArray(
+                translates[ax] + np.arange(shape[idx]) * scales[ax],
+                dims=ax,
+                attrs={"unit": ureg.get_name(units[ax])},
+            )
+            for idx, ax in enumerate(output_axes)
         ]
+    elif (multiscale := group_attrs.get("multiscales", None)) is not None:
+        multiscales_meta = [Multiscale(**entry) for entry in multiscale]
         transforms = []
         axes = []
         matched_multiscale = None
@@ -270,34 +294,6 @@ def zarr_n5_coordinate_inference(
             transforms.extend(matched_dataset.coordinateTransformations)
             axes.extend(matched_multiscale.axes)
             coords = create_coords(axes, transforms, shape)
-
-    elif "transform" in source_attrs:
-        transform_meta = source_attrs["transform"]
-        coords = SpatialTransform(**transform_meta).to_coords(shape)
-
-    elif "pixelResolution" in source_attrs or "resolution" in source_attrs:
-        input_axes = N5_AXES_3D
-        output_axes = input_axes[::-1]
-        translates = {ax: 0 for ax in output_axes}
-        units = {ax: "nm" for ax in output_axes}
-
-        if "pixelResolution" in source_attrs:
-            pixelResolution = source_attrs["pixelResolution"]
-            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
-            units = {ax: pixelResolution["unit"] for ax in input_axes}
-
-        elif "resolution" in source_attrs:
-            _scales = source_attrs["resolution"]
-            scales = dict(zip(N5_AXES_3D, _scales))
-
-        coords = [
-            DataArray(
-                translates[ax] + np.arange(shape[idx]) * scales[ax],
-                dims=ax,
-                attrs={"units": units[ax]},
-            )
-            for idx, ax in enumerate(output_axes)
-        ]
     else:
         raise ValueError("Could not infer coordinates from the supplied attributes.")
 
@@ -305,10 +301,7 @@ def zarr_n5_coordinate_inference(
 
 
 def is_n5(array: zarr.core.Array) -> bool:
-    if isinstance(array.store, (zarr.N5Store, zarr.N5FSStore)):
-        return True
-    else:
-        return False
+    return isinstance(array.store, (zarr.N5Store, zarr.N5FSStore))
 
 
 def get_chunk_keys(

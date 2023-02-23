@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fibsem-tools"
-version = "1.2.1"
+version = "1.2.2"
 description = "Tools for processing FIBSEM datasets"
 authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
 license = "MIT"
@@ -19,6 +19,7 @@ pydantic = "^1.8.2"
 backoff = "^1.10.0"
 s3fs = ">=2022.2.0"
 xarray-ome-ngff = "^1.0.0"
+pint = "^0.20.1"
 
 
 [tool.poetry.group.dev.dependencies]

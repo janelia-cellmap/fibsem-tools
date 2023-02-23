@@ -225,8 +225,8 @@ def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
     if isinstance(arr, zarr.core.Array):
         coords = zarr_n5_coordinate_inference(
             shape=arr.shape,
-            source_attrs=dict(arr.attrs),
-            parent_attrs=dict(access_parent(arr, mode="r").attrs),
+            array_attrs=dict(arr.attrs),
+            group_attrs=dict(access_parent(arr, mode="r").attrs),
             array_path=arr.basename,
         )
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
