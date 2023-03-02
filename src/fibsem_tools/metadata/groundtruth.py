@@ -4,8 +4,8 @@ from enum import Enum
 
 
 class AnnotationType(Enum):
-    semantic: "semantic"
-    instance: "instance"
+    semantic: str = "semantic"
+    instance: str = "instance"
 
 
 class InstanceName(BaseModel):
