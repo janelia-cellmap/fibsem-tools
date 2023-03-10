@@ -4,7 +4,7 @@ import numpy as np
 from pydantic import BaseModel, PositiveInt
 from xarray import DataArray
 
-from .transform import SpatialTransform
+from .transform import STTransform
 
 
 class PixelResolution(BaseModel):
@@ -52,7 +52,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         NeuroglancerN5GroupMetadata
         """
         transforms = [
-            SpatialTransform.fromDataArray(array, reverse_axes=True) for array in arrays
+            STTransform.fromDataArray(array, reverse_axes=True) for array in arrays
         ]
         pixelresolution = PixelResolution(
             dimensions=transforms[0].scale, unit=transforms[0].units[0]

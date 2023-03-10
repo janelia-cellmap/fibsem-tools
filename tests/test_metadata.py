@@ -8,7 +8,7 @@ from fibsem_tools.metadata.neuroglancer import (
     NeuroglancerN5GroupMetadata,
     PixelResolution,
 )
-from fibsem_tools.metadata.transform import SpatialTransform
+from fibsem_tools.metadata.transform import STTransform
 
 
 def test_SpatialTransform():
@@ -19,9 +19,9 @@ def test_SpatialTransform():
     ]
 
     data = DataArray(np.zeros((10, 10, 10)), coords=coords)
-    transform = SpatialTransform.fromDataArray(data)
+    transform = STTransform.fromDataArray(data)
     assert all(c.equals(t) for c, t in zip(coords, transform.to_coords(data.shape)))
-    assert transform == SpatialTransform(
+    assert transform == STTransform(
         order="C",
         axes=["z", "y", "x"],
         units=["m", "m", "km"],
@@ -29,8 +29,8 @@ def test_SpatialTransform():
         scale=[1.0, 1.0, 10.0],
     )
 
-    transform = SpatialTransform.fromDataArray(data, reverse_axes=True)
-    assert transform == SpatialTransform(
+    transform = STTransform.fromDataArray(data, reverse_axes=True)
+    assert transform == STTransform(
         order="F",
         axes=["x", "y", "z"],
         units=["km", "m", "m"],

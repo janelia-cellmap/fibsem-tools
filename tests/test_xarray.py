@@ -4,8 +4,8 @@ import pytest
 from xarray import DataArray
 
 from fibsem_tools.io.zarr import zarr_n5_coordinate_inference
-from pydantic_ome_ngff import Multiscale, Axis
-from pydantic_ome_ngff.v05.coordinateTransformations import (
+from pydantic_ome_ngff.v04 import Multiscale, Axis
+from pydantic_ome_ngff.v04.coordinateTransformations import (
     VectorScaleTransform,
     VectorTranslationTransform,
 )

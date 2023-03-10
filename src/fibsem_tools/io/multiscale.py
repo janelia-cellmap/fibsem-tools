@@ -10,14 +10,15 @@ from fibsem_tools.io.core import AccessMode, initialize_group, create_group
 from fibsem_tools.io.zarr import lock_array
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
-from fibsem_tools.metadata.transform import SpatialTransform
+from fibsem_tools.metadata.transform import STTransform
 from zarr.errors import ContainsGroupError
 from numcodecs.abc import Codec
-from xarray_ome_ngff import create_multiscale as omengff_multiscale_metadata
+from xarray_ome_ngff.registry import get_adaptors
 
 
 from fibsem_tools.io.types import Attrs, JSON
 
+NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem", "ome-ngff"]
 
 
@@ -72,7 +73,7 @@ class Multiscales:
 
     def _array_metadata(self):
         cosem_meta = {
-            key: {"transform": SpatialTransform.fromDataArray(arr).dict()}
+            key: {"transform": STTransform.fromDataArray(arr).dict()}
             for key, arr in self.arrays.items()
         }
         return cosem_meta
@@ -188,7 +189,7 @@ class Multiscales:
 
 def _normalize_chunks(
     arrays: Sequence[DataArray],
-    chunks: Optional[Union[Tuple[Tuple[int, ...], ...], Tuple[int]]],
+    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], None],
 ) -> Tuple[Tuple[int, ...], ...]:
     if chunks is None:
         result: Tuple[Tuple[int, ...]] = tuple(v.data.chunksize for v in arrays)
@@ -226,7 +227,7 @@ def multiscale_metadata(
 
     """
     group_attrs = {}
-    array_attrs = [{}] * len(arrays)
+    array_attrs: List[Dict[str, Any]] = [{}] * len(arrays)
     for flavor in set(metadata_types):
         if flavor == "neuroglancer":
             g_meta = NeuroglancerN5GroupMetadata.fromDataArrays(arrays)
@@ -236,12 +237,17 @@ def multiscale_metadata(
             group_attrs.update(g_meta.dict())
             for idx in range(len(array_attrs)):
                 array_attrs[idx] = {
-                    **SpatialTransform.fromDataArray(arrays[idx]).dict(),
+                    **STTransform.fromDataArray(arrays[idx]).dict(),
                     **array_attrs[idx],
                 }
-        elif flavor == "ome-ngff":
+        elif flavor.startswith("ome-ngff"):
+            if "@" in flavor:
+                ngff_version = flavor.split("@")[-1]
+            else:
+                ngff_version = NGFF_DEFAULT_VERSION
+            adaptors = get_adaptors(ngff_version)
             group_attrs["multiscales"] = [
-                omengff_multiscale_metadata(
+                adaptors.multiscale_metadata(
                     arrays, name="", array_paths=array_paths
                 ).dict()
             ]
@@ -261,11 +267,11 @@ def multiscale_group(
     array_paths: List[str],
     chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], None],
     metadata_types: List[str],
-    group_mode="w-",
-    array_mode="w-",
+    group_mode: AccessMode = "w-",
+    array_mode: AccessMode = "w-",
     group_attrs: Optional[Attrs] = None,
     array_attrs: Optional[Sequence[Attrs]] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> Tuple[str, Tuple[str, ...]]:
     if array_attrs is None:
         array_attrs = [{}] * len(arrays)

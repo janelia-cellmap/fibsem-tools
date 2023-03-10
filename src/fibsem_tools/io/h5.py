@@ -1,10 +1,8 @@
 import warnings
-from pathlib import Path
 from typing import Any, Dict, Tuple, Union
+from fibsem_tools.io.types import PathLike
 
 import h5py
-
-Pathlike = Union[str, Path]
 
 H5_ACCESS_MODES = ("r", "r+", "w", "w-", "x", "a")
 
@@ -46,7 +44,7 @@ H5_FILE_KWDS = (
 )
 
 
-def partition_h5_kwargs(**kwargs) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def partition_h5_kwargs(**kwargs: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     partition kwargs into file-creation kwargs and dataset-creation kwargs
     """
@@ -60,7 +58,7 @@ def partition_h5_kwargs(**kwargs) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 
 def access_h5(
-    store: Pathlike, path: Pathlike, mode: str, **kwargs
+    store: PathLike, path: PathLike, mode: str, **kwargs: Any
 ) -> Union[h5py.Dataset, h5py.Group]:
     """
     Docstring

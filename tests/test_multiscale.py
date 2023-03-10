@@ -17,7 +17,7 @@ from fibsem_tools.io.multiscale import (
 )
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
-from fibsem_tools.metadata.transform import SpatialTransform
+from fibsem_tools.metadata.transform import STTransform
 
 
 @pytest.mark.parametrize("chunks", (None, (2, 2)))
@@ -88,7 +88,7 @@ def test_multiscale_storage(
 
             assert (
                 arrays[idx].attrs["transform"]
-                == SpatialTransform.fromDataArray(array=multi[k]).dict()
+                == STTransform.fromDataArray(array=multi[k]).dict()
             )
         else:
             assert "multiscales" not in group.attrs
