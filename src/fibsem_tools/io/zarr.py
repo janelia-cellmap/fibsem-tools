@@ -19,7 +19,7 @@ from fibsem_tools.io.util import split_by_suffix
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
 from fibsem_tools.io.types import JSON
-from xarray_ome_ngff.registry import get_adaptors
+from xarray_ome_ngff.registry import get_adapters
 
 ureg = pint.UnitRegistry()
 
@@ -284,7 +284,7 @@ def zarr_n5_coordinate_inference(
                 )
         else:
             raise ValueError("Multiscales attribute was empty")
-        xarray_adaptors = get_adaptors(ngff_version)
+        xarray_adapters = get_adapters(ngff_version)
         multiscales_meta = [Multiscale(**entry) for entry in multiscales]
         transforms = []
         axes = []
@@ -307,7 +307,7 @@ def zarr_n5_coordinate_inference(
             transforms.extend(matched_multiscale.coordinateTransformations)
             transforms.extend(matched_dataset.coordinateTransformations)
             axes.extend(matched_multiscale.axes)
-            coords = xarray_adaptors.transforms_to_coords(axes, transforms, shape)
+            coords = xarray_adapters.transforms_to_coords(axes, transforms, shape)
     else:
         raise ValueError("Could not infer coordinates from the supplied attributes.")
 

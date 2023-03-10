@@ -13,7 +13,7 @@ from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import STTransform
 from zarr.errors import ContainsGroupError
 from numcodecs.abc import Codec
-from xarray_ome_ngff.registry import get_adaptors
+from xarray_ome_ngff.registry import get_adapters
 
 
 from fibsem_tools.io.types import Attrs, JSON
@@ -245,9 +245,9 @@ def multiscale_metadata(
                 ngff_version = flavor.split("@")[-1]
             else:
                 ngff_version = NGFF_DEFAULT_VERSION
-            adaptors = get_adaptors(ngff_version)
+            adapters = get_adapters(ngff_version)
             group_attrs["multiscales"] = [
-                adaptors.multiscale_metadata(
+                adapters.multiscale_metadata(
                     arrays, name="", array_paths=array_paths
                 ).dict()
             ]
