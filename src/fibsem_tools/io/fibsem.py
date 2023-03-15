@@ -644,7 +644,7 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
     expected_nbytes = OFFSET + np.prod(shape) * np.dtype(dtype).itemsize
     
     if file_size < expected_nbytes:
-        warnings.warn(f'The file {path} is {file_size} bytes, but a file with size of least {expected_nbytes} was expected. It will be read as 0-padded truncated image')
+        warnings.warn(f'The file {path} is {file_size} bytes, but a file with size of least {expected_nbytes} bytes was expected. It will be read as an array of zeros')
         raw_data = np.zeros(dtype=dtype, shape=shape)
     else:
         raw_data = np.memmap(
