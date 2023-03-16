@@ -1,6 +1,6 @@
 from fibsem_tools.io.xr import stt_from_array
 import typer
-from typing import List
+from typing import List, Literal, Tuple
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools import access, read
 from fibsem_tools.io.dask import autoscale_chunk_shape, store_blocks
@@ -13,7 +13,15 @@ import time
 import numpy as np
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
-from textual.widgets import Input, Static
+from textual.widgets import Input, Static, Button, TextLog
+from fibsem_tools.metadata.transform import STTransform
+from pydantic import BaseModel
+
+
+class MultiscaleUIArgs(BaseModel):
+    transform: STTransform
+    source_path: str = ""
+    dest_path: str = ""
 
 
 def listify_str(value: List[str]):
@@ -52,24 +60,63 @@ def normalize_downsampler(downsampler: str, data: DataArray):
 
 
 class ConverterApp(App):
+    TITLE = "Convert tif to zarr"
+    SUB_TITLE = ""
     CSS_PATH = "styles.css"
-    resolution = reactive([1, 1, 1])
-    dims = ("z", "y", "x")
-    transform_parameters = ("resolution", "offset", "unit")
+
+    multi_args = reactive(
+        MultiscaleUIArgs(
+            transform=STTransform(
+                axes=("z", "y", "x"),
+                scale=(1,) * 3,
+                translate=(0,) * 3,
+                units=("nm",) * 3,
+            )
+        )
+    )
+
+    transform_name_map = dict(scale="resolution", translate="offset", units="units")
 
     def compose(self) -> ComposeResult:
         # the corner element
         yield Static()
 
-        for dim in self.dims:
+        for dim in self.multi_args.transform.axes:
             yield Static(dim.upper())
 
-        for tform in self.transform_parameters:
-            yield Static(tform, id=f"{tform}_static")
-            for dim in self.dims:
+        for tform in self.transform_name_map:
+            mapped = self.transform_name_map[tform]
+            vals = self.multi_args.transform.dict()[tform]
+            yield Static(mapped, id=f"{tform}_static")
+            for idx, dim in enumerate(self.multi_args.transform.axes):
                 yield Input(
-                    name=f"{tform}_{dim}", placeholder=f"Enter the {dim} {tform}"
+                    name=f"transform/{tform}/{idx}",
+                    value=str(vals[idx]),
+                    placeholder=f"Enter the {dim} {mapped}",
                 )
+
+        yield Static("Source path")
+        yield Input(placeholder="enter the path to the source image", id="source_path")
+        yield Static("Dest path")
+        yield Input(placeholder="enter the path to the target image", id="dest_path")
+        yield Static()
+        yield Button("Convert", id="convert_button", disabled=False)
+        yield TextLog(id="tlog")
+
+    def on_button_pressed(self, message: Button.Pressed):
+        self.exit(self.multi_args)
+
+    def on_input_changed(self, message: Input.Changed):
+        tlog = self.query_one(TextLog)
+        tlog.write(message.__dict__)
+
+        if message.input.name.startswith("transform"):
+            outer, field, index = message.input.name.split("/")
+
+            old_args = self.multi_args.dict()
+
+            old_args[outer][field][int(index)] = message.value
+            self.multi_args = MultiscaleUIArgs(**old_args)
 
 
 def cli(
@@ -81,6 +128,16 @@ def cli(
     translate: List[str] = typer.Option(["0, 0, 0"], callback=listify_float),
     chunks: List[str] = typer.Option(["128, 128, 128"], callback=listify_int),
     downsampler: str = typer.Option("auto"),
+):
+    pass
+
+
+def convert_data(
+    source: str,
+    dest: str,
+    transform: STTransform,
+    chunks: Tuple[int, ...],
+    downsampler: Literal["mean", "mode"],
 ):
     source_array = read(source)
     nbytes = source_array.nbytes
@@ -102,7 +159,11 @@ def cli(
     data = da.from_array(np.array(source_array), chunks=read_chunks)
     typer.echo(f"""Done loading tif after {time.time() - start:0.2f} s""")
     source_xr = stt_from_array(
-        data, dims=axes, scales=scale, translates=translate, units=units
+        data,
+        dims=transform.axes,
+        scales=transform.scale,
+        translates=transform.translate,
+        units=transform.units,
     )
     reducer = normalize_downsampler(downsampler, data)
     multi = multiscale(source_xr, reducer, (2,) * data.ndim, chunks=chunks)
@@ -136,5 +197,5 @@ def cli(
 
 if __name__ == "__main__":
     app = ConverterApp()
-    app.run()
-    # typer.run(cli)
+    ui_args = app.run()
+    typer.echo(ui_args)

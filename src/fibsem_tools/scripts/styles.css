@@ -4,6 +4,22 @@ Screen {
     grid-rows: 15%;
 }
 
+#source_path {
+    column-span: 3;
+}
+
+#dest_path {
+    column-span: 3;
+}
+
+#convert_button {
+    column-span: 3;
+}
+
+#tlog {
+    column-span: 4;
+}
+
 .box {
     height: 100%;
     border: solid green;
