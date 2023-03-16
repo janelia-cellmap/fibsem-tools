@@ -11,6 +11,9 @@ from xarray_multiscale import windowed_mean, windowed_mode
 from dask.utils import memory_repr
 import time
 import numpy as np
+from textual.app import App, ComposeResult
+from textual.reactive import reactive
+from textual.widgets import Input, Static
 
 
 def listify_str(value: List[str]):
@@ -46,6 +49,27 @@ def normalize_downsampler(downsampler: str, data: DataArray):
         raise ValueError(
             'Invalid argument. downsampler must be one of ("auto", "mode", "mean")'
         )
+
+
+class ConverterApp(App):
+    CSS_PATH = "styles.css"
+    resolution = reactive([1, 1, 1])
+    dims = ("z", "y", "x")
+    transform_parameters = ("resolution", "offset", "unit")
+
+    def compose(self) -> ComposeResult:
+        # the corner element
+        yield Static()
+
+        for dim in self.dims:
+            yield Static(dim.upper())
+
+        for tform in self.transform_parameters:
+            yield Static(tform, id=f"{tform}_static")
+            for dim in self.dims:
+                yield Input(
+                    name=f"{tform}_{dim}", placeholder=f"Enter the {dim} {tform}"
+                )
 
 
 def cli(
@@ -111,4 +135,6 @@ def cli(
 
 
 if __name__ == "__main__":
-    typer.run(cli)
+    app = ConverterApp()
+    app.run()
+    # typer.run(cli)

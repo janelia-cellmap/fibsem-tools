@@ -13,7 +13,6 @@ from typing import (
     Tuple,
     Union,
 )
-from urllib.parse import urlparse
 import tifffile
 import dask.array as da
 import h5py
@@ -21,6 +20,7 @@ import mrcfile
 import zarr
 from numpy.typing import NDArray
 from xarray import DataArray
+import fsspec
 
 from fibsem_tools.metadata.transform import STTransform
 from fibsem_tools.io.types import Attrs, PathLike
@@ -315,10 +315,9 @@ def create_group(
             {bad_paths}
             """
         )
-    protocol = urlparse(group_url).scheme
-    protocol_prefix = ""
-    if protocol != "":
-        protocol_prefix = protocol + "://"
+
+    protocol = fsspec.get_mapper(path).fs.protocol
+    protocol_prefix = protocol + "://"
     group = access(group_url, mode=group_mode, attrs=group_attrs)
 
     if array_attrs is None:
