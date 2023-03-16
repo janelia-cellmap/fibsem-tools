@@ -1,16 +1,16 @@
 from typing import Dict, List, Optional, Sequence, Tuple, Union, Literal
 
-import numpy as np
 from pydantic import BaseModel, root_validator
 from xarray import DataArray
+from fibsem_tools.io.xr import stt_coord
 
 ArrayOrder = Literal["C", "F"]
 
 
-class SpatialTransform(BaseModel):
+class STTransform(BaseModel):
     """
-    Representation of an N-dimensional scaling + translation transform for labelled axes
-    with units.
+    Representation of an N-dimensional scaling -> translation transform for labelled
+    axes with units.
     """
 
     order: Optional[ArrayOrder] = "C"
@@ -47,10 +47,12 @@ class SpatialTransform(BaseModel):
         else:
             axes = reversed(self.axes)
         return [
-            DataArray(
-                (np.arange(shape[idx]) * self.scale[idx]) + self.translate[idx],
-                attrs={"units": self.units[idx]},
-                dims=(k,),
+            stt_coord(
+                shape[idx],
+                dim=k,
+                scale=self.scale[idx],
+                translate=self.translate[idx],
+                unit=self.units[idx],
             )
             for idx, k in enumerate(axes)
         ]
@@ -58,7 +60,7 @@ class SpatialTransform(BaseModel):
     @classmethod
     def fromDataArray(
         cls, array: DataArray, reverse_axes: bool = False
-    ) -> "SpatialTransform":
+    ) -> "STTransform":
         """
         Generate a spatial transform from a DataArray.
 
@@ -75,7 +77,7 @@ class SpatialTransform(BaseModel):
         Returns
         -------
 
-        SpatialTransform
+        STTransform
 
         """
 

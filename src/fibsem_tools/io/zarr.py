@@ -16,10 +16,10 @@ from toolz import concat
 from xarray import DataArray
 from zarr.indexing import BasicIndexer
 from fibsem_tools.io.util import split_by_suffix
-from fibsem_tools.metadata.transform import SpatialTransform
-from pydantic_ome_ngff import Multiscale
-from xarray_ome_ngff import create_coords
+from fibsem_tools.io.xr import stt_coord
+from fibsem_tools.metadata.transform import STTransform
 from fibsem_tools.io.types import JSON
+from xarray_ome_ngff.registry import get_adapters
 
 ureg = pint.UnitRegistry()
 
@@ -245,8 +245,10 @@ def zarr_n5_coordinate_inference(
     group_attrs: Dict[str, JSON] = {},
     array_path: str = "",
 ) -> List[DataArray]:
+
     if (transform := array_attrs.get("transform", None)) is not None:
-        coords = SpatialTransform(**transform).to_coords(shape)
+        coords = STTransform(**transform).to_coords(shape)
+
     elif "pixelResolution" in array_attrs or "resolution" in array_attrs:
         input_axes = N5_AXES_3D
         output_axes = input_axes[::-1]
@@ -263,15 +265,27 @@ def zarr_n5_coordinate_inference(
             scales = dict(zip(N5_AXES_3D, _scales))
 
         coords = [
-            DataArray(
-                translates[ax] + np.arange(shape[idx]) * scales[ax],
-                dims=ax,
-                attrs={"unit": ureg.get_name(units[ax])},
-            )
+            stt_coord(shape[idx], ax, scales[ax], translates[ax], units[ax])
             for idx, ax in enumerate(output_axes)
         ]
-    elif (multiscale := group_attrs.get("multiscales", None)) is not None:
-        multiscales_meta = [Multiscale(**entry) for entry in multiscale]
+    elif (multiscales := group_attrs.get("multiscales", None)) is not None:
+        if len(multiscales) > 0:
+            multiscale = multiscales[0]
+            if (ngff_version := multiscale.get("version", None)) == "0.4":
+                from pydantic_ome_ngff.v04 import Multiscale
+            elif multiscale["version"] == "0.5-dev":
+                from pydantic_ome_ngff.latest import Multiscale
+            else:
+                raise ValueError(
+                    f"""
+                    Could not resolve the version of the multiscales metadata 
+                    found in the group metadata {group_attrs}
+                    """
+                )
+        else:
+            raise ValueError("Multiscales attribute was empty")
+        xarray_adapters = get_adapters(ngff_version)
+        multiscales_meta = [Multiscale(**entry) for entry in multiscales]
         transforms = []
         axes = []
         matched_multiscale = None
@@ -293,7 +307,7 @@ def zarr_n5_coordinate_inference(
             transforms.extend(matched_multiscale.coordinateTransformations)
             transforms.extend(matched_dataset.coordinateTransformations)
             axes.extend(matched_multiscale.axes)
-            coords = create_coords(axes, transforms, shape)
+            coords = xarray_adapters.transforms_to_coords(axes, transforms, shape)
     else:
         raise ValueError("Could not infer coordinates from the supplied attributes.")
 

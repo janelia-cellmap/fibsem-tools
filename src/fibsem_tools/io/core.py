@@ -1,6 +1,5 @@
 import os
-from os import PathLike
-from enum import Enum
+import numpy.typing as npt
 from pathlib import Path
 from typing import (
     Any,
@@ -8,22 +7,23 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
     Union,
 )
-from urllib.parse import urlparse
-
+import tifffile
 import dask.array as da
 import h5py
 import mrcfile
 import zarr
 from numpy.typing import NDArray
 from xarray import DataArray
+import fsspec
 
-from fibsem_tools.metadata.transform import SpatialTransform
-from fibsem_tools.io.types import Attrs
+from fibsem_tools.metadata.transform import STTransform
+from fibsem_tools.io.types import Attrs, PathLike
 from fibsem_tools.io.fibsem import read_fibsem
 from fibsem_tools.io.mrc import (
     access_mrc,
@@ -42,26 +42,27 @@ from fibsem_tools.io.zarr import (
 )
 
 
-# encode the fact that the first axis in zarr is the z axis
-_zarr_axes = {"z": 0, "y": 1, "x": 2}
-# encode the fact that the first axis in n5 is the x axis
-_n5_axes = {"z": 2, "y": 1, "x": 0}
-_formats = (".dat", ".mrc")
+_formats = (".dat", ".mrc", ".tif")
 _container_extensions = (".zarr", ".n5", ".h5")
 _suffixes = (*_formats, *_container_extensions)
 
 
-class AccessMode(str, Enum):
-    w = "w"
-    w_minus = "w-"
-    r = "r"
-    r_plus = "r+"
-    a = "a"
+AccessMode = Literal["w", "w-", "r", "r+", "a"]
 
 
-def access_fibsem(
-    path: Union[PathLike, Iterable[str], Iterable[Path]], mode: AccessMode
-):
+def access_tif(
+    path: PathLike, mode: Literal["r"] = "r", memmap: bool = True
+) -> npt.ArrayLike:
+    if mode != "r":
+        raise ValueError("Tifs may only be accessed in read-only mode")
+
+    if memmap:
+        return tifffile.memmap(path)
+    else:
+        return tifffile.imread(path)
+
+
+def access_fibsem(path: Union[PathLike, Iterable[PathLike]], mode: AccessMode):
     if mode != "r":
         raise ValueError(
             f".dat files can only be accessed in read-only mode, not {mode}."
@@ -84,6 +85,7 @@ accessors[".n5"] = access_n5
 accessors[".zarr"] = access_zarr
 accessors[".h5"] = access_h5
 accessors[".mrc"] = access_mrc
+accessors[".tif"] = access_tif
 
 daskifiers: Dict[str, Callable[..., da.core.Array]] = {}
 daskifiers[".mrc"] = mrc_to_dask
@@ -92,7 +94,7 @@ daskifiers[".zarr"] = zarr_to_dask
 
 
 def access(
-    path: Union[PathLike, Iterable[str], Iterable[Path]],
+    path: Union[PathLike, Iterable[PathLike]],
     mode: AccessMode,
     **kwargs: Dict[str, Any],
 ) -> Any:
@@ -203,20 +205,24 @@ def read_xarray(
     url: str,
     chunks: Union[str, Tuple[int, ...]] = "auto",
     coords: Any = "auto",
+    use_dask: bool = True,
     storage_options: Dict[str, Any] = {},
-    **kwargs: Dict[str, Any],
+    **kwargs: Any,
 ) -> DataArray:
     """
     Create an xarray.DataArray from data found at a path.
     """
     raw_array = read(url, storage_options=storage_options)
-    dask_array = read_dask(url, chunks=chunks, storage_options=storage_options)
+    if use_dask:
+        array = read_dask(url, chunks=chunks, storage_options=storage_options)
 
     if coords == "auto":
         coords = infer_coordinates(raw_array)
-    elif isinstance(coords, SpatialTransform):
-        coords = coords.to_coords(dict(zip(coords.axes, dask_array.shape)))
-    result = DataArray(dask_array, coords=coords, **kwargs)
+
+    elif isinstance(coords, STTransform):
+        coords = coords.to_coords(array.shape)
+
+    result = DataArray(array, coords=coords, **kwargs)
     return result
 
 
@@ -309,10 +315,9 @@ def create_group(
             {bad_paths}
             """
         )
-    protocol = urlparse(group_url).scheme
-    protocol_prefix = ""
-    if protocol != "":
-        protocol_prefix = protocol + "://"
+
+    protocol = fsspec.get_mapper(path).fs.protocol
+    protocol_prefix = protocol + "://"
     group = access(group_url, mode=group_mode, attrs=group_attrs)
 
     if array_attrs is None:
