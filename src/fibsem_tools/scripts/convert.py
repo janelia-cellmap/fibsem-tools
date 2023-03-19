@@ -1,6 +1,6 @@
 from fibsem_tools.io.xr import stt_from_array
-import typer
-from typing import List, Literal, Tuple
+from fibsem_tools.io.types import JSON
+from typing import List, Literal, Tuple, Dict, Sequence
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools import access, read
 from fibsem_tools.io.dask import autoscale_chunk_shape, store_blocks
@@ -12,16 +12,78 @@ from dask.utils import memory_repr
 import time
 import numpy as np
 from textual.app import App, ComposeResult
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Input, Static, Button, TextLog
 from fibsem_tools.metadata.transform import STTransform
-from pydantic import BaseModel
+from pydantic import (
+    BaseModel,
+    DirectoryPath,
+    PositiveFloat,
+    ValidationError,
+    FilePath,
+    conlist,
+)
+from pathlib import Path
+import os
 
 
-class MultiscaleUIArgs(BaseModel):
+def represents_int(s):
+    try:
+        int(s)
+    except ValueError:
+        return False
+    else:
+        return True
+
+
+def ensure_key(data, key):
+    if isinstance(data, Sequence) and represents_int(key):
+        return int(key)
+    else:
+        return key
+
+
+def url_getitem(data: Dict[str, JSON], url: str, separator: str):
+    first, *rest = url.split(separator)
+
+    first = ensure_key(data, first)
+
+    if len(rest) == 0:
+        return data[first]
+    else:
+        subdata = data[first]
+        return url_getitem(subdata, separator.join(rest), separator)
+
+
+def url_setitem(data: Dict[str, JSON], url: str, value: JSON, separator: str):
+    parts = url.split(separator)
+
+    if len(parts) == 1:
+        last = ensure_key(data, parts[0])
+        data[last] = value
+        return
+    else:
+        url_setitem(data[parts[0]], separator.join(parts[1:]), value, separator)
+
+
+class Params(BaseModel):
+    axes: conlist(str, unique_items=True)
+    units: List[str]
+    scale: List[PositiveFloat]
+    translate: List[float]
+    source_path: FilePath
+    dest_path: DirectoryPath
+
+
+class MultiscaleArgs(BaseModel):
     transform: STTransform
-    source_path: str = ""
-    dest_path: str = ""
+    source_path: FilePath
+    dest_path: str
+
+
+def validation_error_to_paths(e: ValidationError, separator: str):
+    return (separator.join(map(str, err["loc"])) for err in e.errors())
 
 
 def listify_str(value: List[str]):
@@ -63,73 +125,113 @@ class ConverterApp(App):
     TITLE = "Convert tif to zarr"
     SUB_TITLE = ""
     CSS_PATH = "styles.css"
-
-    multi_args = reactive(
-        MultiscaleUIArgs(
-            transform=STTransform(
-                axes=("z", "y", "x"),
-                scale=(1,) * 3,
-                translate=(0,) * 3,
-                units=("nm",) * 3,
-            )
+    is_valid: bool = reactive(True)
+    is_converting: bool = reactive(False)
+    separator = "/"
+    chunks = (128, 128, 128)
+    data = reactive(
+        dict(
+            axes=["z", "y", "x"],
+            scale=[4] * 3,
+            translate=[0] * 3,
+            units=["nm"] * 3,
+            source_path="",
+            dest_path="",
         )
     )
 
+    output_model = Params
     transform_name_map = dict(scale="resolution", translate="offset", units="units")
 
     def compose(self) -> ComposeResult:
         # the corner element
-        yield Static()
+        yield Static(classes="label")
 
-        for dim in self.multi_args.transform.axes:
+        for dim in self.data["axes"]:
             yield Static(dim.upper())
 
         for tform in self.transform_name_map:
             mapped = self.transform_name_map[tform]
-            vals = self.multi_args.transform.dict()[tform]
-            yield Static(mapped, id=f"{tform}_static")
-            for idx, dim in enumerate(self.multi_args.transform.axes):
+            vals = self.data[tform]
+
+            yield Static(mapped, id=f"{tform}_static", classes="label")
+            for idx, dim in enumerate(self.data["axes"]):
                 yield Input(
-                    name=f"transform/{tform}/{idx}",
+                    id=self.separator.join(map(str, (tform, idx))),
                     value=str(vals[idx]),
                     placeholder=f"Enter the {dim} {mapped}",
                 )
 
-        yield Static("Source path")
+        yield Static("Source path", classes="label")
         yield Input(placeholder="enter the path to the source image", id="source_path")
-        yield Static("Dest path")
+        yield Static("Dest path", classes="label")
         yield Input(placeholder="enter the path to the target image", id="dest_path")
         yield Static()
-        yield Button("Convert", id="convert_button", disabled=False)
-        yield TextLog(id="tlog")
+        yield Button("Convert", id="convert_button", disabled=not self.is_valid)
+        yield TextLog(id="tlog", markup=True)
 
-    def on_button_pressed(self, message: Button.Pressed):
-        self.exit(self.multi_args)
+    def watch_is_converting(self, is_converting):
+        for widget in self.query("Input"):
+            widget.disabled = is_converting
+        self.query_one("#convert_button").disabled = is_converting
+
+    def watch_is_valid(self, is_valid: bool):
+        if is_valid:
+            for widget in self.query("Input"):
+                widget.remove_class("invalid")
+                widget.add_class("valid")
+
+        try:
+            self.query_one("#convert_button").disabled = not is_valid
+        except NoMatches:
+            pass
 
     def on_input_changed(self, message: Input.Changed):
-        tlog = self.query_one(TextLog)
-        tlog.write(message.__dict__)
+        tlog = self.query_one("#tlog")
+        data = self.data.copy()
+        url_setitem(data, message.input.id, message.value, self.separator)
 
-        if message.input.name.startswith("transform"):
-            outer, field, index = message.input.name.split("/")
+        try:
+            self.output_model(**data)
+            self.data = data
+            self.is_valid = True
 
-            old_args = self.multi_args.dict()
+        except ValidationError as e:
+            paths = tuple(validation_error_to_paths(e, self.separator))
+            self.is_valid = False
+            tlog.write(e)
 
-            old_args[outer][field][int(index)] = message.value
-            self.multi_args = MultiscaleUIArgs(**old_args)
+            for widget in self.query("Input"):
+                if widget.id in paths:
+                    widget.remove_class("valid")
+                    widget.add_class("invalid")
+                else:
+                    widget.remove_class("invalid")
+                    widget.add_class("valid")
 
+    def on_button_pressed(self, message: Button.Pressed):
+        tlog = self.query_one("#tlog")
+        args: Params = self.output_model(**self.data)
+        fname = Path(args.source_path).stem
 
-def cli(
-    source: str,
-    dest: str,
-    axes: List[str] = typer.Option(["z, y, x"], callback=listify_str),
-    units: List[str] = typer.Option(["m, m, m"], callback=listify_str),
-    scale: List[str] = typer.Option(["1, 1, 1"], callback=listify_float),
-    translate: List[str] = typer.Option(["0, 0, 0"], callback=listify_float),
-    chunks: List[str] = typer.Option(["128, 128, 128"], callback=listify_int),
-    downsampler: str = typer.Option("auto"),
-):
-    pass
+        transform = STTransform(
+            axes=args.axes, units=args.units, translate=args.translate, scale=args.scale
+        )
+        self.is_converting = True
+        self.log("hi")
+        tlog.write("Begin converting data...")
+
+        convert_data(
+            source=args.source_path,
+            dest=os.path.join(args.dest_path, fname + ".zarr/"),
+            transform=transform,
+            chunks=self.chunks,
+            downsampler="mode",
+            logger=tlog,
+        )
+
+        tlog.write("Done converting data.")
+        self.is_converting = False
 
 
 def convert_data(
@@ -138,10 +240,11 @@ def convert_data(
     transform: STTransform,
     chunks: Tuple[int, ...],
     downsampler: Literal["mean", "mode"],
+    logger,
 ):
     source_array = read(source)
     nbytes = source_array.nbytes
-    typer.echo(
+    logger.write(
         f"""
     Loading tif file with size {memory_repr(nbytes)}. 
     Be advised that this process requires approximately 
@@ -157,7 +260,7 @@ def convert_data(
     )
 
     data = da.from_array(np.array(source_array), chunks=read_chunks)
-    typer.echo(f"""Done loading tif after {time.time() - start:0.2f} s""")
+    logger.write(f"""Done loading tif after {time.time() - start:0.2f} s""")
     source_xr = stt_from_array(
         data,
         dims=transform.axes,
@@ -171,7 +274,7 @@ def convert_data(
     for idx, m in enumerate(multi):
         m.name = f"s{idx}"
 
-    typer.echo("Begin preparing storage at {dest}")
+    logger.write(f"Begin preparing storage at {dest}")
     start = time.time()
 
     multi_group, multi_arrays = multiscale_group(
@@ -183,19 +286,23 @@ def convert_data(
         group_mode="w",
         array_mode="w",
     )
-    typer.echo(f"Done preparing storage after {time.time() - start:0.2f}s")
+    logger.write(f"Done preparing storage after {time.time() - start:0.2f}s")
 
     storage = [
         store_blocks(s.data, access(d, write_empty_chunks=False, mode="a"))
         for s, d in zip(multi, multi_arrays)
     ]
     start = time.time()
-    typer.echo("Begin storing arrays.")
+    logger.write("Begin storing arrays.")
     da.compute(storage)
-    typer.echo(f"Done storing arrays after {time.time() - start:0.2f}s")
+    logger.write(f"Done storing arrays after {time.time() - start:0.2f}s")
+
+
+def run():
+    app = ConverterApp()
+    result = app.run()
+    return result
 
 
 if __name__ == "__main__":
-    app = ConverterApp()
-    ui_args = app.run()
-    typer.echo(ui_args)
+    run()

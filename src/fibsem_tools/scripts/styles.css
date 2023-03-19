@@ -1,7 +1,13 @@
 Screen {
     layout: grid;
     grid-size: 4;
-    grid-rows: 15%;
+    grid-rows: 1fr;
+    grid-columns: 1fr;
+}
+
+Static {
+    content-align-horizontal: center;
+    content-align-vertical: middle;
 }
 
 #source_path {
@@ -20,7 +26,20 @@ Screen {
     column-span: 4;
 }
 
+.label {
+    width: 100%
+}
+
 .box {
     height: 100%;
     border: solid green;
-}           
+}
+
+.valid {
+    border: solid green;
+
+}
+
+.invalid {
+    border: dashed #ff2d2d;
+}
