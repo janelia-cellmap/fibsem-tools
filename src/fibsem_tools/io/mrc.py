@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import List, Sequence, Tuple, Union
 
 import dask.array as da
@@ -8,10 +7,10 @@ from dask.array.core import normalize_chunks
 from mrcfile.mrcmemmap import MrcMemmap
 from xarray import DataArray
 
-Pathlike = Union[str, Path]
+from fibsem_tools.io.types import PathLike
 
 
-def access_mrc(path: Pathlike, mode: str, **kwargs):
+def access_mrc(path: PathLike, mode: str, **kwargs):
     # todo: add warning when kwargs are passed to this function
     return MrcMemmap(path, mode=mode)
 

@@ -28,7 +28,6 @@ from fibsem_tools.io.fibsem import read_fibsem
 from fibsem_tools.io.mrc import (
     access_mrc,
     mrc_coordinate_inference,
-    mrc_shape_dtype_inference,
     mrc_to_dask,
 )
 from fibsem_tools.io.util import split_by_suffix
@@ -277,18 +276,6 @@ def initialize_group(
         z_arr.attrs.update(attrs)
 
     return group
-
-
-def infer_dtype(path: str) -> str:
-    fd = read(path)
-    if hasattr(fd, "dtype"):
-        dtype = str(fd.dtype)
-    elif hasattr(fd, "data"):
-        _, dtype = mrc_shape_dtype_inference(fd)
-        dtype = str(dtype)
-    else:
-        raise ValueError(f"Cannot infer dtype of data located at {path}")
-    return dtype
 
 
 def create_group(
