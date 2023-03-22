@@ -9,14 +9,12 @@ import numpy as np
 import pytest
 from xarray import DataArray
 from fibsem_tools.io.core import read
-
-from fibsem_tools.io.zarr import zarr_n5_coordinate_inference
-from pydantic_ome_ngff.v04 import Multiscale, Axis
-from pydantic_ome_ngff.v04.coordinateTransformations import (
-    VectorScaleTransform,
-    VectorTranslationTransform,
-
+from fibsem_tools.io.multiscale import (
+    Multiscales,
+    multiscale_group,
+    multiscale_metadata,
 )
+
 from fibsem_tools.metadata.cosem import COSEMGroupMetadata
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import STTransform
