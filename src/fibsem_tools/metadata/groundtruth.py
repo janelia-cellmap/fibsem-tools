@@ -14,9 +14,15 @@ class InstanceName(BaseModel):
     short: str
 
 
+class Annotated(str, Enum):
+    dense: str = "dense"
+    sparse: str = "sparse"
+    empty: str = "empty"
+
+
 class AnnotationState(BaseModel):
     present: bool
-    annotated: bool
+    annotated: Annotated
 
 
 class Label(BaseModel):
