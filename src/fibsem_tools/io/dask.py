@@ -106,6 +106,10 @@ def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Arra
     each chunk of `source` to `target`.
     """
 
+    # handle xarray
+    if hasattr(source, "data") and isinstance(source.data, da.Array):
+        source = source.data
+
     slices = slices_from_chunks(source.chunks)
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]

@@ -13,7 +13,7 @@ import zarr
 
 from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.h5 import access_h5
-from fibsem_tools.io.core import initialize_group, read_dask, access, read
+from fibsem_tools.io.core import create_group, read_dask, access, read
 from fibsem_tools.io.mrc import access_mrc
 from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
 from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE, delete_zbranch
@@ -188,7 +188,7 @@ def test_group_initialization():
     a_attrs = {"foo": {"a": 10}, "bar": {"b": 15}}
     g_attrs = {"bla": "bla"}
     chunks = ((2,), (2,))
-    group = initialize_group(
+    group_path, _ = create_group(
         store_path,
         data.values(),
         data.keys(),
@@ -196,7 +196,7 @@ def test_group_initialization():
         group_attrs=g_attrs,
         array_attrs=a_attrs.values(),
     )
-
+    group = read(group_path)
     assert g_attrs == dict(group.attrs)
     for d in data:
         assert data[d].shape == group[d].shape
