@@ -13,7 +13,7 @@ import zarr
 
 from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.h5 import access_h5
-from fibsem_tools.io.core import initialize_group, read_dask, access, read
+from fibsem_tools.io.core import create_group, read_dask, access, read
 from fibsem_tools.io.mrc import access_mrc
 from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
 from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE, delete_zbranch
@@ -79,17 +79,21 @@ def test_access_group_zarr_n5():
 
 
 def test_access_mrc():
-    with tempfile.NamedTemporaryFile(suffix=".mrc") as store:
-        data = np.arange(27, dtype="uint8").reshape((3, 3, 3))
-        mrcfile.new(store.name, data=data, overwrite=True)
-        original = mrcfile.open(store.name)
-        assert np.array_equal(access_mrc(store.name, mode="r").data, original.data)
-        assert np.array_equal(read_dask(store.name).compute(), original.data)
-        assert np.array_equal(
-            read_dask(store.name, chunks=(2, -1, -1)).compute(), original.data
-        )
-        with pytest.raises(ValueError):
-            read_dask(store.name, chunks=(1, 1, 1))
+    store = tempfile.NamedTemporaryFile(suffix=".mrc", delete=False)
+    name = store.name
+    data = np.arange(27, dtype="uint8").reshape((3, 3, 3))
+    mrcfile.new(name, data=data, overwrite=True)
+
+    original = mrcfile.open(name)
+    assert np.array_equal(access_mrc(name, mode="r").data, original.data)
+    assert np.array_equal(read_dask(name).compute(), original.data)
+    assert np.array_equal(read_dask(name, chunks=(2, -1, -1)).compute(), original.data)
+    with pytest.raises(ValueError):
+        read_dask(name, chunks=(1, 1, 1))
+
+    del original
+    del store
+    os.remove(name)
 
 
 def test_access_array_h5():
@@ -184,7 +188,7 @@ def test_group_initialization():
     a_attrs = {"foo": {"a": 10}, "bar": {"b": 15}}
     g_attrs = {"bla": "bla"}
     chunks = ((2,), (2,))
-    group = initialize_group(
+    group_path, _ = create_group(
         store_path,
         data.values(),
         data.keys(),
@@ -192,7 +196,7 @@ def test_group_initialization():
         group_attrs=g_attrs,
         array_attrs=a_attrs.values(),
     )
-
+    group = read(group_path)
     assert g_attrs == dict(group.attrs)
     for d in data:
         assert data[d].shape == group[d].shape

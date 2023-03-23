@@ -8,6 +8,8 @@ import fsspec
 import toolz as tz
 from dask import bag, delayed
 
+from fibsem_tools.io.types import PathLike
+
 
 @delayed
 def _rmtree_after_delete_files(path: str, dependency: Any):
@@ -72,7 +74,7 @@ def list_files_parallel(
         return result
 
 
-def split_by_suffix(uri: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
+def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     """
     Given a string and a collection of suffixes, return
     the string split at the last instance of any element of the string
@@ -82,7 +84,7 @@ def split_by_suffix(uri: str, suffixes: Sequence[str]) -> Tuple[str, str, str]:
     """
     protocol: Optional[str]
     subpath: str
-    protocol, subpath = fsspec.core.split_protocol(uri)
+    protocol, subpath = fsspec.core.split_protocol(str(uri))
     if protocol is None:
         separator = os.path.sep
     else:

@@ -27,8 +27,7 @@ from fibsem_tools.io.types import Attrs, PathLike
 from fibsem_tools.io.fibsem import read_fibsem
 from fibsem_tools.io.mrc import (
     access_mrc,
-    mrc_coordinate_inference,
-    mrc_shape_dtype_inference,
+    infer_coords as mrc_infer_coords,
     mrc_to_dask,
 )
 from fibsem_tools.io.util import split_by_suffix
@@ -37,7 +36,7 @@ from fibsem_tools.io.zarr import (
     access_parent,
     access_zarr,
     n5_to_dask,
-    zarr_n5_coordinate_inference,
+    infer_coords as z_infer_coords,
     zarr_to_dask,
 )
 
@@ -226,17 +225,17 @@ def read_xarray(
     return result
 
 
-def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
+def infer_coordinates(arr: npt.ArrayLike) -> List[DataArray]:
 
     if isinstance(arr, zarr.core.Array):
-        coords = zarr_n5_coordinate_inference(
+        coords = z_infer_coords(
             shape=arr.shape,
             array_attrs=dict(arr.attrs),
             group_attrs=dict(access_parent(arr, mode="r").attrs),
             array_path=arr.basename,
         )
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
-        coords = mrc_coordinate_inference(arr)
+        coords = mrc_infer_coords(arr)
     else:
         raise ValueError(
             f"No coordinate inference possible for array of type {type(arr)}"
@@ -244,57 +243,10 @@ def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
     return coords
 
 
-def initialize_group(
-    group_path: PathLike,
-    arrays: Sequence[NDArray[Any]],
-    array_paths: Sequence[str],
-    chunks: Sequence[int],
-    group_attrs: Dict[str, Any] = {},
-    array_attrs: Optional[Sequence[Dict[str, Any]]] = None,
-    modes: Tuple[AccessMode, AccessMode] = ("w", "w"),
-    **kwargs,
-) -> zarr.hierarchy.Group:
-    group_access_mode, array_access_mode = modes
-    group = access(group_path, mode=group_access_mode, attrs=group_attrs)
-
-    if array_attrs is None:
-        _array_attrs: Tuple[Dict[str, Any], ...] = ({},) * len(arrays)
-    else:
-        _array_attrs = array_attrs
-
-    for name, arr, attrs, chnks in zip(array_paths, arrays, _array_attrs, chunks):
-        path = os.path.join(group.path, name)
-        z_arr = zarr.open_array(
-            store=group.store,
-            mode=array_access_mode,
-            fill_value=0,
-            path=path,
-            shape=arr.shape,
-            dtype=arr.dtype,
-            chunks=chnks,
-            **kwargs,
-        )
-        z_arr.attrs.update(attrs)
-
-    return group
-
-
-def infer_dtype(path: str) -> str:
-    fd = read(path)
-    if hasattr(fd, "dtype"):
-        dtype = str(fd.dtype)
-    elif hasattr(fd, "data"):
-        _, dtype = mrc_shape_dtype_inference(fd)
-        dtype = str(dtype)
-    else:
-        raise ValueError(f"Cannot infer dtype of data located at {path}")
-    return dtype
-
-
 def create_group(
     group_url: PathLike,
-    arrays: Sequence[NDArray[Any]],
-    array_paths: Sequence[str],
+    arrays: Iterable[NDArray[Any]],
+    array_paths: Iterable[str],
     chunks: Sequence[int],
     group_attrs: Attrs = {},
     array_attrs: Optional[Sequence[Attrs]] = None,
@@ -303,8 +255,11 @@ def create_group(
     **array_kwargs,
 ) -> Tuple[str, Tuple[str, ...]]:
 
+    _arrays = tuple(a for a in arrays)
+    _array_paths = tuple(p for p in array_paths)
+
     bad_paths = []
-    for path in array_paths:
+    for path in _array_paths:
         if len(Path(path).parts) > 1:
             bad_paths.append(path)
 
@@ -321,12 +276,12 @@ def create_group(
     group = access(group_url, mode=group_mode, attrs=group_attrs)
 
     if array_attrs is None:
-        _array_attrs: Tuple[Attrs, ...] = ({},) * len(arrays)
+        _array_attrs: Tuple[Attrs, ...] = ({},) * len(_arrays)
     else:
         _array_attrs = array_attrs
 
-    for idx, array in enumerate(arrays):
-        name = array_paths[idx]
+    for idx, vals in enumerate(zip(_arrays, _array_paths, _array_attrs)):
+        array, name, attrs = vals
         path = protocol_prefix + os.path.join(group.store.path, group.path, name)
         access(
             path=path,
@@ -334,10 +289,10 @@ def create_group(
             shape=array.shape,
             dtype=array.dtype,
             chunks=chunks[idx],
-            attrs=_array_attrs[idx],
+            attrs=attrs,
             **array_kwargs,
         )
     g_url = protocol_prefix + os.path.join(group.store.path, group.path)
-    a_urls = [os.path.join(g_url, name) for name in array_paths]
+    a_urls = [os.path.join(g_url, name) for name in _array_paths]
 
     return g_url, a_urls

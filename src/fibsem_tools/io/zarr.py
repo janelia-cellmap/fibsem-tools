@@ -239,7 +239,7 @@ def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs):
     return access_zarr(store=node.store, path=parent_path, **kwargs)
 
 
-def zarr_n5_coordinate_inference(
+def infer_coords(
     shape: Tuple[int, ...],
     array_attrs: Dict[str, JSON],
     group_attrs: Dict[str, JSON] = {},

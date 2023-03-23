@@ -11,7 +11,8 @@ import dask.array as da
 import numpy as np
 from xarray import DataArray
 
-Pathlike = Union[str, Path]
+import warnings
+from fibsem_tools.io.types import PathLike
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3_555_587_570
@@ -639,7 +640,13 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
     else:
         dtype = ">i2"
 
-    try:
+    file_size = os.path.getsize(path)
+    expected_nbytes = OFFSET + np.prod(shape) * np.dtype(dtype).itemsize
+    
+    if file_size < expected_nbytes:
+        warnings.warn(f'The file {path} is {file_size} bytes, but a file with size of least {expected_nbytes} bytes was expected. It will be read as an array of zeros')
+        raw_data = np.zeros(dtype=dtype, shape=shape)
+    else:
         raw_data = np.memmap(
             path,
             dtype=dtype,
@@ -647,9 +654,6 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
             offset=OFFSET,
             shape=shape,
         )
-    except ValueError:
-        # todo: read what data is available
-        raw_data = np.zeros(dtype=dtype, shape=shape)
 
     # Once read into the FIBSEMData structure it will be in memory, not memmap.
     result = FIBSEMData(raw_data, fibsem_header)
