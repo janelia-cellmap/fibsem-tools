@@ -5,8 +5,9 @@ from typing import Tuple
 import pytest
 import dask.array as da
 from xarray import DataArray
-from fibsem_tools.io.core import read
-
+from fibsem_tools.io.core import access, read
+from fibsem_tools.io.dask import store_blocks
+from numcodecs import GZip
 from fibsem_tools.io.multiscale import (
     multiscale_group,
     multiscale_metadata,
@@ -48,14 +49,17 @@ def test_multiscale_storage(metadata_types: Tuple[str, ...]):
     )
 
     chunks = ((8, 8, 8), (8, 8, 8))
-
+    multi = [m.chunk(c) for m, c in zip(multi, chunks)]
     group_url, array_urls = multiscale_group(
         store,
         multi,
         array_paths=array_paths,
         metadata_types=metadata_types,
         chunks=chunks,
+        compressor=GZip(-1),
     )
+
+    da.compute(store_blocks(multi, [access(a_url, mode="a") for a_url in array_urls]))
 
     assert dict(read(group_url).attrs) == g_meta
     assert tuple(read(a).chunks for a in array_urls) == chunks
