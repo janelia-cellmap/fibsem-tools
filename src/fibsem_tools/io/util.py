@@ -2,13 +2,15 @@ import os
 from glob import glob
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Sequence, Tuple, Union, Dict, List
 
 import fsspec
 import toolz as tz
 from dask import bag, delayed
 
-from fibsem_tools.io.types import PathLike
+JSON = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, None]
+Attrs = Dict[str, JSON]
+PathLike = Union[Path, str]
 
 
 @delayed

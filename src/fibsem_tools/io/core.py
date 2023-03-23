@@ -23,7 +23,7 @@ from xarray import DataArray
 import fsspec
 
 from fibsem_tools.metadata.transform import STTransform
-from fibsem_tools.io.types import Attrs, PathLike
+from fibsem_tools.io.util import Attrs, PathLike
 from fibsem_tools.io.fibsem import read_fibsem
 from fibsem_tools.io.mrc import (
     access_mrc,

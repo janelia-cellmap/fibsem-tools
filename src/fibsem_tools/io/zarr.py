@@ -18,7 +18,7 @@ from zarr.indexing import BasicIndexer
 from fibsem_tools.io.util import split_by_suffix
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
-from fibsem_tools.io.types import JSON
+from fibsem_tools.io.util import JSON
 from xarray_ome_ngff.registry import get_adapters
 
 ureg = pint.UnitRegistry()

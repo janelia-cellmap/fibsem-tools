@@ -12,7 +12,7 @@ from numcodecs.abc import Codec
 from xarray_ome_ngff.registry import get_adapters
 
 
-from fibsem_tools.io.types import Attrs, JSON
+from fibsem_tools.io.util import Attrs, JSON
 
 NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem", "ome-ngff"]

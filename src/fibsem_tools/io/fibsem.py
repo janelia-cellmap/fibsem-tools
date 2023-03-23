@@ -12,7 +12,6 @@ import numpy as np
 from xarray import DataArray
 
 import warnings
-from fibsem_tools.io.types import PathLike
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3_555_587_570
@@ -642,9 +641,14 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
 
     file_size = os.path.getsize(path)
     expected_nbytes = OFFSET + np.prod(shape) * np.dtype(dtype).itemsize
-    
+
     if file_size < expected_nbytes:
-        warnings.warn(f'The file {path} is {file_size} bytes, but a file with size of least {expected_nbytes} bytes was expected. It will be read as an array of zeros')
+        warnings.warn(
+            f"""
+            The file {path} is {file_size} bytes, but a file with size of least 
+            {expected_nbytes} bytes was expected. It will be read as an array of zeros
+            """
+        )
         raw_data = np.zeros(dtype=dtype, shape=shape)
     else:
         raw_data = np.memmap(

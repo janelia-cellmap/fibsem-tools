@@ -7,7 +7,7 @@ from dask.array.core import normalize_chunks
 from mrcfile.mrcmemmap import MrcMemmap
 from xarray import DataArray
 
-from fibsem_tools.io.types import PathLike
+from fibsem_tools.io.util import PathLike
 
 
 def access_mrc(path: PathLike, mode: str, **kwargs):
