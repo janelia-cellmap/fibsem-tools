@@ -225,7 +225,7 @@ def read_xarray(
     return result
 
 
-def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
+def infer_coordinates(arr: npt.ArrayLike) -> List[DataArray]:
 
     if isinstance(arr, zarr.core.Array):
         coords = z_infer_coords(
