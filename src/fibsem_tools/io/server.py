@@ -21,15 +21,16 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
 
 
 def serve(port, bind, directory):
+    """
+    Server code adapated from the source code of http.server in the stdlib
+    """
     attempts = 11
     attempt = 1
 
     handler_class = CORSRequestHandler
 
-    # ensure dual-stack is not disabled; ref #38907
     class DualStackServer(ThreadingHTTPServer):
         def server_bind(self):
-            # suppress exception when protocol is IPv4
             with contextlib.suppress(Exception):
                 self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
             return super().server_bind()
