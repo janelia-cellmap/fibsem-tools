@@ -64,7 +64,7 @@ if __name__ == "__main__":
         "--bind",
         metavar="ADDRESS",
         default=HOST,
-        help="bind to this address " "(default: all interfaces)",
+        help="bind to this address " "(default: 0.0.0.0)",
     )
     parser.add_argument(
         "directory",
