@@ -1,5 +1,5 @@
-from typing import List, Sequence, Tuple, Union
-
+from typing import List, Sequence, Union
+import numpy.typing as npt
 import dask.array as da
 import mrcfile
 import numpy as np
@@ -15,23 +15,22 @@ def access_mrc(path: PathLike, mode: str, **kwargs):
     return MrcMemmap(path, mode=mode)
 
 
-def mrc_shape_dtype_inference(mem: MrcMemmap) -> Tuple[Tuple[int], str]:
+def infer_dtype(mem: MrcMemmap) -> npt.DTypeLike:
     """
-    Infer the shape and datatype of an MrcMemmap array. We cannot use the dtype
+    Infer the datatype of an MrcMemmap array. We cannot use the dtype
     attribute because the MRC2014 specification does not officially support the uint8
     datatype, but that doesn't stop people from storing uint8 data as int8. This can
     only be inferred by checking if the header.dmax propert exceeds the upper limit of
     int8 (127).
     """
-    shape = mem.data.shape
     dtype = mem.data.dtype
     if dtype == "int8":
         if mem.header.dmax > 127:
             dtype = "uint8"
-    return shape, dtype
+    return dtype
 
 
-def mrc_coordinate_inference(mem: MrcMemmap) -> List[DataArray]:
+def infer_coords(mem: MrcMemmap) -> List[DataArray]:
     header = mem.header
     grid_size_angstroms = header.cella
     coords = []
@@ -74,7 +73,8 @@ def mrc_to_dask(urlpath, chunks: Union[str, Sequence[int]], **kwargs):
     Generate a dask array backed by a memory-mapped .mrc file.
     """
     with access_mrc(urlpath, mode="r") as mem:
-        shape, dtype = mrc_shape_dtype_inference(mem)
+        dtype = infer_dtype(mem)
+        shape = mem.data.shape
 
     if chunks == "auto":
         _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)

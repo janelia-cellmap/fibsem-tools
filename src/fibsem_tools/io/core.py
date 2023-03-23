@@ -27,7 +27,7 @@ from fibsem_tools.io.types import Attrs, PathLike
 from fibsem_tools.io.fibsem import read_fibsem
 from fibsem_tools.io.mrc import (
     access_mrc,
-    mrc_coordinate_inference,
+    infer_coords as mrc_infer_coords,
     mrc_to_dask,
 )
 from fibsem_tools.io.util import split_by_suffix
@@ -36,7 +36,7 @@ from fibsem_tools.io.zarr import (
     access_parent,
     access_zarr,
     n5_to_dask,
-    zarr_n5_coordinate_inference,
+    infer_coords as z_infer_coords,
     zarr_to_dask,
 )
 
@@ -228,14 +228,14 @@ def read_xarray(
 def infer_coordinates(arr: Any, default_unit: str = "nm") -> List[DataArray]:
 
     if isinstance(arr, zarr.core.Array):
-        coords = zarr_n5_coordinate_inference(
+        coords = z_infer_coords(
             shape=arr.shape,
             array_attrs=dict(arr.attrs),
             group_attrs=dict(access_parent(arr, mode="r").attrs),
             array_path=arr.basename,
         )
     elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
-        coords = mrc_coordinate_inference(arr)
+        coords = mrc_infer_coords(arr)
     else:
         raise ValueError(
             f"No coordinate inference possible for array of type {type(arr)}"
