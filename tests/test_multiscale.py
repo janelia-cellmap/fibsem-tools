@@ -1,7 +1,8 @@
 import atexit
 import shutil
 import tempfile
-
+from typing import Tuple
+import pytest
 import dask.array as da
 from xarray import DataArray
 from fibsem_tools.io.core import read
@@ -12,7 +13,12 @@ from fibsem_tools.io.multiscale import (
 )
 
 
-def test_multiscale_storage():
+@pytest.mark.parametrize(
+    "metadata_types",
+    [("ome-ngff@0.4",), ("neuroglancer",), ("ome-ngff",), ("ome-ngff", "neuroglancer")],
+)
+def test_multiscale_storage(metadata_types: Tuple[str, ...]):
+
     store = tempfile.mkdtemp(suffix=".zarr")
     atexit.register(shutil.rmtree, store)
 
@@ -38,7 +44,7 @@ def test_multiscale_storage():
     multi.append(multi[0].coarsen({"x": 2, "y": 2, "z": 2}).mean().astype("uint8"))
     array_paths = ["s0", "s1"]
     g_meta, a_meta = multiscale_metadata(
-        multi, metadata_types=["ome-ngff"], array_paths=array_paths
+        multi, metadata_types=metadata_types, array_paths=array_paths
     )
 
     chunks = ((8, 8, 8), (8, 8, 8))
@@ -47,7 +53,7 @@ def test_multiscale_storage():
         store,
         multi,
         array_paths=array_paths,
-        metadata_types=["ome-ngff"],
+        metadata_types=metadata_types,
         chunks=chunks,
     )
 
