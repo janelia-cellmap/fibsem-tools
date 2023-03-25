@@ -314,7 +314,7 @@ def copy_array(
         `fibsem_tools.io.core.access`. Otherwise, it is assumed to be a chunked
         array-like that supports writing / appending.
 
-    chunks: tuple of ints or str
+    chunksize: tuple of ints or str
         The chunk size used for reading from the source data. If a string is given,
         it is assumed that this is a target size in bytes, and a chunk size will be
         chosen automatically to not exceed this size.
