@@ -1,6 +1,13 @@
 import dask.array as da
-
-from fibsem_tools.io.dask import ensure_minimum_chunksize, autoscale_chunk_shape
+from fibsem_tools.io.dask import (
+    copy_array,
+    ensure_minimum_chunksize,
+    autoscale_chunk_shape,
+)
+import pytest
+import zarr
+import numpy as np
+import dask
 
 
 def test_ensure_minimum_chunksize():
@@ -50,3 +57,25 @@ def test_autoscale_chunk_shape():
         64,
         1024,
     )
+
+
+@pytest.mark.parametrize("shape", ((1000,), (100, 100)))
+def test_array_copy_from_array(temp_zarr, shape):
+    g = zarr.group(zarr.NestedDirectoryStore(temp_zarr))
+    arr_1 = g.create_dataset(name="a", data=np.random.randint(0, 255, shape))
+    arr_2 = g.create_dataset(name="b", data=np.zeros(arr_1.shape, dtype=arr_1.dtype))
+
+    copy_op = copy_array(arr_1, arr_2)
+    dask.compute(copy_op)
+    assert np.array_equal(arr_2, arr_1)
+
+
+@pytest.mark.parametrize("shape", ((1000,), (100, 100)))
+def test_array_copy_from_path(temp_zarr, shape):
+    g = zarr.group(zarr.NestedDirectoryStore(temp_zarr))
+    arr_1 = g.create_dataset(name="a", data=np.random.randint(0, 255, shape))
+    arr_2 = g.create_dataset(name="b", data=np.zeros(arr_1.shape, dtype=arr_1.dtype))
+
+    copy_op = copy_array(arr_1, arr_2)
+    dask.compute(copy_op)
+    assert np.array_equal(arr_2, arr_1)

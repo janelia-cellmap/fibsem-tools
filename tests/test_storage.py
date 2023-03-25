@@ -28,27 +28,23 @@ def _make_local_files(files):
     return result
 
 
-def test_access_array_zarr():
-    store = tempfile.mkdtemp(suffix=".zarr")
-    atexit.register(shutil.rmtree, store)
+def test_access_array_zarr(temp_zarr):
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
-    z = zarr.open(store, mode="w", shape=data.shape, chunks=10)
+    z = zarr.open(temp_zarr, mode="w", shape=data.shape, chunks=10)
     z[:] = data
-    assert np.array_equal(read(store)[:], data)
+    assert np.array_equal(read(temp_zarr)[:], data)
 
-    darr = read_dask(store, chunks=(10,))
+    darr = read_dask(temp_zarr, chunks=(10,))
     assert (darr.compute() == data).all
 
 
-def test_access_array_zarr_n5():
-    store = tempfile.mkdtemp(suffix=".n5")
-    atexit.register(shutil.rmtree, store)
+def test_access_array_zarr_n5(temp_n5):
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
-    z = zarr.open(store, mode="w", shape=data.shape, chunks=10)
+    z = zarr.open(temp_n5, mode="w", shape=data.shape, chunks=10)
     z[:] = data
-    assert np.array_equal(read(store)[:], data)
+    assert np.array_equal(read(temp_n5)[:], data)
 
-    darr = read_dask(store, chunks=(10,))
+    darr = read_dask(temp_n5, chunks=(10,))
     assert (darr.compute() == data).all
 
 
@@ -66,16 +62,14 @@ def test_access_group_zarr():
     assert zarr.open(DEFAULT_ZARR_STORE(store), mode="a") == zg
 
 
-def test_access_group_zarr_n5():
-    store = tempfile.mkdtemp(suffix=".n5")
-    atexit.register(shutil.rmtree, store)
+def test_access_group_zarr_n5(temp_n5):
     data = np.zeros(100, dtype="uint8") + 42
-    zg = zarr.open(store, mode="a")
+    zg = zarr.open(temp_n5, mode="a")
     zg.attrs.update({"foo": "bar"})
     zg["foo"] = data
 
-    assert dict(access(store, mode="r").attrs) == {"foo": "bar"}
-    assert np.array_equal(access(store, mode="r")["foo"][:], data)
+    assert dict(access(temp_n5, mode="r").attrs) == {"foo": "bar"}
+    assert np.array_equal(access(temp_n5, mode="r")["foo"][:], data)
 
 
 def test_access_mrc():
@@ -126,11 +120,9 @@ def test_access_group_h5():
         grp2.file.close()
 
 
-def test_list_files():
-    path = tempfile.mkdtemp()
-    atexit.register(shutil.rmtree, path)
+def test_list_files(temp_dir):
     fnames = [
-        os.path.join(path, f)
+        os.path.join(temp_dir, f)
         for f in [
             os.path.join("foo", "foo.txt"),
             os.path.join("foo", "bar", "bar.txt"),
@@ -138,15 +130,13 @@ def test_list_files():
         ]
     ]
     _make_local_files(fnames)
-    files_found = list_files(path)
+    files_found = list_files(temp_dir)
     assert set(files_found) == set(fnames)
 
 
-def test_list_files_parellel():
-    path = tempfile.mkdtemp()
-    atexit.register(shutil.rmtree, path)
+def test_list_files_parellel(temp_dir):
     fnames = [
-        os.path.join(path, f)
+        os.path.join(temp_dir, f)
         for f in [
             os.path.join("foo", "foo.txt"),
             os.path.join("foo", "bar", "bar.txt"),
@@ -154,7 +144,7 @@ def test_list_files_parellel():
         ]
     ]
     _make_local_files(fnames)
-    files_found = list_files_parallel(path)
+    files_found = list_files_parallel(temp_dir)
     assert set(files_found) == set(fnames)
 
 
@@ -172,13 +162,11 @@ def test_path_splitting():
     assert split == (os.path.join("0", "1", "2.n5"), "", ".n5")
 
 
-def test_store_blocks():
+def test_store_blocks(temp_zarr):
     data = da.arange(256).reshape(16, 16).rechunk((4, 4))
-    store = tempfile.mkdtemp(suffix=".zarr")
-    atexit.register(shutil.rmtree, store)
-    z = zarr.open(store, mode="w", shape=data.shape, chunks=data.chunksize)
+    z = zarr.open(temp_zarr, mode="w", shape=data.shape, chunks=data.chunksize)
     dask.delayed(store_blocks(data, z)).compute()
-    assert np.array_equal(read(store)[:], data.compute())
+    assert np.array_equal(read(temp_zarr)[:], data.compute())
 
 
 def test_group_initialization():
@@ -204,10 +192,8 @@ def test_group_initialization():
         assert a_attrs[d] == dict(group[d].attrs)
 
 
-def test_deletion():
-    store_path = tempfile.mkdtemp(suffix=".zarr")
-    atexit.register(shutil.rmtree, store_path)
-    existing = access(f"{store_path}/bar", mode="w", shape=(10,), chunks=(1,))
+def test_deletion(temp_zarr):
+    existing = access(f"{temp_zarr}/bar", mode="w", shape=(10,), chunks=(1,))
     existing[:] = 10
     keys = tuple(existing.chunk_store.keys())
 

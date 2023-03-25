@@ -1,6 +1,3 @@
-import atexit
-import shutil
-import tempfile
 from typing import Tuple
 import pytest
 import dask.array as da
@@ -18,11 +15,7 @@ from fibsem_tools.io.multiscale import (
     "metadata_types",
     [("ome-ngff@0.4",), ("neuroglancer",), ("ome-ngff",), ("ome-ngff", "neuroglancer")],
 )
-def test_multiscale_storage(metadata_types: Tuple[str, ...]):
-
-    store = tempfile.mkdtemp(suffix=".zarr")
-    atexit.register(shutil.rmtree, store)
-
+def test_multiscale_storage(temp_zarr, metadata_types: Tuple[str, ...]):
     data = da.random.randint(0, 8, (16, 16, 16), chunks=(8, 8, 8), dtype="uint8")
     coords = [
         DataArray(
@@ -51,7 +44,7 @@ def test_multiscale_storage(metadata_types: Tuple[str, ...]):
     chunks = ((8, 8, 8), (8, 8, 8))
     multi = [m.chunk(c) for m, c in zip(multi, chunks)]
     group_url, array_urls = multiscale_group(
-        store,
+        temp_zarr,
         multi,
         array_paths=array_paths,
         metadata_types=metadata_types,
