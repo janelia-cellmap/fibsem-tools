@@ -322,6 +322,10 @@ def copy_array(
     write_empty_chunks: bool, defaults to False
         Whether empty chunks should be written to storage. Defaults to False.
 
+    Returns
+    -------
+
+    A dask bag which, when computed, will copy data from source to dest.
 
     """
     if isinstance(source, PathLike):
