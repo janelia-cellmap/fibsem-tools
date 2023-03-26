@@ -43,7 +43,7 @@ def test_multiscale_storage(temp_zarr, metadata_types: Tuple[str, ...]):
 
     chunks = ((8, 8, 8), (8, 8, 8))
     multi = [m.chunk(c) for m, c in zip(multi, chunks)]
-    group_url, array_urls = multiscale_group(
+    group = multiscale_group(
         temp_zarr,
         multi,
         array_paths=array_paths,
@@ -52,7 +52,8 @@ def test_multiscale_storage(temp_zarr, metadata_types: Tuple[str, ...]):
         compressor=GZip(-1),
     )
 
+    array_urls = [f"{temp_zarr}/{ap}" for ap in array_paths]
     da.compute(store_blocks(multi, [access(a_url, mode="a") for a_url in array_urls]))
 
-    assert dict(read(group_url).attrs) == g_meta
+    assert dict(group.attrs) == g_meta
     assert tuple(read(a).chunks for a in array_urls) == chunks

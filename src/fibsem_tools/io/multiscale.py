@@ -103,7 +103,7 @@ def multiscale_group(
     group_attrs: Optional[Attrs] = None,
     array_attrs: Optional[Sequence[Attrs]] = None,
     **kwargs: Any,
-) -> Tuple[str, Tuple[str, ...]]:
+) -> zarr.Group:
     if array_attrs is None:
         array_attrs = [{}] * len(arrays)
     if group_attrs is None:
@@ -117,7 +117,7 @@ def multiscale_group(
 
     _chunks = _normalize_chunks(arrays, chunks)
     try:
-        paths = create_group(
+        group = create_group(
             group_url,
             arrays,
             array_paths=array_paths,
@@ -128,7 +128,7 @@ def multiscale_group(
             array_mode=array_mode,
             **kwargs,
         )
-        return paths
+        return group
     except ContainsGroupError:
         raise FileExistsError(
             f"""
@@ -147,14 +147,14 @@ def prepare_multiscale(
     metadata_types: List[str],
     store_chunks: Tuple[int, ...],
     compressor: Codec,
-) -> Tuple[str, str]:
+) -> Tuple[zarr.Group, zarr.Group]:
 
     if scratch_url is not None:
         # prepare the temporary storage
         scratch_names = array_names[1:]
         scratch_multi = arrays[1:]
 
-        scratch_group_url, scratch_array_urls = multiscale_group(
+        scratch_group = multiscale_group(
             scratch_url,
             scratch_multi,
             scratch_names,
@@ -165,10 +165,10 @@ def prepare_multiscale(
             compressor=None,
         )
     else:
-        scratch_array_urls = []
+        scratch_group = None
 
     # prepare final storage
-    dest_group_url, dest_array_urls = multiscale_group(
+    dest_group = multiscale_group(
         dest_url,
         arrays,
         array_names,
@@ -179,7 +179,7 @@ def prepare_multiscale(
         compressor=compressor,
     )
 
-    return dest_array_urls, scratch_array_urls
+    return (dest_group, scratch_group)
 
 
 # TODO: make this more robust

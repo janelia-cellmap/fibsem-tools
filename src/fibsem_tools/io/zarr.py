@@ -163,7 +163,7 @@ def get_url(node: Union[zarr.Group, zarr.Array]):
         raise ValueError(
             f"""
         The store associated with this object has type {type(store)}, which 
-        cannot be resolved to a path"""
+        cannot be resolved to a url"""
         )
 
 

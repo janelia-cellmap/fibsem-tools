@@ -176,7 +176,7 @@ def test_group_initialization():
     a_attrs = {"foo": {"a": 10}, "bar": {"b": 15}}
     g_attrs = {"bla": "bla"}
     chunks = ((2,), (2,))
-    group_path, _ = create_group(
+    group = create_group(
         store_path,
         data.values(),
         data.keys(),
@@ -184,7 +184,6 @@ def test_group_initialization():
         group_attrs=g_attrs,
         array_attrs=a_attrs.values(),
     )
-    group = read(group_path)
     assert g_attrs == dict(group.attrs)
     for d in data:
         assert data[d].shape == group[d].shape

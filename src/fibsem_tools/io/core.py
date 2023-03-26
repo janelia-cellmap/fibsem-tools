@@ -252,7 +252,7 @@ def create_group(
     group_mode: AccessMode = "w-",
     array_mode: AccessMode = "w-",
     **array_kwargs,
-) -> Tuple[str, Tuple[str, ...]]:
+) -> zarr.Group:
 
     _arrays = tuple(a for a in arrays)
     _array_paths = tuple(p for p in array_paths)
@@ -270,7 +270,7 @@ def create_group(
             """
         )
 
-    access(group_url, mode=group_mode, attrs=group_attrs)
+    group = access(group_url, mode=group_mode, attrs=group_attrs)
     a_urls = [os.path.join(group_url, name) for name in _array_paths]
 
     if array_attrs is None:
@@ -290,4 +290,4 @@ def create_group(
             **array_kwargs,
         )
 
-    return group_url, a_urls
+    return group
