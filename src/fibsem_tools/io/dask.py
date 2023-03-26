@@ -7,6 +7,7 @@ import dask.array as da
 from dask.bag import from_sequence
 import distributed
 import numpy as np
+
 from aiohttp import ServerDisconnectedError
 from dask.array.core import (
     slices_from_chunks,
@@ -288,33 +289,71 @@ def copy_from_slices(slices, source_array, dest_array):
 
 
 def copy_array(
-    source_url: PathLike,
-    dest_url: PathLike,
-    read_chunks: Tuple[int, ...],
+    source: Union[PathLike, NDArray],
+    dest: Union[PathLike, NDArray],
+    chunksize: Union[str, Tuple[int, ...]] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
     randomize: bool = True,
 ):
     """
-    Copy data from one chunked array to another
-    """
+    Use Dask to copy data from one chunked array to another.
 
-    source_arr = read(source_url)
-    dest_arr = access(dest_url, mode="a", write_empty_chunks=write_empty_chunks)
+    Parameters
+    ----------
+
+    source: string, Pathlib.Path, array-like
+        The source of the data to be copied. If this argument is a path or string,
+        it is assumed to be url pointing to a resource that can be accessed via
+        `fibsem_tools.io.core.read`. Otherwise, it is assumed to be a chunked
+        array-like.
+
+    dest: string, Pathlib.Path, array-like.
+        The destination for the data to be copied. If this argument is a path or string,
+        it is assumed to be url pointing to a resource that can be accessed via
+        `fibsem_tools.io.core.access`. Otherwise, it is assumed to be a chunked
+        array-like that supports writing / appending.
+
+    chunksize: tuple of ints or str
+        The chunk size used for reading from the source data. If a string is given,
+        it is assumed that this is a target size in bytes, and a chunk size will be
+        chosen automatically to not exceed this size.
+
+    write_empty_chunks: bool, defaults to False
+        Whether empty chunks should be written to storage. Defaults to False.
+
+    Returns
+    -------
+
+    A dask bag which, when computed, will copy data from source to dest.
+
+    """
+    if isinstance(source, PathLike):
+        source_arr = read(source)
+    else:
+        source_arr = source
+
+    if isinstance(dest, PathLike):
+        dest_arr = access(dest, mode="a", write_empty_chunks=write_empty_chunks)
+    else:
+        dest_arr = dest
 
     # assume we are given a size in bytes
-    if isinstance(read_chunks, str):
-        chunk_size_limit_bytes = parse_bytes(read_chunks)
+    if isinstance(chunksize, str):
+        chunk_size_limit_bytes = parse_bytes(chunksize)
 
-        read_chunks = autoscale_chunk_shape(
-            dest_arr.chunks, chunk_size_limit_bytes, dest_arr.dtype, dest_arr.shape
+        chunksize = autoscale_chunk_shape(
+            chunk_shape=dest_arr.chunks,
+            array_shape=dest_arr.shape,
+            size_limit=chunk_size_limit_bytes,
+            dtype=dest_arr.dtype,
         )
 
     assert source_arr.shape == dest_arr.shape
     assert source_arr.dtype == dest_arr.dtype
-    assert are_chunks_aligned(read_chunks, dest_arr.chunks)
+    assert are_chunks_aligned(chunksize, dest_arr.chunks)
 
-    chunks_normalized = normalize_chunks_dask(read_chunks, shape=dest_arr.shape)
+    chunks_normalized = normalize_chunks_dask(chunksize, shape=dest_arr.shape)
     slices = slices_from_chunks(chunks_normalized)
 
     # randomization to ensure that we don't create prefix hotspots when writing to

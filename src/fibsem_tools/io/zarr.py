@@ -34,7 +34,7 @@ DEFAULT_ZARR_STORE = FSStore
 logger = logging.getLogger(__name__)
 
 
-def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
+def get_arrays(obj: Any) -> Tuple[zarr.Array]:
     result = ()
     if isinstance(obj, zarr.core.Array):
         result = (obj,)
@@ -45,15 +45,13 @@ def get_arrays(obj: Any) -> Tuple[zarr.core.Array]:
     return result
 
 
-def delete_zbranch(
-    branch: Union[zarr.hierarchy.Group, zarr.core.Array], compute: bool = True
-):
+def delete_zbranch(branch: Union[zarr.Group, zarr.Array], compute: bool = True):
     """
     Delete a branch (group or array) from a zarr container
     """
-    if isinstance(branch, zarr.hierarchy.Group):
+    if isinstance(branch, zarr.Group):
         return delete_zgroup(branch, compute=compute)
-    elif isinstance(branch, zarr.core.Array):
+    elif isinstance(branch, zarr.Array):
         return delete_zarray(branch, compute=compute)
     else:
         raise TypeError(
@@ -64,7 +62,7 @@ def delete_zbranch(
         )
 
 
-def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool = True):
+def delete_zgroup(zgroup: zarr.Group, compute: bool = True):
     """
     Delete all arrays in a zarr group
     """
@@ -82,12 +80,12 @@ def delete_zgroup(zgroup: zarr.hierarchy.Group, compute: bool = True):
         return to_delete
 
 
-def delete_zarray(arr: zarr.core.Array, compute: bool = True):
+def delete_zarray(arr: zarr.Array, compute: bool = True):
     """
     Delete all the chunks in a zarr array.
     """
 
-    if not isinstance(arr, zarr.core.Array):
+    if not isinstance(arr, zarr.Array):
         raise TypeError(
             f"Cannot use the delete_zarray function on object of type {type(arr)}"
         )
@@ -148,6 +146,25 @@ def zarr_array_from_dask(arr: Any) -> Any:
     """
     keys = tuple(arr.dask.keys())
     return arr.dask[keys[-1]]
+
+
+def get_url(node: Union[zarr.Group, zarr.Array]):
+    store = node.store
+    if hasattr(store, "path"):
+        if hasattr(store, "fs"):
+            if isinstance(store.fs.protocol, list):
+                protocol = store.fs.protocol[0]
+            else:
+                protocol = store.fs.protocol
+        else:
+            protocol = "file"
+        return f"{protocol}://{os.path.join(node.store.path, node.path)}"
+    else:
+        raise ValueError(
+            f"""
+        The store associated with this object has type {type(store)}, which 
+        cannot be resolved to a url"""
+        )
 
 
 def access_zarr(store: PathLike, path: PathLike, **kwargs) -> Any:
