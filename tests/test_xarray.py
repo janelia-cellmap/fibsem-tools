@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from fibsem_tools.io.xr import stt_coord, stt_from_array
+from fibsem_tools.io.xr import stt_coord, stt_from_array, flip
 
 
 @pytest.mark.parametrize("length", (1, 10, 100))
@@ -38,3 +38,24 @@ def test_stt_from_array(kwargs):
             assert coordvar[1] - coordvar[0] == kwargs["scales"][idx]
         assert coordvar[0] == kwargs["translates"][idx]
         assert coordvar.units == kwargs["units"][idx]
+
+
+@pytest.mark.parametrize("flip_dims", (("a",), ("a", "b"), ("a", "b", "c")))
+def test_flip(flip_dims):
+    all_dims = ("a", "b", "c")
+    ndim = len(all_dims)
+    data = stt_from_array(
+        np.random.randint(0, 255, (10,) * ndim),
+        dims=all_dims,
+        scales=(1,) * ndim,
+        translates=(0,) * ndim,
+        units=("mm",) * ndim,
+    )
+    test_selector = []
+    for dim in all_dims:
+        if dim in flip_dims:
+            test_selector.append(slice(None, None, -1))
+        else:
+            test_selector.append(slice(None))
+
+    assert np.array_equal(flip(data, flip_dims).data, data.data[tuple(test_selector)])

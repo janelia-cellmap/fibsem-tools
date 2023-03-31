@@ -1,7 +1,21 @@
 import xarray as xr
 import numpy as np
 import numpy.typing as npt
-from typing import Tuple
+from typing import Tuple, Sequence
+
+
+def flip(data: xr.DataArray, dims: Sequence[str] = []):
+    """
+    Reverse a DataArray along the specified dimension(s).
+    """
+    flip_selector = {}
+    for dim in data.dims:
+        if dim in dims:
+            flip_selector[dim] = slice(None, None, -1)
+        else:
+            flip_selector[dim] = slice(None)
+
+    return data[flip_selector]
 
 
 def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
