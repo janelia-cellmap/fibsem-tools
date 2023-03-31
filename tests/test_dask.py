@@ -59,14 +59,20 @@ def test_autoscale_chunk_shape():
     )
 
 
-@pytest.mark.parametrize("shape", ((1000,), (100, 100)))
-def test_array_copy_from_array(temp_zarr, shape):
+@pytest.mark.parametrize("keep_attrs", (True, False))
+@pytest.mark.parametrize("shape", ((10,), (10, 10)))
+def test_array_copy_from_array(temp_zarr, shape, keep_attrs):
     g = zarr.group(zarr.NestedDirectoryStore(temp_zarr))
     arr_1 = g.create_dataset(name="a", data=np.random.randint(0, 255, shape))
+    arr_1.attrs.update(**{"foo": 100})
     arr_2 = g.create_dataset(name="b", data=np.zeros(arr_1.shape, dtype=arr_1.dtype))
 
-    copy_op = copy_array(arr_1, arr_2)
+    copy_op = copy_array(arr_1, arr_2, keep_attrs=keep_attrs)
     dask.compute(copy_op)
+    if keep_attrs:
+        assert arr_1.attrs == arr_2.attrs
+    else:
+        assert arr_1.attrs != arr_2.attrs
     assert np.array_equal(arr_2, arr_1)
 
 

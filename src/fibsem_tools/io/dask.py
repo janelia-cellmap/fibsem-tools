@@ -291,10 +291,11 @@ def copy_from_slices(slices, source_array, dest_array):
 def copy_array(
     source: Union[PathLike, NDArray],
     dest: Union[PathLike, NDArray],
-    chunksize: Union[str, Tuple[int, ...]] = "100 MB",
+    chunk_size: Union[str, Tuple[int, ...]] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
     randomize: bool = True,
+    keep_attrs: bool = True,
 ):
     """
     Use Dask to copy data from one chunked array to another.
@@ -314,13 +315,29 @@ def copy_array(
         `fibsem_tools.io.core.access`. Otherwise, it is assumed to be a chunked
         array-like that supports writing / appending.
 
-    chunksize: tuple of ints or str
+    chunk_size: tuple of ints or str
         The chunk size used for reading from the source data. If a string is given,
         it is assumed that this is a target size in bytes, and a chunk size will be
         chosen automatically to not exceed this size.
 
     write_empty_chunks: bool, defaults to False
         Whether empty chunks should be written to storage. Defaults to False.
+
+    npartitions: int, defaults to 1000
+        The array copying routine is wrapped in a dask bag. The npartitions parameter
+        sets the the number of partitions of tha dask bag, and thus the degree of
+        parallelism.
+
+    randomize: bool, defaults to True
+        If this parameter is True, then the dest array will be written in random
+        order, which could minimize timeouts from cloud storage. This is untested and
+        possibly superstitious.
+
+    write_empty_chunks: bool, defaults to False
+        Whether empty chunks of the source data will be written to dest.
+
+    keep_attrs: bool, defaults to True
+        Whether to copy the attributes of the source into dest.
 
     Returns
     -------
@@ -338,11 +355,15 @@ def copy_array(
     else:
         dest_arr = dest
 
-    # assume we are given a size in bytes
-    if isinstance(chunksize, str):
-        chunk_size_limit_bytes = parse_bytes(chunksize)
+    # this should probably also be lazy.
+    if keep_attrs:
+        dest_arr.attrs.update(**source_arr.attrs)
 
-        chunksize = autoscale_chunk_shape(
+    # assume we are given a size in bytes
+    if isinstance(chunk_size, str):
+        chunk_size_limit_bytes = parse_bytes(chunk_size)
+
+        chunk_size = autoscale_chunk_shape(
             chunk_shape=dest_arr.chunks,
             array_shape=dest_arr.shape,
             size_limit=chunk_size_limit_bytes,
@@ -351,9 +372,9 @@ def copy_array(
 
     assert source_arr.shape == dest_arr.shape
     assert source_arr.dtype == dest_arr.dtype
-    assert are_chunks_aligned(chunksize, dest_arr.chunks)
+    assert are_chunks_aligned(chunk_size, dest_arr.chunks)
 
-    chunks_normalized = normalize_chunks_dask(chunksize, shape=dest_arr.shape)
+    chunks_normalized = normalize_chunks_dask(chunk_size, shape=dest_arr.shape)
     slices = slices_from_chunks(chunks_normalized)
 
     # randomization to ensure that we don't create prefix hotspots when writing to
