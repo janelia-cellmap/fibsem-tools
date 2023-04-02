@@ -1,6 +1,6 @@
 from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.io.util import JSON
-from typing import List, Dict, Tuple, Any, Sequence, NamedTuple, Literal
+from typing import List, Dict, Tuple, Any, Sequence, Literal
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools import access, read
 from fibsem_tools.io.dask import autoscale_chunk_shape, store_blocks
@@ -18,7 +18,6 @@ from textual.widgets import Input, Static, Button, TextLog, Footer, Header
 from fibsem_tools.metadata.transform import STTransform
 from pydantic import (
     BaseModel,
-    PositiveFloat,
     ValidationError,
     FilePath,
     conlist,
@@ -28,39 +27,25 @@ import os
 import click
 from functools import partial
 
-from pydantic.types import CallableGenerator
-from pydantic import errors
-from pydantic.validators import path_validator
+
+class ArrayMoveWeak(BaseModel):
+    source: str
+    dest: str
+    dims: conlist(str, unique_items=True)
+    units: List[str]
+    scale: List[float]
+    translate: List[float]
+    chunks: List[int]
 
 
-class PathExistsError(errors._PathValueError):
-    code = "path.exists"
-    msg_template = 'file or directory at path "{path}" does not exist'
-
-
-def path_not_exists_validator(v: any) -> Path:
-    if v.exists():
-        raise errors.PathExistsError(path=v)
-
-    return v
-
-
-class NewPath(Path):
-    @classmethod
-    def __modify_schema__(cls, field_schema: Dict[str, Any]) -> None:
-        field_schema.update(format="new-path")
-
-    @classmethod
-    def __get_validators__(cls) -> "CallableGenerator":
-        yield path_validator
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value: Path) -> Path:
-        if not value.is_dir():
-            raise errors.PathNotADirectoryError(path=value)
-
-        return value
+class ArrayMoveStrict(BaseModel):
+    source: FilePath
+    dest: Path
+    dims: conlist(str, unique_items=True)
+    units: List[str]
+    scale: List[float]
+    translate: List[float]
+    chunks: List[int]
 
 
 def represents_int(s):
@@ -103,21 +88,6 @@ def url_setitem(data: Dict[str, JSON], url: str, value: JSON, separator: str):
         return
     else:
         url_setitem(data[parts[0]], separator.join(parts[1:]), value, separator)
-
-
-class Params(BaseModel):
-    dims: conlist(str, unique_items=True)
-    units: List[str]
-    scale: List[PositiveFloat]
-    translate: List[float]
-    source: FilePath
-    dest: NewPath
-
-
-class MultiscaleArgs(BaseModel):
-    transform: STTransform
-    source: FilePath
-    dest: str
 
 
 def validation_error_to_paths(e: ValidationError, separator: str):
@@ -169,9 +139,9 @@ class Tiff2Zarr(App):
     is_converting: bool = reactive(False)
     separator = "/"
 
-    data = reactive(None)
+    data: ArrayMoveStrict = reactive(None)
 
-    output_model = Params
+    output_model = ArrayMoveStrict
     transform_name_map = dict(scale="resolution", translate="offset", units="units")
 
     def __init__(self, data):
@@ -258,7 +228,7 @@ class Tiff2Zarr(App):
 
     def on_button_pressed(self, message: Button.Pressed):
         tlog = self.query_one("#tlog")
-        args: Params = self.output_model(**self.data)
+        args: ArrayMoveStrict = self.output_model(**self.data)
         fname = Path(args.source).stem
 
         transform = STTransform(
@@ -271,7 +241,7 @@ class Tiff2Zarr(App):
             source=args.source,
             dest=os.path.join(args.dest, fname + ".zarr/"),
             transform=transform,
-            chunks=self.chunks,
+            chunks=args.chunks,
             downsampler="mode",
             logger=tlog,
         )
@@ -399,7 +369,7 @@ def normalize_csl_str_unique(ctx, param, value):
         if not len(set(result)) == len(result):
             raise ValueError(
                 f"""
-                Elements of {value} were parsed to {result} which has repeating values.
+                Elements of {value} were parsed to {result}, which has repeating values.
                 """
             )
         return result
@@ -409,16 +379,6 @@ def normalize_csl_str_unique(ctx, param, value):
             Input must be a comma-separated list of unique strings. Got {value} instead.
             """
         )
-
-
-class ArrayMoveOp(NamedTuple):
-    source: str
-    dest: str
-    dims: List[str]
-    units: List[str]
-    scale: List[int]
-    translate: List[int]
-    chunks: List[int]
 
 
 @click.command()
@@ -474,13 +434,13 @@ def cli(
     scale: Tuple[float, ...],
     translate: Tuple[float, ...],
     chunks: Tuple[int, ...],
-) -> ArrayMoveOp:
+) -> ArrayMoveWeak:
     rank = len(dims)
     stretchables = (units, scale, translate, chunks)
     units, scale, translate, chunks = tuple(
         map(list, map(partial(stretch_tuple, length=rank), stretchables))
     )
-    move_op = ArrayMoveOp(
+    move_op = ArrayMoveWeak(
         source=source,
         dest=dest,
         dims=dims,
@@ -502,7 +462,7 @@ def guess_dest(source: str) -> str:
 
 def run():
     move_op = cli(standalone_mode=False)
-    data = move_op._asdict()
+    data = move_op.dict()
     if move_op.dest == "" and move_op.source != "":
         data["dest"] = guess_dest(move_op.source)
     app = Tiff2Zarr(data=data)
