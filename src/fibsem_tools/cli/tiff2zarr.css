@@ -1,0 +1,49 @@
+Screen {
+    layout: grid;
+    grid-size: 4;
+    grid-rows: 2fr;
+    grid-columns: 1fr 2fr 2fr 2fr;
+}
+
+Static {
+    text-style: bold;
+    content-align-horizontal: center;
+    content-align-vertical: middle;
+}
+
+#source {
+    column-span: 3;
+}
+
+#dest {
+    column-span: 3;
+}
+
+#convert_button {
+    column-span: 3;
+}
+
+#tlog {
+    column-span: 4;
+}
+
+.label {
+    width: 100%;
+    border: $background;
+    content-align-horizontal: center;
+    content-align-vertical: middle;
+}
+
+.box {
+    height: 100%;
+    border: solid green;
+}
+
+.valid {
+    border: solid green;
+
+}
+
+.invalid {
+    border: dashed #ff2d2d;
+}
