@@ -1,10 +1,17 @@
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 from pydantic import BaseModel
 from xarray import DataArray
 
+from fibsem_tools.metadata.transform import STTransform
 
-class MultiscaleMeta(BaseModel):
+
+class MultiscaleMetaV1(BaseModel):
+    name: Optional[str]
+    datasets: Sequence[STTransform]
+
+
+class MultiscaleMetaV2(BaseModel):
     name: Optional[str]
     datasets: Sequence[str]
 
@@ -14,7 +21,7 @@ class COSEMGroupMetadata(BaseModel):
     Multiscale metadata used by COSEM for multiscale datasets saved in N5/Zarr groups.
     """
 
-    multiscales: Sequence[MultiscaleMeta]
+    multiscales: Union[Sequence[MultiscaleMetaV2], Sequence[MultiscaleMetaV1]]
 
     @classmethod
     def fromDataArrays(
@@ -54,7 +61,7 @@ class COSEMGroupMetadata(BaseModel):
             _paths = paths
 
         multiscales = [
-            MultiscaleMeta(
+            MultiscaleMetaV2(
                 name=name,
                 datasets=_paths,
             )
