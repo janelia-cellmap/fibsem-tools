@@ -45,17 +45,17 @@ def test_flip(flip_dims):
     all_dims = ("a", "b", "c")
     ndim = len(all_dims)
     data = stt_from_array(
-        np.random.randint(0, 255, (10,) * ndim),
+        np.random.randint(0, 255, (3,) * ndim),
         dims=all_dims,
         scales=(1,) * ndim,
         translates=(0,) * ndim,
         units=("mm",) * ndim,
     )
-    test_selector = []
+    test_selector = ()
     for dim in all_dims:
         if dim in flip_dims:
-            test_selector.append(slice(None, None, -1))
+            test_selector += (slice(None, None, -1),)
         else:
-            test_selector.append(slice(None))
+            test_selector += (slice(None),)
 
-    assert np.array_equal(flip(data, flip_dims).data, data.data[tuple(test_selector)])
+    assert np.array_equal(flip(data, flip_dims).data, data.data[test_selector])
