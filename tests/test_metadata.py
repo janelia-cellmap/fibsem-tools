@@ -1,17 +1,22 @@
+from typing import List, Literal
 import numpy as np
 from xarray import DataArray
+from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.metadata.cosem import (
-    COSEMGroupMetadata,
-    MultiscaleMeta as COSEMMultiscaleMeta,
+    COSEMGroupMetadataV1,
+    MultiscaleMetaV1,
+    COSEMGroupMetadataV2,
+    MultiscaleMetaV2,
 )
 from fibsem_tools.metadata.neuroglancer import (
     NeuroglancerN5GroupMetadata,
     PixelResolution,
 )
 from fibsem_tools.metadata.transform import STTransform
+import pytest
 
 
-def test_SpatialTransform():
+def test_sttransform():
     coords = [
         DataArray(np.arange(10), dims=("z")),
         DataArray(np.arange(10) + 5, dims=("y",), attrs={"units": "m"}),
@@ -63,7 +68,9 @@ def test_neuroglancer_metadata():
     )
 
 
-def test_cosem_ome():
+@pytest.mark.parametrize("version", ("v1", "v2"))
+def test_cosem_ome(version: Literal["v1", "v2"]):
+
     transform_base = {
         "axes": ["z", "y", "x"],
         "units": ["nm", "m", "km"],
@@ -71,27 +78,36 @@ def test_cosem_ome():
         "scale": [1.0, 1.0, 10.0],
     }
     shape_base = (16, 16, 16)
-    coords = [
-        DataArray(
-            (np.arange(shape_base[idx]) * transform_base["scale"][idx])
-            + transform_base["translate"][idx],
-            dims=(transform_base["axes"][idx],),
-            attrs={"units": transform_base["units"][idx]},
-        )
-        for idx in range(len(shape_base))
-    ]
+    data = stt_from_array(
+        np.zeros(shape_base),
+        dims=transform_base["axes"],
+        units=transform_base["units"],
+        translates=transform_base["translate"],
+        scales=transform_base["scale"],
+    )
 
-    data = DataArray(np.zeros(shape_base), coords=coords, name="data")
     coarsen_kwargs = {"z": 2, "y": 2, "x": 2, "boundary": "trim"}
-    multi = [data.coarsen(**coarsen_kwargs).mean()]
+    multi: List[DataArray] = [data.coarsen(**coarsen_kwargs).mean()]
     multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
-
     paths = ["s0", "s1"]
+    if version == "v1":
 
-    cosem_ome_group_metadata = COSEMGroupMetadata.fromDataArrays(
-        multi, paths=paths, name="data"
-    )
+        g_meta = COSEMGroupMetadataV1.fromDataArrays(multi, paths=paths, name="data")
 
-    assert cosem_ome_group_metadata == COSEMGroupMetadata(
-        multiscales=[COSEMMultiscaleMeta(name="data", datasets=paths)]
-    )
+        assert g_meta == COSEMGroupMetadataV1(
+            multiscales=[
+                MultiscaleMetaV1(
+                    name="data",
+                    datasets=[
+                        {"path": p, "transform": STTransform.fromDataArray(m)}
+                        for p, m in zip(paths, multi)
+                    ],
+                )
+            ]
+        )
+
+    else:
+        g_meta = COSEMGroupMetadataV2.fromDataArrays(multi, paths=paths, name="data")
+        assert g_meta == COSEMGroupMetadataV2(
+            multiscales=[MultiscaleMetaV2(name="data", datasets=paths)]
+        )
