@@ -4,7 +4,7 @@ from xarray import DataArray
 
 import zarr
 from fibsem_tools.io.core import AccessMode, create_group
-from fibsem_tools.metadata.cosem import COSEMGroupMetadata
+from fibsem_tools.metadata.cosem import COSEMGroupMetadataV1, COSEMGroupMetadataV2
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import STTransform
 from zarr.errors import ContainsGroupError
@@ -59,24 +59,43 @@ def multiscale_metadata(
     """
     group_attrs = {}
     array_attrs: List[Dict[str, Any]] = [{}] * len(arrays)
-    for flavor in set(metadata_types):
-        if flavor == "neuroglancer":
+    if any(f.startswith("ome-ngff") for f in metadata_types) and any(
+        f.startswith("cosem") for f in metadata_types
+    ):
+        raise ValueError(
+            f"""
+        You requested {metadata_types}, but ome-ngff metadata and cosem metadata are 
+        incompatible. Use just ome-ngff metadata instead.
+        """
+        )
+
+    for flavor in metadata_types:
+        flave, _, version = flavor.partition("@")
+        if flave == "neuroglancer":
             g_meta = NeuroglancerN5GroupMetadata.fromDataArrays(arrays)
             group_attrs.update(g_meta.dict())
-        elif flavor == "cellmap" or flavor == "cosem":
-            g_meta = COSEMGroupMetadata.fromDataArrays(arrays)
+        elif flave == "cosem":
+            if version == "2":
+                g_meta = COSEMGroupMetadataV2.fromDataArrays(arrays)
+            else:
+                g_meta = COSEMGroupMetadataV1.fromDataArrays(arrays)
             group_attrs.update(g_meta.dict())
             for idx in range(len(array_attrs)):
                 array_attrs[idx] = {
                     **STTransform.fromDataArray(arrays[idx]).dict(),
                     **array_attrs[idx],
                 }
-        elif flavor.startswith("ome-ngff"):
-            if "@" in flavor:
-                ngff_version = flavor.split("@")[-1]
-            else:
-                ngff_version = NGFF_DEFAULT_VERSION
-            adapters = get_adapters(ngff_version)
+        elif flave == "ome-ngff":
+            if array_paths is None:
+                raise ValueError(
+                    f"""
+                You requested {flave}-type metadata, but array_paths was set to None.
+                array_paths must be set to a list of strings to use this metadata.
+                """
+                )
+            if version == "":
+                version = NGFF_DEFAULT_VERSION
+            adapters = get_adapters(version)
             group_attrs["multiscales"] = [
                 adapters.multiscale_metadata(
                     arrays, name="", array_paths=array_paths
