@@ -2417,14 +2417,14 @@ viz = ["matplotlib", "nc-time-axis", "seaborn"]
 
 [[package]]
 name = "xarray-multiscale"
-version = "2.0.0"
+version = "2.1.0"
 description = ""
 category = "main"
 optional = false
 python-versions = ">=3.9,<4.0"
 files = [
-    {file = "xarray_multiscale-2.0.0-py3-none-any.whl", hash = "sha256:37d07591d6aa3f4f022cbfd81ee4cf38f675d517b52d16c6d4b29d9dc5973427"},
-    {file = "xarray_multiscale-2.0.0.tar.gz", hash = "sha256:b01162a07de1aba8a9ee91d1e60fd1ae8217d573a009c93722ef2ff503dbf413"},
+    {file = "xarray_multiscale-2.1.0-py3-none-any.whl", hash = "sha256:a3bf851235dbf14ca47aa4ac7dc3fbc9279683739157cba2ab7aed61bd3f5084"},
+    {file = "xarray_multiscale-2.1.0.tar.gz", hash = "sha256:7e8dd862253390fa09c909f3b4fdc44b450719c7daca6bdb0e14a7e2b0c46112"},
 ]
 
 [package.dependencies]
