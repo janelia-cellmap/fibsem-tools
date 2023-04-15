@@ -38,6 +38,7 @@ from fibsem_tools.io.zarr import (
     infer_coords as z_infer_coords,
     zarr_to_dask,
 )
+from warnings import warn
 
 
 _formats = (".dat", ".mrc", ".tif")
@@ -203,6 +204,7 @@ def read_xarray(
     url: str,
     chunks: Union[str, Tuple[int, ...]] = "auto",
     coords: Any = "auto",
+    keep_attrs: bool = False,
     use_dask: bool = True,
     storage_options: Dict[str, Any] = {},
     **kwargs: Any,
@@ -211,8 +213,23 @@ def read_xarray(
     Create an xarray.DataArray from data found at a path.
     """
     raw_array = read(url, storage_options=storage_options)
+    attrs = {}
+    if keep_attrs:
+        if hasattr(raw_array, "attrs"):
+            attrs = dict(raw_array.attrs)
+        else:
+            warn(
+                f"""
+            The read_xarray function was invoked with the `keep_attrs` keyword argument 
+            set to `True`, but the array found at the url {url} was read as an instance 
+            of {type(raw_array)} which does not have an `attrs` property. This may 
+            generate an error in the future.
+            """
+            )
     if use_dask:
         array = read_dask(url, chunks=chunks, storage_options=storage_options)
+    else:
+        array = raw_array
 
     if coords == "auto":
         coords = infer_coordinates(raw_array)
@@ -220,7 +237,7 @@ def read_xarray(
     elif isinstance(coords, STTransform):
         coords = coords.to_coords(array.shape)
 
-    result = DataArray(array, coords=coords, **kwargs)
+    result = DataArray(array, coords=coords, attrs=attrs, **kwargs)
     return result
 
 
