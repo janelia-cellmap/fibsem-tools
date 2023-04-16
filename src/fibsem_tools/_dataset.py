@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Sequence
 from urllib.request import urlopen
 
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from typing_extensions import TypedDict
     import xarray as xr
 
@@ -103,7 +103,7 @@ class CosemDataset:
         import fibsem_tools
 
         source = self.sources[key]
-        if source["format"] != "n5":
+        if source["format"] != "n5":  # pragma: no cover
             raise NotImplementedError(
                 f"Can only read n5 sources, (not {source['format']!r})"
             )
@@ -116,7 +116,7 @@ class CosemDataset:
         for d in self.views:
             if d["name"].lower().startswith(name.lower()):
                 return d
-        raise KeyError(f"No view named/starting with {name!r}")
+        raise KeyError(f"No view named/starting with {name!r}")  # pragma: no cover
 
     def load_view(
         self,
@@ -140,6 +140,7 @@ class CosemDataset:
     @staticmethod
     def all_names() -> list[str]:
         return list(get_datasets())
+
 
 @lru_cache
 def get_datasets() -> dict[str, str]:
@@ -202,10 +203,10 @@ def load_view(
         try:
             arrs.append(ds.read_source(source, level))
             _loaded.append(source)
-        except (NotImplementedError, KeyError):
+        except (NotImplementedError, KeyError):  # pragma: no cover
             warnings.warn(f"Could not load source {source!r}", stacklevel=2)
 
-    if not arrs:
+    if not arrs:  # pragma: no cover
         raise RuntimeError("No sources could be loaded")
 
     if len(arrs) > 1:
@@ -231,11 +232,11 @@ def _crop_around(
     axes: str = "xyz",
 ) -> xr.DataArray:
     """Crop dataarray around position."""
-    if len(position) != 3:
+    if len(position) != 3:  # pragma: no cover
         raise ValueError("position must be of length 3 (X, Y, Z)")
     if isinstance(extent, (float, int)):
         extent = (extent,) * 3
-    if len(extent) != 3:
+    if len(extent) != 3:  # pragma: no cover
         raise ValueError("extent must be of length 3")
 
     slc = {ax: slice(p - e / 2, p + e / 2) for p, e, ax in zip(position, extent, axes)}
