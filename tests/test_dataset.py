@@ -1,12 +1,34 @@
-from fibsem_tools._dataset import CosemDataset
+from fibsem_tools._dataset import CosemDataset, Datasets
 import urllib.error
 import pytest
 import xarray as xr
 
 
+def test_datasets():
+    d = Datasets()
+    assert len(d) == len(d.client.table("dataset").select("name").execute().data)
+
+    good_key = "jrc_hela-3"
+    assert good_key in d
+    assert (
+        d[good_key]
+        == d.client.table("dataset")
+        .select("*")
+        .eq("name", good_key)
+        .single()
+        .execute()
+        .data
+    )
+
+    bad_key = "jrc_hela-1000"
+    assert bad_key not in d
+    with pytest.raises(KeyError):
+        d[bad_key]
+
+
 def test_dataset():
     try:
-        name = 'jrc_hela-3'
+        name = "jrc_hela-3"
         assert name in CosemDataset.all_names()
         ds = CosemDataset(name)
     except urllib.error.URLError:
@@ -34,4 +56,3 @@ def test_dataset():
 
     data = ds.read_image(list(images)[0], level=2)
     assert isinstance(data, xr.DataArray)
-

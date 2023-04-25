@@ -6,9 +6,16 @@ import dask
 import xarray as xr
 import warnings
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, DefaultDict, Sequence
-
-from .io.core import read_xarray
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    DefaultDict,
+    Iterator,
+    Literal,
+    Mapping,
+    Sequence,
+)
+from fibsem_tools import read_xarray
 
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -17,17 +24,21 @@ if TYPE_CHECKING:  # pragma: no cover
     import matplotlib.pyplot as plt
     import numpy as np
 
+    # todo: find a way to generate these types from either postgrest or an
+    # API wrapping postgrest
     class ImageDict(TypedDict):
         id: int
         name: str
         description: str
         url: str
-        format: str
+        format: Literal["n5", "zarr"]
         transform: dict[str, Any]
         display_settings: dict[str, Any]
         created_at: str
-        sample_type: str
-        content_type: str
+        sample_type: Literal["scalar"] | Literal["label"]
+        content_type: Literal["lm"] | Literal["prediction"] | Literal[
+            "segmentation"
+        ] | Literal["em"] | Literal["analysis"]
         dataset_name: str
         institution: str
 
@@ -36,9 +47,9 @@ if TYPE_CHECKING:  # pragma: no cover
         name: str
         description: str
         created_at: str
-        position: list[float] | None
+        position: tuple[float, float, float] | None
         scale: float | None
-        orientation: list[float] | None
+        orientation: tuple[float, float, float, float] | None
         dataset_name: str
         thumbnail_url: str
         images: list[str]
@@ -187,9 +198,9 @@ class CosemDataset:
 
     def read_image(self, image_id: str, level: int = 0) -> xr.DataArray:
         source = self.images[image_id]
-        if source["format"] != "n5":  # pragma: no cover
+        if source["format"] not in ("n5", "zarr"):  # pragma: no cover
             raise NotImplementedError(
-                f"Can only read n5 sources, (not {source['format']!r})"
+                f"Can only read n5 or zarr sources, (not {source['format']!r})"
             )
 
         return read_xarray(f"{source['url']}/s{level}", storage_options={"anon": True})
@@ -250,9 +261,38 @@ class CosemDataset:
             ax.axis("off")
         fig.set_tight_layout(True)
         return fig
-    
 
 
+class Datasets(Mapping[str, CosemDataset]):
+    table_name = "dataset"
+
+    def __init__(self, client: supabase.client.Client = supaclient()):
+        self.client = client
+
+    def __getitem__(self, key: str) -> CosemDataset:
+        import postgrest.exceptions
+
+        try:
+            query = (
+                self.client.table(self.table_name)
+                .select("*")
+                .eq("name", key)
+                .single()
+                .execute()
+            )
+            return query.data
+        except postgrest.exceptions.APIError as e:
+            raise KeyError from e
+
+    def __iter__(self) -> Iterator[str, None, None]:
+        for data in self.client.table(self.table_name).select("name").execute().data:
+            yield data["name"]
+
+    def __len__(self) -> int:
+        return len(self.client.table(self.table_name).select("name").execute().data)
+
+
+# consider making this a static method of `Datasets`
 @lru_cache
 def dataset_names() -> list[str]:
     """Retrieve available dataset names from janelia-cosem."""
@@ -298,7 +338,9 @@ def load_view(
         raise RuntimeError("No sources could be loaded")
 
     if len(arrs) > 1:
-        with dask.config.set(**{"array.slicing.split_large_chunks": False}): # type: ignore
+        with dask.config.set(
+            **{"array.slicing.split_large_chunks": False}
+        ):  # type: ignore
             stack = xr.concat(arrs, dim="source")
         stack.coords["source"] = _loaded
     else:
