@@ -3,7 +3,9 @@ import numpy as np
 from xarray import DataArray
 from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.metadata.cosem import (
+    ArrayAttrs,
     COSEMGroupMetadataV1,
+    CosemGroupV1,
     MultiscaleMetaV1,
     COSEMGroupMetadataV2,
     MultiscaleMetaV2,
@@ -14,6 +16,8 @@ from fibsem_tools.metadata.neuroglancer import (
 )
 from fibsem_tools.metadata.transform import STTransform
 import pytest
+
+from fibsem_tools.tree import Array
 
 
 def test_sttransform():
@@ -69,7 +73,7 @@ def test_neuroglancer_metadata():
 
 
 @pytest.mark.parametrize("version", ("v1", "v2"))
-def test_cosem_ome(version: Literal["v1", "v2"]):
+def test_cosem(version: Literal["v1", "v2"]):
 
     transform_base = {
         "axes": ["z", "y", "x"],
@@ -104,6 +108,18 @@ def test_cosem_ome(version: Literal["v1", "v2"]):
                     ],
                 )
             ]
+        )
+        CosemGroupV1(
+            attrs=g_meta,
+            values=[
+                Array[ArrayAttrs](
+                    name=paths[idx],
+                    attrs=ArrayAttrs(transform=STTransform.fromDataArray(m)),
+                    shape=m.shape,
+                    dtype=str(m.dtype),
+                )
+                for idx, m in enumerate(multi)
+            ],
         )
 
     else:

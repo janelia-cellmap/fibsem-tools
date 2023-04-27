@@ -1,8 +1,11 @@
-from typing import Optional, Sequence
+from typing import (
+    Optional,
+    Sequence,
+)
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 from xarray import DataArray
-
+from fibsem_tools.tree import Array, Group
 from fibsem_tools.metadata.transform import STTransform
 
 
@@ -119,3 +122,15 @@ class COSEMGroupMetadataV2(BaseModel):
             )
         ]
         return cls(name=name, multiscales=multiscales, paths=paths)
+
+
+class ArrayAttrs(BaseModel, extra=Extra.allow):
+    transform: STTransform
+
+
+class CosemGroupV1(Group[COSEMGroupMetadataV1, Array[ArrayAttrs]]):
+    ...
+
+
+class CosemGroupV2(Group[COSEMGroupMetadataV2, Array[ArrayAttrs]]):
+    ...
