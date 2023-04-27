@@ -33,6 +33,7 @@ def stt_from_array(
     scales: Tuple[float, ...],
     translates: Tuple[float, ...],
     units: Tuple[str, ...],
+    **kwargs,
 ) -> xr.DataArray:
 
     """
@@ -44,4 +45,4 @@ def stt_from_array(
     for idx, s in enumerate(data.shape):
         coords.append(stt_coord(s, dims[idx], scales[idx], translates[idx], units[idx]))
 
-    return xr.DataArray(data, dims=dims, coords=coords)
+    return xr.DataArray(data, dims=dims, coords=coords, **kwargs)

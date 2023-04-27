@@ -222,8 +222,8 @@ def access_n5(store: PathLike, path: PathLike, **kwargs) -> Any:
     return access_zarr(store, path, **kwargs)
 
 
-def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
-    store_path, key, _ = split_by_suffix(urlpath, (".zarr",))
+def zarr_to_dask(url: str, chunks: Union[str, Sequence[int]], **kwargs):
+    store_path, key, _ = split_by_suffix(url, (".zarr",))
     arr = access_zarr(store_path, key, mode="r", **kwargs)
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not a zarr array")
@@ -231,12 +231,11 @@ def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
         _chunks = arr.chunks
     else:
         _chunks = chunks
-    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
-    return darr
+    return zarray_to_dask(arr, _chunks)
 
 
-def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
-    store_path, key, _ = split_by_suffix(urlpath, (".n5",))
+def n5_to_dask(url: str, chunks: Union[str, Sequence[int]], **kwargs):
+    store_path, key, _ = split_by_suffix(url, (".n5",))
     arr = access_n5(store_path, key, mode="r", **kwargs)
     if not hasattr(arr, "shape"):
         raise ValueError(f"{store_path}/{key} is not an n5 array")
@@ -244,7 +243,11 @@ def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
         _chunks = arr.chunks
     else:
         _chunks = chunks
-    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
+    return zarray_to_dask(arr, _chunks)
+
+
+def zarray_to_dask(arr: zarr.Array, chunks: Union[str, Sequence[int]]):
+    darr = da.from_array(arr, chunks=chunks, inline_array=True, name=arr.path)
     return darr
 
 

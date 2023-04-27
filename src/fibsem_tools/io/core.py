@@ -1,4 +1,5 @@
 import os
+from datatree import DataTree
 import numpy.typing as npt
 from pathlib import Path
 from typing import (
@@ -21,7 +22,6 @@ import zarr
 from numpy.typing import NDArray
 from xarray import DataArray
 
-from fibsem_tools.metadata.transform import STTransform
 from fibsem_tools.io.util import Attrs, PathLike
 from fibsem_tools.io.fibsem import read_fibsem
 from fibsem_tools.io.mrc import (
@@ -37,6 +37,7 @@ from fibsem_tools.io.zarr import (
     n5_to_dask,
     infer_coords as z_infer_coords,
     zarr_to_dask,
+    zarray_to_dask,
 )
 from warnings import warn
 
@@ -208,40 +209,103 @@ def read_xarray(
     use_dask: bool = True,
     storage_options: Dict[str, Any] = {},
     **kwargs: Any,
+):
+
+    element = read(url, **storage_options)
+    if isinstance(element, zarr.Group):
+        return create_datatree(
+            element=element,
+            chunks=chunks,
+            coords=coords,
+            keep_attrs=keep_attrs,
+            use_dask=use_dask,
+            storage_options=storage_options,
+            **kwargs,
+        )
+    elif hasattr(element, "shape"):
+        return create_dataarray(
+            element=element,
+            chunks=chunks,
+            coords=coords,
+            keep_attrs=keep_attrs,
+            use_dask=use_dask,
+            **kwargs,
+        )
+    else:
+        raise ValueError(
+            f"""
+            The resource at {url} could not be resolved to either 
+            a zarr array or a zarr group. Got an instance of {type(element)} instead"""
+        )
+
+
+def create_datatree(
+    element: zarr.Group,
+    chunks: Union[str, Tuple[int, ...]] = "auto",
+    coords: Any = "auto",
+    keep_attrs: bool = False,
+    use_dask: bool = True,
+    **kwargs: Any,
+) -> DataTree:
+
+    if not isinstance(element, zarr.Group):
+        raise ValueError(
+            f"""
+        The first argument to this function must be a zarr Group; Got {type(element)}.
+        """
+        )
+    arrays = {
+        name: create_dataarray(
+            array,
+            chunks=chunks,
+            coords=coords,
+            keep_attrs=keep_attrs,
+            use_dask=use_dask,
+            **kwargs,
+        )
+        for name, array in element.arrays()
+    }
+    return DataTree.from_dict(arrays, name=element.basename)
+
+
+def create_dataarray(
+    element: zarr.Array | mrcfile.mrcmemmap.MrcMemmap,
+    chunks: Union[str, Tuple[int, ...]] = "auto",
+    coords: Any = "auto",
+    keep_attrs: bool = False,
+    use_dask: bool = True,
+    **kwargs: Any,
 ) -> DataArray:
     """
-    Create an xarray.DataArray from data found at a path.
+    Create an xarray.DataArray from a zarr array.
     """
-    raw_array = read(url, storage_options=storage_options)
     attrs = {}
     if keep_attrs:
-        if hasattr(raw_array, "attrs"):
-            attrs = dict(raw_array.attrs)
+        if hasattr(element, "attrs"):
+            attrs = dict(element.attrs)
         else:
             warn(
                 f"""
             The read_xarray function was invoked with the `keep_attrs` keyword argument 
-            set to `True`, but the array found at the url {url} was read as an instance 
-            of {type(raw_array)} which does not have an `attrs` property. This may 
+            set to `True`,  but the first argumnet to this function has 
+            type={type(element)} which does not have an `attrs` property. This may 
             generate an error in the future.
             """
             )
-    if use_dask:
-        array = read_dask(url, chunks=chunks, storage_options=storage_options)
-    else:
-        array = raw_array
-
     if coords == "auto":
-        coords = infer_coordinates(raw_array)
+        coords = infer_coordinates(element)
 
-    elif isinstance(coords, STTransform):
-        coords = coords.to_coords(array.shape)
+    elif hasattr(coords, "to_coords"):
+        coords = coords.to_coords(element.shape)
 
-    result = DataArray(array, coords=coords, attrs=attrs, **kwargs)
+    if use_dask:
+        element = zarray_to_dask(element, chunks=chunks)
+
+    result = DataArray(element, coords=coords, attrs=attrs, **kwargs)
     return result
 
 
-def infer_coordinates(arr: npt.ArrayLike) -> List[DataArray]:
+def infer_coordinates(arr: zarr.Array | mrcfile.mrcmemmap.MrcMemmap) -> List[DataArray]:
 
     if isinstance(arr, zarr.core.Array):
         coords = z_infer_coords(
