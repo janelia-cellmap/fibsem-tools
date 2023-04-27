@@ -211,7 +211,7 @@ def read_xarray(
     **kwargs: Any,
 ):
 
-    element = read(url, **storage_options)
+    element = read(url, storage_options=storage_options)
     if isinstance(element, zarr.Group):
         return create_datatree(
             element=element,
@@ -219,7 +219,6 @@ def read_xarray(
             coords=coords,
             keep_attrs=keep_attrs,
             use_dask=use_dask,
-            storage_options=storage_options,
             **kwargs,
         )
     elif hasattr(element, "shape"):
@@ -265,7 +264,11 @@ def create_datatree(
         )
         for name, array in element.arrays()
     }
-    return DataTree.from_dict(arrays, name=element.basename)
+    dtree = DataTree.from_dict(arrays, name=element.basename)
+    if keep_attrs:
+        dtree.attrs = element.attrs
+
+    return dtree
 
 
 def create_dataarray(
