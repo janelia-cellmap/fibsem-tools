@@ -76,13 +76,13 @@ def multiscale_metadata(
             group_attrs.update(g_meta.dict())
         elif flave == "cosem":
             if version == "2":
-                g_meta = COSEMGroupMetadataV2.fromDataArrays(arrays)
+                g_meta = COSEMGroupMetadataV2.fromDataArrays(arrays, array_paths)
             else:
-                g_meta = COSEMGroupMetadataV1.fromDataArrays(arrays)
+                g_meta = COSEMGroupMetadataV1.fromDataArrays(arrays, array_paths)
             group_attrs.update(g_meta.dict())
             for idx in range(len(array_attrs)):
                 array_attrs[idx] = {
-                    **STTransform.fromDataArray(arrays[idx]).dict(),
+                    "transform": STTransform.fromDataArray(arrays[idx]).dict(),
                     **array_attrs[idx],
                 }
         elif flave == "ome-ngff":
@@ -112,7 +112,7 @@ def multiscale_metadata(
 
 
 def multiscale_group(
-    group_url: str,
+    url: str,
     arrays: List[DataArray],
     array_paths: List[str],
     chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], None],
@@ -137,7 +137,7 @@ def multiscale_group(
     _chunks = _normalize_chunks(arrays, chunks)
     try:
         group = create_group(
-            group_url,
+            url,
             arrays,
             array_paths=array_paths,
             chunks=_chunks,
@@ -151,7 +151,7 @@ def multiscale_group(
     except ContainsGroupError:
         raise FileExistsError(
             f"""
-            The resource at {group_url} resolves to an existing group. Use 'w' or 'a' 
+            The resource at {url} resolves to an existing group. Use 'w' or 'a' 
             access modes to enable writable / appendable access to this group.
             """
         )
