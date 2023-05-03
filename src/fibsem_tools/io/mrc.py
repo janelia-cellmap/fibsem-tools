@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any, Dict, List, Literal, Sequence, Tuple, Union
 import numpy.typing as npt
 import dask.array as da

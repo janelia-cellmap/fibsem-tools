@@ -2,7 +2,7 @@
 Functions for reading FIB-SEM data from Harald Hess' proprietary format
 Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem.py
 """
-
+from __future__ import annotations
 import os
 from typing import Any, Dict, Literal, Sequence, Tuple
 
