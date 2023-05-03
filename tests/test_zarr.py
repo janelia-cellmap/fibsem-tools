@@ -5,6 +5,7 @@ from xarray import DataArray
 from zarr.storage import FSStore
 import zarr
 import numpy as np
+from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.io.zarr import (
@@ -15,6 +16,7 @@ from fibsem_tools.io.zarr import (
     create_dataarray,
     create_datatree,
     get_url,
+    to_dask,
     to_xarray,
 )
 from fibsem_tools.metadata.transform import STTransform
@@ -29,7 +31,7 @@ def test_url(temp_zarr):
     assert get_url(arr) == f"file://{store.path}/foo"
 
 
-def test_to_xarray(temp_zarr):
+def test_read_xarray(temp_zarr):
     path = "test"
     url = os.path.join(temp_zarr, path)
 
@@ -46,7 +48,7 @@ def test_to_xarray(temp_zarr):
     data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
     data["s1"].name = "data"
 
-    tmp_zarr = multiscale_group(
+    zgroup = multiscale_group(
         url,
         tuple(data.values()),
         tuple(data.keys()),
@@ -55,13 +57,14 @@ def test_to_xarray(temp_zarr):
         group_attrs={},
     )
     for key, value in data.items():
-        tmp_zarr[key] = value.data
-        tmp_zarr[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
+        zgroup[key] = value.data
+        zgroup[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
 
     tree_expected = DataTree.from_dict(data, name=path)
-    assert_equal(to_xarray(tmp_zarr["s0"]), data["s0"])
-    assert_equal(to_xarray(tmp_zarr["s1"]), data["s1"])
-    assert tree_expected.equals(to_xarray(tmp_zarr))
+    assert_equal(to_xarray(zgroup["s0"]), data["s0"])
+    assert_equal(to_xarray(zgroup["s1"]), data["s1"])
+    assert tree_expected.equals(to_xarray(zgroup))
+    assert tree_expected.equals(read_xarray(url))
 
 
 @pytest.mark.parametrize("attrs", (None, {"foo": 10}))
@@ -226,3 +229,21 @@ def test_access_group(temp_zarr, accessor):
     zg = accessor(temp_zarr, "", mode="w", attrs={"bar": 10})
     zg["foo"] = data
     assert zarr.open(default_store(temp_zarr), mode="a") == zg
+
+
+@pytest.mark.parametrize("chunks", ("auto", (10,)))
+def test_dask(temp_zarr, chunks):
+    path = "foo"
+    data = np.arange(100)
+    zarray = access_zarr(temp_zarr, path, mode="w", shape=data.shape, dtype=data.dtype)
+    zarray[:] = data
+    name_expected = "foo"
+
+    expected = da.from_array(zarray, chunks=chunks, name=name_expected)
+    observed = to_dask(zarray, chunks=chunks, name=name_expected)
+
+    assert observed.chunks == expected.chunks
+    assert observed.name == expected.name
+    assert np.array_equal(observed, data)
+
+    assert np.array_equal(read_dask(get_url(zarray), chunks).compute(), data)
