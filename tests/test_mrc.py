@@ -2,7 +2,9 @@ import os
 import mrcfile
 import numpy as np
 import pytest
-from fibsem_tools.io.mrc import access, to_dask
+from fibsem_tools.io.xr import stt_from_array
+from fibsem_tools.io.mrc import access, recarray_to_dict, to_dask, to_xarray
+from xarray.testing import assert_equal
 
 
 def test_access_mrc(temp_dir):
@@ -26,4 +28,25 @@ def test_access_mrc(temp_dir):
     del accessed
 
 
-# todo: add dataarray tests
+@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
+def test_read_xarray(temp_dir, attrs):
+    name = "test.mrc"
+    mrc_path = os.path.join(temp_dir, name)
+    scales = [1.0, 2.0, 3.0]
+    data = np.arange(4 * 5 * 6, dtype="uint8").reshape((4, 5, 6))
+    original = mrcfile.new(mrc_path, data=data, overwrite=True)
+    original.voxel_size = [x * 10 for x in reversed(scales)]
+    original.flush()
+
+    expected = stt_from_array(
+        data,
+        dims=("z", "y", "x"),
+        translates=(0, 0, 0),
+        scales=scales,
+        units=("nm", "nm", "nm"),
+    )
+
+    observed = to_xarray(original, attrs=attrs)
+    assert_equal(observed, expected)
+    if attrs is None:
+        assert dict(observed.attrs) == recarray_to_dict(original.header)

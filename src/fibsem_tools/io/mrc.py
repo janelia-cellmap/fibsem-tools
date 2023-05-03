@@ -9,6 +9,20 @@ from mrcfile.mrcfile import MrcFile
 from mrcfile.mrcmemmap import MrcMemmap
 import xarray
 from fibsem_tools.io.util import PathLike
+from pathlib import Path
+
+
+def recarray_to_dict(recarray) -> Dict[str, Any]:
+    result = {}
+    for k in recarray.dtype.names:
+        if isinstance(recarray[k], np.recarray):
+            result[k] = recarray_to_dict(recarray[k])
+        else:
+            if hasattr(recarray, "tolist"):
+                result[k] = recarray[k].tolist()
+            else:
+                result[k] = recarray[k]
+    return result
 
 
 def access(path: PathLike, mode: str, **kwargs):
@@ -79,7 +93,9 @@ def to_xarray(
     name: str | None = None,
 ):
 
-    return create_dataarray(element, chunks, use_dask, coords, attrs, name)
+    return create_dataarray(
+        element, chunks=chunks, use_dask=use_dask, coords=coords, attrs=attrs, name=name
+    )
 
 
 def create_dataarray(
@@ -95,6 +111,12 @@ def create_dataarray(
         inferred_coords = infer_coords(element)
     else:
         inferred_coords = coords
+
+    if name is None:
+        name = Path(element._iostream.name).parts[-1]
+
+    if attrs is None:
+        attrs = recarray_to_dict(element.header)
 
     if use_dask:
         element = to_dask(element, chunks)
