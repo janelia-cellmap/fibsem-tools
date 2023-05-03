@@ -227,7 +227,7 @@ def access_n5(store: PathLike, path: PathLike, **kwargs: Any) -> Any:
 
 
 def to_dask(
-    arr: zarr.Array, chunks: Union[str, Sequence[int]], name: str | None = None
+    arr: zarr.Array, chunks: Literal["auto"] | Sequence[int], name: str | None = None
 ):
     darr = da.from_array(arr, chunks=chunks, inline_array=True, name=name)
     return darr
