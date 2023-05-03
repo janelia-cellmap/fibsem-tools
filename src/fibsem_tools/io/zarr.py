@@ -374,9 +374,9 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
 def to_xarray(
     element: zarr.Array | zarr.Group,
     chunks: Literal["auto"] | Tuple[int, ...] = "auto",
-    coords: Any = "auto",
-    keep_attrs: bool = False,
     use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    coords: Any = "auto",
     name: str | None = None,
 ):
     if isinstance(element, zarr.Group):
@@ -384,7 +384,7 @@ def to_xarray(
             element,
             chunks=chunks,
             coords=coords,
-            keep_attrs=keep_attrs,
+            attrs=attrs,
             use_dask=use_dask,
             name=name,
         )
@@ -393,7 +393,7 @@ def to_xarray(
             element,
             chunks=chunks,
             coords=coords,
-            keep_attrs=keep_attrs,
+            attrs=attrs,
             use_dask=use_dask,
             name=name,
         )
@@ -419,7 +419,7 @@ def create_dataarray(
     """
 
     if name is None:
-        name = element.name
+        name = element.basename
 
     if coords == "auto":
         coords = infer_coords(element)
@@ -453,6 +453,10 @@ def create_datatree(
         Got {coords}. This may change in the future.
         """
         )
+
+    if name is None:
+        name = element.basename
+
     nodes = {
         name: create_dataarray(
             array,
