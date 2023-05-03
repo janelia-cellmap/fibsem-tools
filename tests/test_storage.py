@@ -6,17 +6,13 @@ from pathlib import Path
 
 import dask
 import dask.array as da
-import mrcfile
 import numpy as np
-import pytest
 import zarr
 
 from fibsem_tools.io.dask import store_blocks
-from fibsem_tools.io.h5 import access_h5
-from fibsem_tools.io.core import create_group, read_dask, access, read
-from fibsem_tools.io.mrc import access_mrc
+from fibsem_tools.io.core import create_group, access, read
 from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
-from fibsem_tools.io.zarr import DEFAULT_ZARR_STORE, delete_zbranch
+from fibsem_tools.io.zarr import delete_zbranch
 
 
 def _make_local_files(files):
@@ -26,98 +22,6 @@ def _make_local_files(files):
         Path(f).touch(exist_ok=True)
         result.append(str(Path(f).absolute()))
     return result
-
-
-def test_access_array_zarr(temp_zarr):
-    data = np.random.randint(0, 255, size=(100,), dtype="uint8")
-    z = zarr.open(temp_zarr, mode="w", shape=data.shape, chunks=10)
-    z[:] = data
-    assert np.array_equal(read(temp_zarr)[:], data)
-
-    darr = read_dask(temp_zarr, chunks=(10,))
-    assert (darr.compute() == data).all
-
-
-def test_access_array_zarr_n5(temp_n5):
-    data = np.random.randint(0, 255, size=(100,), dtype="uint8")
-    z = zarr.open(temp_n5, mode="w", shape=data.shape, chunks=10)
-    z[:] = data
-    assert np.array_equal(read(temp_n5)[:], data)
-
-    darr = read_dask(temp_n5, chunks=(10,))
-    assert (darr.compute() == data).all
-
-
-def test_access_group_zarr():
-    store = tempfile.mkdtemp(suffix=".zarr")
-    atexit.register(shutil.rmtree, store)
-    data = np.zeros(100, dtype="uint8") + 42
-
-    zg = zarr.open(store, mode="w")
-    zg["foo"] = data
-    assert access(store, mode="a") == zg
-
-    zg = access(store, mode="w")
-    zg["foo"] = data
-    assert zarr.open(DEFAULT_ZARR_STORE(store), mode="a") == zg
-
-
-def test_access_group_zarr_n5(temp_n5):
-    data = np.zeros(100, dtype="uint8") + 42
-    zg = zarr.open(temp_n5, mode="a")
-    zg.attrs.update({"foo": "bar"})
-    zg["foo"] = data
-
-    assert dict(access(temp_n5, mode="r").attrs) == {"foo": "bar"}
-    assert np.array_equal(access(temp_n5, mode="r")["foo"][:], data)
-
-
-def test_access_mrc():
-    store = tempfile.NamedTemporaryFile(suffix=".mrc", delete=False)
-    name = store.name
-    data = np.arange(27, dtype="uint8").reshape((3, 3, 3))
-    mrcfile.new(name, data=data, overwrite=True)
-
-    original = mrcfile.open(name)
-    assert np.array_equal(access_mrc(name, mode="r").data, original.data)
-    assert np.array_equal(read_dask(name).compute(), original.data)
-    assert np.array_equal(read_dask(name, chunks=(2, -1, -1)).compute(), original.data)
-    with pytest.raises(ValueError):
-        read_dask(name, chunks=(1, 1, 1))
-
-    del original
-    del store
-    os.remove(name)
-
-
-def test_access_array_h5():
-    key = "foo/s0"
-    data = np.random.randint(0, 255, size=(10, 10, 10), dtype="uint8")
-    attrs = {"resolution": "1000"}
-    with tempfile.TemporaryFile(suffix=".h5") as store:
-        arr = access_h5(store, key, data=data, attrs=attrs, mode="w")
-        assert dict(arr.attrs) == attrs
-        assert np.array_equal(arr[:], data)
-        arr.file.close()
-
-        arr2 = access_h5(store, key, mode="r")
-        assert dict(arr2.attrs) == attrs
-        assert np.array_equal(arr2[:], data)
-        arr2.file.close()
-
-
-def test_access_group_h5():
-    key = "s0"
-    attrs = {"resolution": "1000"}
-
-    with tempfile.TemporaryFile(suffix=".h5") as store:
-        grp = access_h5(store, key, attrs=attrs, mode="w")
-        assert dict(grp.attrs) == attrs
-        grp.file.close()
-
-        grp2 = access_h5(store, key, mode="r")
-        assert dict(grp2.attrs) == attrs
-        grp2.file.close()
 
 
 def test_list_files(temp_dir):

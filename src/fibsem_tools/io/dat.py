@@ -4,14 +4,16 @@ Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem
 """
 
 import os
-from pathlib import Path
-from typing import Any, Iterable, Sequence, Union
+from typing import Any, Dict, Literal, Sequence, Tuple
 
 import dask.array as da
 import numpy as np
 from xarray import DataArray
 
 import warnings
+
+from fibsem_tools.io.util import AccessMode, PathLike
+from fibsem_tools.io.xr import stt_coord
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3_555_587_570
@@ -83,7 +85,7 @@ class FIBSEMData(np.ndarray):
         self.attrs = getattr(obj, "attrs", None)
 
 
-class _DTypeDict(object):
+class _DTypeDict:
     """
     Handle dtype dict manipulations. Note: this object is deprecated and will soon be
     removed.
@@ -122,7 +124,7 @@ class _DTypeDict(object):
         return np.dtype(self.dict)
 
 
-def _read_header(path):
+def read_header(path: PathLike):
     # make emtpy header to fill
     header_dtype = _DTypeDict()
     header_dtype.update(
@@ -611,10 +613,10 @@ def _read_header(path):
     return fibsem_header
 
 
-def _read(path: Union[str, Path]) -> FIBSEMData:
+def access(path: PathLike, mode: AccessMode) -> FIBSEMData:
     """
 
-    Read a single .dat file.
+    Access a .dat file created by FIB-SEM microscopes.
 
     Parameters
     ----------
@@ -624,9 +626,16 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
     -------
 
     """
+    if mode != "r":
+        raise ValueError(
+            f"""
+        .dat files can only be opened with read-only mode (r). Got {mode} instead.
+        """
+        )
+
     # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data
     # type
-    fibsem_header = _read_header(path)
+    fibsem_header = read_header(path)
     # read data
     shape = (
         fibsem_header.YResolution,
@@ -663,31 +672,6 @@ def _read(path: Union[str, Path]) -> FIBSEMData:
     result = FIBSEMData(raw_data, fibsem_header)
     del raw_data
     return result
-
-
-def read_fibsem(path: Union[str, Path, Iterable[str], Iterable[Path]]):
-    """
-
-    Parameters
-    ----------
-    path : string or iterable of strings representing paths to .dat files.
-
-    Returns a single FIBSEMDataset or an iterable of FIBSEMDatasets, depending on
-    whether a single path or multiple paths are supplied as arguments.
-    -------
-
-    """
-    if isinstance(path, (str, Path)):
-        return _read(path)
-    elif isinstance(path, Iterable):
-        return [_read(p) for p in path]
-    else:
-        raise ValueError(
-            f"""
-            Path '{path}' must be an instance of string or pathlib.Path, or iterable of 
-            strings / pathlib.Paths
-            """
-        )
 
 
 def _convert_data(fibsem):
@@ -761,7 +745,7 @@ def _convert_data(fibsem):
     return detector_a, detector_b, scaled
 
 
-def _chunked_fibsem_loader(
+def chunked_fibsem_loader(
     filenames, channel_axis, pad_values=None, concat_axis=0, block_info=None
 ):
     """
@@ -770,7 +754,7 @@ def _chunked_fibsem_loader(
     idx = block_info[None]["chunk-location"]
     output_shape = block_info[None]["chunk-shape"]
     filedata = np.expand_dims(
-        np.asanyarray(read_fibsem(filenames[idx[0]])), concat_axis
+        np.asanyarray(access(filenames[idx[0]], mode="r")), concat_axis
     )
     pad_width = np.subtract(output_shape, filedata.shape)
     if np.any(pad_width):
@@ -796,12 +780,12 @@ def _chunked_fibsem_loader(
 
 def minmax(filenames, block_info):
     idx = block_info[None]["chunk-location"][0]
-    filedata = read_fibsem(filenames[idx])
+    filedata = access(filenames[idx], mode="r")
     return np.expand_dims(np.array([[f.min(), f.max()] for f in filedata]), 0)
 
 
 def aggregate_fibsem_metadata(fnames):
-    headers = [_read_header(f) for f in fnames]
+    headers = [read_header(f) for f in fnames]
     meta, shapes, dtypes = [], [], []
     # build lists of metadata for each image
     for d in headers:
@@ -815,6 +799,7 @@ def aggregate_fibsem_metadata(fnames):
     return meta, shapes, dtypes
 
 
+# todo: make this a dataarray
 class FibsemDataset:
     def __init__(self, filenames: Sequence[str]):
         """
@@ -824,18 +809,18 @@ class FibsemDataset:
         self.metadata, self.shapes, self.dtypes = aggregate_fibsem_metadata(
             self.filenames
         )
-        self.axes = {"z": 0, "c": 1, "y": 2, "x": 3}
-        self.bounding_shape = {
+        self.dims = ("c", "z", "y", "x")
+        self.shape = {
             k: v
             for k, v in zip(
                 self.axes, (len(self.filenames), *np.array(self.shapes).max(0))
             )
         }
-        self.extrema = self._get_extrema()
+        self.extrema = self.get_extrema()
         self.needs_padding = len(set(self.shapes)) > 1
-        self.grid_spacing, self.coords = self._get_grid_spacing_and_coords()
+        self.grid_spacing, self.coords = self.infer_coords()
 
-    def _get_grid_spacing_and_coords(self):
+    def infer_coords(self):
         lateral = self.metadata[0]["PixelSize"]
         axial = (
             abs((self.metadata[0]["WD"] - self.metadata[-1]["WD"]) / len(self.metadata))
@@ -848,7 +833,7 @@ class FibsemDataset:
         }
         return grid_spacing, coords
 
-    def _get_extrema(self):
+    def get_extrema(self):
         all_extrema = da.map_blocks(
             minmax,
             self.filenames,
@@ -863,9 +848,17 @@ class FibsemDataset:
         )
         return result
 
-    def to_dask(self, pad_values=None):
-        num_channels = self.bounding_shape["c"]
-        if self.needs_padding:
+
+def to_dask(
+    data: FibsemDataset | FIBSEMData,
+    chunks: Literal["auto"] | Sequence[int],
+    pad_values=None,
+):
+    if isinstance(data, FIBSEMData):
+        return da.from_array(data, chunks=chunks)
+    elif isinstance(data, FibsemDataset):
+        num_channels = data.bounding_shape["c"]
+        if data.needs_padding:
             if pad_values is None:
                 raise ValueError("Data must be padded but no pad values were supplied!")
             elif len(pad_values) != num_channels:
@@ -877,15 +870,97 @@ class FibsemDataset:
                 )
 
         chunks = (
-            (1,) * self.bounding_shape["z"],
-            *[self.bounding_shape[k] for k in ("c", "y", "x")],
+            (1,) * data.bounding_shape["z"],
+            *[data.bounding_shape[k] for k in ("c", "y", "x")],
         )
         darr = da.map_blocks(
-            _chunked_fibsem_loader,
-            self.filenames,
-            self.axes["c"],
+            chunked_fibsem_loader,
+            data.filenames,
+            data.axes["c"],
             pad_values,
             chunks=chunks,
-            dtype=self.dtypes[0],
+            dtype=data.dtypes[0],
         )
         return darr
+
+
+def infer_coords(array: FIBSEMData):
+    grid_spacing_xy = array.attrs["PixelSize"]
+    dims = ("x", "y", "c")
+    scales = (grid_spacing_xy, grid_spacing_xy, 1)
+    translates = (0, 0, 0)
+    coords = [
+        stt_coord(
+            length=s,
+            dim=dims[idx],
+            scale=scales[idx],
+            translate=translates[idx],
+            unit="nm",
+        )
+        for idx, s in enumerate(array.shape)
+    ]
+    return coords
+
+
+def create_dataarray(
+    element: FIBSEMData,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    name: str | None = None,
+):
+
+    if coords == "auto":
+        coords = infer_coords(element)
+    if use_dask:
+        element = to_dask(element, chunks)
+
+    return DataArray(element, coords, attrs, name=name)
+
+
+def create_datatree(
+    element: FibsemDataset,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    name: str | None = None,
+):
+    raise NotImplementedError("This behavior has not been implemented yet.")
+
+
+def to_xarray(
+    element: FIBSEMData | FibsemDataset,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    name: str | None = None,
+):
+    if isinstance(element, FibsemDataset):
+        return create_datatree(
+            element,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=attrs,
+            name=name,
+        )
+
+    elif isinstance(element, FIBSEMData):
+        return create_dataarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=attrs,
+            name=name,
+        )
+    else:
+        raise ValueError(
+            f"""
+        This function only accepts instances of zarr.Group and zarr.Array. 
+        Got {type(element)} instead.
+        """
+        )

@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union, Literal
 
 from pydantic import BaseModel, root_validator
 from xarray import DataArray
-from fibsem_tools.io.xr import stt_coord
+import fibsem_tools.io.xr as fsxr
 
 ArrayOrder = Literal["C", "F"]
 
@@ -47,7 +47,7 @@ class STTransform(BaseModel):
         else:
             axes = reversed(self.axes)
         return [
-            stt_coord(
+            fsxr.stt_coord(
                 shape[idx],
                 dim=k,
                 scale=self.scale[idx],

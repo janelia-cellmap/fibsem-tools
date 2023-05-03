@@ -1,16 +1,48 @@
+from __future__ import annotations
 import os
 from glob import glob
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Optional, Sequence, Tuple, Union, Dict, List
+from typing import Any, Iterable, Literal, Optional, Sequence, Tuple, Union, Dict, List
 
 import fsspec
 import toolz as tz
 from dask import bag, delayed
+from typing import Protocol, runtime_checkable
 
 JSON = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, None]
 Attrs = Dict[str, JSON]
 PathLike = Union[Path, str]
+AccessMode = Literal["w", "w-", "r", "r+", "a"]
+
+
+@runtime_checkable
+class ArrayLike(Protocol):
+    shape: Tuple[int, ...]
+    dtype: Any
+
+    def __getitem__(self, *args) -> "ArrayLike" | float:
+        ...
+
+
+@runtime_checkable
+class GroupLike(Protocol):
+    def values(self) -> Iterable[Union["GroupLike", ArrayLike]]:
+        """
+        Iterable of the children of this group
+        """
+        ...
+
+    def create_group(self, name: str, **kwargs) -> "GroupLike":
+        ...
+
+    def create_array(
+        self, name: str, dtype: Any, chunks: Tuple[int, ...], compressor: Any
+    ) -> ArrayLike:
+        ...
+
+    def __getitem__(self, *args) -> ArrayLike | "GroupLike":
+        ...
 
 
 @delayed

@@ -1,10 +1,10 @@
-import xarray as xr
+import xarray
 import numpy as np
 import numpy.typing as npt
-from typing import Tuple, Sequence
+from typing import Any, Tuple, Sequence
 
 
-def flip(data: xr.DataArray, dims: Sequence[str] = []) -> xr.DataArray:
+def flip(data: xarray.DataArray, dims: Sequence[str] = []) -> xarray.DataArray:
     """
     Reverse the data backing a DataArray along the specified dimension(s).
     """
@@ -22,7 +22,7 @@ def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
     Create a coordinate variable parametrized by a shape, a scale, a translation, and
     a unit. The translation is applied after the scaling.
     """
-    return xr.DataArray(
+    return xarray.DataArray(
         (np.arange(length) * scale) + translate, dims=(dim,), attrs={"units": unit}
     )
 
@@ -33,16 +33,16 @@ def stt_from_array(
     scales: Tuple[float, ...],
     translates: Tuple[float, ...],
     units: Tuple[str, ...],
-    **kwargs,
-) -> xr.DataArray:
+    **kwargs: Any,
+) -> xarray.DataArray:
 
     """
     Create a DataArray with coordinates parametrized by a shape, a sequence of dims,
-    a sequence of scales, a sequence of translates, and a sequence of units from an
+    a sequence of scales, a sequence of translations, and a sequence of units from an
     input array.
     """
     coords = []
     for idx, s in enumerate(data.shape):
         coords.append(stt_coord(s, dims[idx], scales[idx], translates[idx], units[idx]))
 
-    return xr.DataArray(data, dims=dims, coords=coords, **kwargs)
+    return xarray.DataArray(data, dims=dims, coords=coords, **kwargs)
