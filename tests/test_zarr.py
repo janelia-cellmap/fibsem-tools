@@ -1,6 +1,7 @@
 import os
 from datatree import DataTree
 import pytest
+from xarray import DataArray
 from zarr.storage import FSStore
 import zarr
 import numpy as np
@@ -14,6 +15,7 @@ from fibsem_tools.io.zarr import (
     create_dataarray,
     create_datatree,
     get_url,
+    to_xarray,
 )
 from fibsem_tools.metadata.transform import STTransform
 import dask.array as da
@@ -27,12 +29,10 @@ def test_url(temp_zarr):
     assert get_url(arr) == f"file://{store.path}/foo"
 
 
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("coords", ("auto",))
-@pytest.mark.parametrize("keep_attrs", (True, False))
-def test_read_datatree(temp_zarr, use_dask, coords, keep_attrs):
+def test_to_xarray(temp_zarr):
     path = "test"
     url = os.path.join(temp_zarr, path)
+
     data = {
         "s0": stt_from_array(
             np.zeros((10, 10, 10)),
@@ -45,27 +45,104 @@ def test_read_datatree(temp_zarr, use_dask, coords, keep_attrs):
     }
     data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
     data["s1"].name = "data"
-    data_tree = DataTree.from_dict(data, name="test")
+
     tmp_zarr = multiscale_group(
         url,
         tuple(data.values()),
         tuple(data.keys()),
         chunks=((64, 64, 64), (64, 64, 64)),
         metadata_types=["cosem"],
-        group_attrs={"foo": 10},
+        group_attrs={},
+    )
+    for key, value in data.items():
+        tmp_zarr[key] = value.data
+        tmp_zarr[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
+
+    tree_expected = DataTree.from_dict(data, name=path)
+    assert_equal(to_xarray(tmp_zarr["s0"]), data["s0"])
+    assert_equal(to_xarray(tmp_zarr["s1"]), data["s1"])
+    assert tree_expected.equals(to_xarray(tmp_zarr))
+
+
+@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
+@pytest.mark.parametrize("coords", ("auto",))
+@pytest.mark.parametrize("use_dask", (True, False))
+@pytest.mark.parametrize("name", (None, "foo"))
+def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
+    path = "test"
+    url = os.path.join(temp_zarr, path)
+    base_data = np.zeros((10, 10, 10))
+
+    if attrs is None:
+        _attrs = {}
+    else:
+        _attrs = attrs
+
+    if name is None:
+        name_expected = path
+    else:
+        name_expected = name
+
+    data = {
+        "s0": stt_from_array(
+            base_data,
+            dims=("z", "y", "x"),
+            scales=(1, 2, 3),
+            translates=(0, 1, 2),
+            units=("nm", "m", "mm"),
+            name="data",
+        )
+    }
+    data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
+    data["s1"].name = "data"
+
+    tmp_zarr = multiscale_group(
+        url,
+        tuple(data.values()),
+        tuple(data.keys()),
+        chunks=((64, 64, 64), (64, 64, 64)),
+        metadata_types=["cosem"],
+        group_attrs=_attrs,
     )
     for key, value in data.items():
         tmp_zarr[key] = value.data
         tmp_zarr[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
 
     data_store = create_datatree(
-        access_zarr(temp_zarr, path, mode="r"), use_dask=use_dask
+        access_zarr(temp_zarr, path, mode="r"),
+        use_dask=use_dask,
+        name=name,
+        coords=coords,
+        attrs=attrs,
     )
+
+    if name is None:
+        assert data_store.name == tmp_zarr.basename
+    else:
+        assert data_store.name == name
+
     assert (
         all(isinstance(d["data"].data, da.Array) for k, d in data_store.items())
         == use_dask
     )
-    assert data_store == data_tree
+
+    # create a datatree directly
+    tree_dict = {
+        k: DataArray(
+            access_zarr(temp_zarr, os.path.join(path, k), mode="r"),
+            coords=data[k].coords,
+            name="data",
+        )
+        for k in data.keys()
+    }
+
+    tree_expected = DataTree.from_dict(tree_dict, name=name_expected)
+
+    assert tree_expected.equals(data_store)
+    if attrs is None:
+        assert dict(data_store.attrs) == dict(tmp_zarr.attrs)
+    else:
+        assert dict(data_store.attrs) == attrs
 
 
 @pytest.mark.parametrize("attrs", (None, {"foo": 10}))
@@ -106,7 +183,7 @@ def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
     )
 
     if name is None:
-        assert data_store.name == tmp_zarr.name
+        assert data_store.name == tmp_zarr.basename
     else:
         assert data_store.name == name
 
