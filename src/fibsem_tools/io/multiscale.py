@@ -115,14 +115,15 @@ def multiscale_group(
     url: str,
     arrays: List[DataArray],
     array_paths: List[str],
-    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], None],
+    chunks: Tuple[Tuple[int, ...], ...] | Tuple[int, ...] | None,
     metadata_types: List[str],
     group_mode: AccessMode = "w-",
     array_mode: AccessMode = "w-",
-    group_attrs: Optional[Attrs] = None,
-    array_attrs: Optional[Sequence[Attrs]] = None,
+    group_attrs: Attrs | None = None,
+    array_attrs: Sequence[Attrs] | None = None,
     **kwargs: Any,
 ) -> zarr.Group:
+
     if array_attrs is None:
         array_attrs = [{}] * len(arrays)
     if group_attrs is None:
@@ -131,8 +132,8 @@ def multiscale_group(
     mgroup_attrs, marray_attrs = multiscale_metadata(
         arrays, metadata_types, array_paths=array_paths
     )
-    group_attrs.update(mgroup_attrs)
-    [a.update(marray_attrs[idx]) for idx, a in enumerate(array_attrs)]
+    _group_attrs = {**group_attrs, **mgroup_attrs}
+    _arr_attrs = [{**a, **m} for a, m in zip(array_attrs, marray_attrs)]
 
     _chunks = _normalize_chunks(arrays, chunks)
     try:
@@ -141,8 +142,8 @@ def multiscale_group(
             arrays,
             array_paths=array_paths,
             chunks=_chunks,
-            group_attrs=group_attrs,
-            array_attrs=array_attrs,
+            group_attrs=_group_attrs,
+            array_attrs=_arr_attrs,
             group_mode=group_mode,
             array_mode=array_mode,
             **kwargs,
