@@ -31,7 +31,7 @@ import fibsem_tools.io.dat
 import fibsem_tools.io.xr
 import fibsem_tools.io.h5
 import fibsem_tools.io.zarr
-
+import fibsem_tools.io.tif
 
 _formats = (".dat", ".mrc", ".tif")
 _container_extensions = (".zarr", ".n5", ".h5")
