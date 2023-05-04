@@ -3,7 +3,7 @@ import os
 from glob import glob
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, Iterable, Literal, Sequence, Tuple, Union, Dict, List
+from typing import Any, Iterable, Literal, Optional, Sequence, Tuple, Union, Dict, List
 
 import fsspec
 import toolz as tz
@@ -116,7 +116,7 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> Tuple[str, str, s
     If the last element of the string bears a suffix, return the string,
     the empty string, and the suffix.
     """
-    protocol: str | None
+    protocol: Optional[str]
     subpath: str
     protocol, subpath = fsspec.core.split_protocol(str(uri))
     if protocol is None:

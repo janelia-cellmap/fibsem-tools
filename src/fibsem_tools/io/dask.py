@@ -1,5 +1,5 @@
 from os import PathLike
-from typing import Any, Callable, List, Literal, Sequence, Tuple, Union
+from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
 import backoff
 import dask
@@ -101,7 +101,7 @@ def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
     return np.array([func(*args, **kwargs)]).reshape((1,) * ndim)
 
 
-def write_blocks(source, target, region: Tuple[slice, ...] | None) -> da.Array:
+def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
     """
     Return a dask array with where each chunk contains the result of writing
     each chunk of `source` to `target`.
@@ -143,9 +143,7 @@ def write_blocks(source, target, region: Tuple[slice, ...] | None) -> da.Array:
     )
 
 
-def store_blocks(
-    sources, targets, regions: Sequence[slice] | None = None
-) -> List[da.Array]:
+def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.Array]:
     """
     Write dask array(s) to sliceable storage. Like `da.store` but instead of
     returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,

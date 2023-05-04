@@ -1,5 +1,4 @@
-from __future__ import annotations
-from typing import Sequence
+from typing import Optional, Sequence
 
 from pydantic import BaseModel
 from xarray import DataArray
@@ -13,12 +12,12 @@ class ScaleMetaV1(BaseModel):
 
 
 class MultiscaleMetaV1(BaseModel):
-    name: str | None
+    name: Optional[str]
     datasets: Sequence[ScaleMetaV1]
 
 
 class MultiscaleMetaV2(BaseModel):
-    name: str | None
+    name: Optional[str]
     datasets: Sequence[str]
 
 
@@ -34,7 +33,7 @@ class COSEMGroupMetadataV1(BaseModel):
         cls,
         arrays: Sequence[DataArray],
         paths: Sequence[str],
-        name: str | None = None,
+        name: Optional[str] = None,
     ):
         """
         Generate multiscale metadata from a list or tuple of DataArrays.
@@ -87,7 +86,7 @@ class COSEMGroupMetadataV2(BaseModel):
         cls,
         arrays: Sequence[DataArray],
         paths: Sequence[str],
-        name: str | None = None,
+        name: Optional[str] = None,
     ):
         """
         Generate multiscale metadata from a list or tuple of DataArrays.
