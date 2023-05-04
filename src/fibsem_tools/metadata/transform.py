@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional, Sequence, Tuple, Union, Literal
+from __future__ import annotations
+from typing import Dict, List, Sequence, Tuple, Union, Literal
 
 from pydantic import BaseModel, root_validator
 from xarray import DataArray
@@ -13,7 +14,7 @@ class STTransform(BaseModel):
     axes with units.
     """
 
-    order: Optional[ArrayOrder] = "C"
+    order: ArrayOrder | None = "C"
     axes: Sequence[str]
     units: Sequence[str]
     translate: Sequence[float]

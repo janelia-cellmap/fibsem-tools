@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel
 
@@ -29,7 +29,7 @@ class Label(BaseModel):
     value: int
     name: InstanceName
     annotationState: AnnotationState
-    count: Optional[int]
+    count: int | None
 
 
 class LabelList(BaseModel):

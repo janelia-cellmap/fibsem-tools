@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union, List
+from typing import Any, Dict, Literal, Sequence, Tuple, Union, List
 
 from xarray import DataArray
 
@@ -47,7 +47,7 @@ def _normalize_chunks(
 def multiscale_metadata(
     arrays: Sequence[DataArray],
     metadata_types: List[str],
-    array_paths: Optional[List[str]] = None,
+    array_paths: List[str] | None = None,
 ) -> Tuple[Dict[str, JSON], List[Dict[str, JSON]]]:
     """
     Generate multiscale metadata of the desired flavor from a list of DataArrays
@@ -161,7 +161,7 @@ def multiscale_group(
 
 def prepare_multiscale(
     dest_url: str,
-    scratch_url: Optional[str],
+    scratch_url: str | None,
     arrays: List[DataArray],
     array_names: List[str],
     access_mode: Literal["w", "w-", "a"],
