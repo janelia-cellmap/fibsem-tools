@@ -1,44 +1,36 @@
+from __future__ import annotations
 import os
-import numpy.typing as npt
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
     Dict,
     Iterable,
-    List,
     Literal,
-    Optional,
     Sequence,
     Tuple,
     Union,
 )
-import tifffile
-import dask.array as da
-import h5py
-import mrcfile
-import zarr
-from numpy.typing import NDArray
-from xarray import DataArray
 
-from fibsem_tools.metadata.transform import STTransform
-from fibsem_tools.io.util import Attrs, PathLike
-from fibsem_tools.io.fibsem import read_fibsem
-from fibsem_tools.io.mrc import (
-    access_mrc,
-    infer_coords as mrc_infer_coords,
-    mrc_to_dask,
+
+from xarray import DataArray
+from datatree import DataTree
+from numpy.typing import NDArray
+
+import dask.array as da
+from fibsem_tools.io.util import (
+    AccessMode,
+    ArrayLike,
+    Attrs,
+    GroupLike,
+    PathLike,
+    split_by_suffix,
 )
-from fibsem_tools.io.util import split_by_suffix
-from fibsem_tools.io.zarr import (
-    access_n5,
-    access_parent,
-    access_zarr,
-    n5_to_dask,
-    infer_coords as z_infer_coords,
-    zarr_to_dask,
-)
-from warnings import warn
+
+import fibsem_tools.io.mrc
+import fibsem_tools.io.dat
+import fibsem_tools.io.xr
+import fibsem_tools.io.h5
+import fibsem_tools.io.zarr
 
 
 _formats = (".dat", ".mrc", ".tif")
@@ -46,64 +38,18 @@ _container_extensions = (".zarr", ".n5", ".h5")
 _suffixes = (*_formats, *_container_extensions)
 
 
-AccessMode = Literal["w", "w-", "r", "r+", "a"]
-
-
-def access_tif(
-    path: PathLike, mode: Literal["r"] = "r", memmap: bool = True
-) -> npt.ArrayLike:
-    if mode != "r":
-        raise ValueError("Tifs may only be accessed in read-only mode")
-
-    if memmap:
-        return tifffile.memmap(path)
-    else:
-        return tifffile.imread(path)
-
-
-def access_fibsem(path: Union[PathLike, Iterable[PathLike]], mode: AccessMode):
-    if mode != "r":
-        raise ValueError(
-            f".dat files can only be accessed in read-only mode, not {mode}."
-        )
-    return read_fibsem(path)
-
-
-def access_h5(
-    dir_path: PathLike, container_path: PathLike, mode: str, **kwargs
-) -> Union[h5py.Dataset, h5py.Group]:
-    result = h5py.File(dir_path, mode=mode, **kwargs)
-    if container_path != "":
-        result = result[str(container_path)]
-    return result
-
-
-accessors: Dict[str, Callable[..., Any]] = {}
-accessors[".dat"] = access_fibsem
-accessors[".n5"] = access_n5
-accessors[".zarr"] = access_zarr
-accessors[".h5"] = access_h5
-accessors[".mrc"] = access_mrc
-accessors[".tif"] = access_tif
-
-daskifiers: Dict[str, Callable[..., da.core.Array]] = {}
-daskifiers[".mrc"] = mrc_to_dask
-daskifiers[".n5"] = n5_to_dask
-daskifiers[".zarr"] = zarr_to_dask
-
-
 def access(
-    path: Union[PathLike, Iterable[PathLike]],
+    path: PathLike,
     mode: AccessMode,
-    **kwargs: Dict[str, Any],
-) -> Any:
+    **kwargs: Any,
+) -> ArrayLike | GroupLike:
     """
 
     Access a variety of hierarchical array storage formats.
 
     Parameters
     ----------
-    path: A path or collection of paths to image files.
+    path: A path reference to array data or an array container.
         If `path` is a string, it is assumed to be a path, then the appropriate access
         function will be selected based on the extension of the path, and the file will
         be accessed. To access a Zarr or N5 containers, the path to the root container
@@ -112,7 +58,7 @@ def access(
         For reading .zarr or n5 containers, this function dispatches to `zarr.open`
 
         For reading .dat files (Janelia-native binary image format), this function uses
-        routines found in `fibsem_tools.io.fibsem`
+        routines found in `fibsem_tools.io.dat`
 
         If `path` is a collection of strings, it is assumed that each element of the
         collection represents a path, and this function will return the result of
@@ -127,36 +73,39 @@ def access(
 
     Returns
     -------
-    An array-like object, a collection of array-like objects, or an instance of
-    zarr.hierarchy.Group
-
+    An array-like object or a group-like object
     """
-    if isinstance(path, (str, Path)):
-        path_outer, path_inner, suffix = split_by_suffix(path, _suffixes)
-        is_container = suffix in _container_extensions
 
-        try:
-            accessor = accessors[suffix]
-        except KeyError:
-            raise ValueError(
-                f"""
-                Cannot access images with extension {suffix}. Try one of 
-                {list(accessors.keys())}
-                """
-            )
+    path_outer, path_inner, suffix = split_by_suffix(path, _suffixes)
+    is_container = suffix in _container_extensions
 
-        if is_container:
-            return accessor(path_outer, path_inner, mode=mode, **kwargs)
-        else:
-            return accessor(path_outer, mode=mode, **kwargs)
-
-    elif isinstance(path, Iterable):
-        return [access(p, mode, **kwargs) for p in path]
+    if suffix == ".zarr":
+        accessor = fibsem_tools.io.zarr.access_zarr
+    elif suffix == ".n5":
+        accessor = fibsem_tools.io.zarr.access_n5
+    elif suffix == ".h5":
+        accessor = fibsem_tools.io.h5.access_h5
+    elif suffix == ".tif":
+        accessor = fibsem_tools.io.tif.access
+    elif suffix == ".mrc":
+        accessor = fibsem_tools.io.mrc.access
+    elif suffix == ".dat":
+        accessor = fibsem_tools.io.dat.access
     else:
-        raise ValueError("`path` must be a string or iterable of strings")
+        raise ValueError(
+            f"""
+                Cannot access file with extension {suffix}. Try one of 
+                {_suffixes}
+                """
+        )
+
+    if is_container:
+        return accessor(path_outer, path_inner, mode=mode, **kwargs)
+    else:
+        return accessor(path_outer, mode=mode, **kwargs)
 
 
-def read(path: Union[PathLike, Iterable[str], Iterable[Path]], **kwargs):
+def read(path: PathLike, **kwargs) -> ArrayLike | GroupLike:
     """
 
     Read-only access for data (arrays and groups) from a variety of hierarchical array
@@ -183,7 +132,7 @@ def read(path: Union[PathLike, Iterable[str], Iterable[Path]], **kwargs):
 
     Returns
     -------
-    An array-like object, a collection of array-like objects, or an instance of
+    An array-like object or a group-like object
     zarr.hierarchy.Group
 
     """
@@ -191,72 +140,68 @@ def read(path: Union[PathLike, Iterable[str], Iterable[Path]], **kwargs):
 
 
 def read_dask(
-    uri: str, chunks: Union[str, Tuple[int, ...]] = "auto", **kwargs: Dict[str, Any]
-) -> da.core.Array:
+    path: PathLike,
+    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
+    **kwargs: Any,
+) -> da.Array:
     """
     Create a dask array from a uri
     """
-    _, _, suffix = split_by_suffix(uri, _suffixes)
-    return daskifiers[suffix](uri, chunks, **kwargs)
+    _, _, suffix = split_by_suffix(path, _suffixes)
+    if suffix in (".zarr", ".n5"):
+        dasker = fibsem_tools.io.zarr.to_dask
+    elif suffix == ".mrc":
+        dasker = fibsem_tools.io.mrc.to_dask
+    elif suffix == ".dat":
+        dasker = fibsem_tools.io.dat.to_dask
+    else:
+        raise ValueError(
+            f"""
+                Cannot access file with extension {suffix} as a dask array. Extensions 
+                with dask support are (".zarr", ".n5", ".mrc", and ".dat")
+                """
+        )
+    return dasker(read(path, **kwargs), chunks)
 
 
 def read_xarray(
-    url: str,
-    chunks: Union[str, Tuple[int, ...]] = "auto",
+    path: PathLike,
+    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
     coords: Any = "auto",
-    keep_attrs: bool = False,
     use_dask: bool = True,
-    storage_options: Dict[str, Any] = {},
+    attrs: Dict[str, Any] | None = None,
+    name: str | None = None,
     **kwargs: Any,
-) -> DataArray:
-    """
-    Create an xarray.DataArray from data found at a path.
-    """
-    raw_array = read(url, storage_options=storage_options)
-    attrs = {}
-    if keep_attrs:
-        if hasattr(raw_array, "attrs"):
-            attrs = dict(raw_array.attrs)
-        else:
-            warn(
-                f"""
-            The read_xarray function was invoked with the `keep_attrs` keyword argument 
-            set to `True`, but the array found at the url {url} was read as an instance 
-            of {type(raw_array)} which does not have an `attrs` property. This may 
-            generate an error in the future.
-            """
-            )
-    if use_dask:
-        array = read_dask(url, chunks=chunks, storage_options=storage_options)
-    else:
-        array = raw_array
-
-    if coords == "auto":
-        coords = infer_coordinates(raw_array)
-
-    elif isinstance(coords, STTransform):
-        coords = coords.to_coords(array.shape)
-
-    result = DataArray(array, coords=coords, attrs=attrs, **kwargs)
-    return result
-
-
-def infer_coordinates(arr: npt.ArrayLike) -> List[DataArray]:
-
-    if isinstance(arr, zarr.core.Array):
-        coords = z_infer_coords(
-            shape=arr.shape,
-            array_attrs=dict(arr.attrs),
-            group_attrs=dict(access_parent(arr, mode="r").attrs),
-            array_path=arr.basename,
+) -> DataArray | DataTree:
+    _, _, suffix = split_by_suffix(path, _suffixes)
+    element = read(path, **kwargs)
+    if suffix in (".zarr", ".n5"):
+        return fibsem_tools.io.zarr.to_xarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=attrs,
+            name=name,
         )
-    elif isinstance(arr, mrcfile.mrcmemmap.MrcMemmap):
-        coords = mrc_infer_coords(arr)
+    elif suffix == ".mrc":
+        # todo: support datatree semantics for mrc files, maybe by considering a folder
+        # group?
+        return fibsem_tools.io.mrc.to_xarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=attrs,
+            name=name,
+        )
     else:
         raise ValueError(
-            f"No coordinate inference possible for array of type {type(arr)}"
+            f"""
+        Xarray data structures are only supported for data saved as zarr, n5, and mrc. 
+        Got {type(element)}, which is not supported.
+        """
         )
-    return coords
 
 
 def create_group(
@@ -265,11 +210,11 @@ def create_group(
     array_paths: Iterable[str],
     chunks: Sequence[int],
     group_attrs: Attrs = {},
-    array_attrs: Optional[Sequence[Attrs]] = None,
+    array_attrs: Sequence[Attrs] | None = None,
     group_mode: AccessMode = "w-",
     array_mode: AccessMode = "w-",
-    **array_kwargs,
-) -> zarr.Group:
+    **array_kwargs: Any,
+) -> GroupLike:
 
     _arrays = tuple(a for a in arrays)
     _array_paths = tuple(p for p in array_paths)

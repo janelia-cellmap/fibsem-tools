@@ -1,13 +1,16 @@
+from __future__ import annotations
 import logging
 import os
 from os import PathLike
 import time
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Sequence, Tuple, Union
+from typing import Any, Dict, Generator, List, Literal, Sequence, Tuple, Union
+from datatree import DataTree
 import pint
 
 import dask.array as da
 import numpy as np
+import xarray
 import zarr
 from zarr.storage import FSStore, contains_array, contains_group
 from dask import bag, delayed
@@ -15,10 +18,8 @@ from distributed import Client, Lock
 from toolz import concat
 from xarray import DataArray
 from zarr.indexing import BasicIndexer
-from fibsem_tools.io.util import split_by_suffix
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
-from fibsem_tools.io.util import JSON
 from xarray_ome_ngff.registry import get_adapters
 
 ureg = pint.UnitRegistry()
@@ -31,6 +32,7 @@ ZARR_AXES_3D = ["z", "y", "x"]
 # is x,y,z
 N5_AXES_3D = ZARR_AXES_3D[::-1]
 DEFAULT_ZARR_STORE = FSStore
+DEFAULT_N5_STORE = zarr.N5FSStore
 logger = logging.getLogger(__name__)
 
 
@@ -167,11 +169,13 @@ def get_url(node: Union[zarr.Group, zarr.Array]):
         )
 
 
-def access_zarr(store: PathLike, path: PathLike, **kwargs) -> Any:
+def access_zarr(
+    store: PathLike, path: PathLike, **kwargs: Any
+) -> zarr.Array | zarr.Group:
     if isinstance(store, Path):
         store = str(store)
 
-    if isinstance(store, str) and kwargs.get("mode") == "w":
+    if isinstance(store, str):
         store = DEFAULT_ZARR_STORE(store)
 
     # set default dimension separator to /
@@ -217,34 +221,15 @@ def access_zarr(store: PathLike, path: PathLike, **kwargs) -> Any:
     return array_or_group
 
 
-def access_n5(store: PathLike, path: PathLike, **kwargs) -> Any:
-    store = zarr.N5FSStore(store, **kwargs.get("storage_options", {}))
+def access_n5(store: PathLike, path: PathLike, **kwargs: Any) -> Any:
+    store = DEFAULT_N5_STORE(store, **kwargs.get("storage_options", {}))
     return access_zarr(store, path, **kwargs)
 
 
-def zarr_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
-    store_path, key, _ = split_by_suffix(urlpath, (".zarr",))
-    arr = access_zarr(store_path, key, mode="r", **kwargs)
-    if not hasattr(arr, "shape"):
-        raise ValueError(f"{store_path}/{key} is not a zarr array")
-    if chunks == "original":
-        _chunks = arr.chunks
-    else:
-        _chunks = chunks
-    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
-    return darr
-
-
-def n5_to_dask(urlpath: str, chunks: Union[str, Sequence[int]], **kwargs):
-    store_path, key, _ = split_by_suffix(urlpath, (".n5",))
-    arr = access_n5(store_path, key, mode="r", **kwargs)
-    if not hasattr(arr, "shape"):
-        raise ValueError(f"{store_path}/{key} is not an n5 array")
-    if chunks == "original":
-        _chunks = arr.chunks
-    else:
-        _chunks = chunks
-    darr = da.from_array(arr, chunks=_chunks, inline_array=True)
+def to_dask(
+    arr: zarr.Array, chunks: Literal["auto"] | Sequence[int], name: str | None = None
+):
+    darr = da.from_array(arr, chunks=chunks, inline_array=True, name=name)
     return darr
 
 
@@ -254,81 +239,6 @@ def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs):
     """
     parent_path = "/".join(node.path.split("/")[:-1])
     return access_zarr(store=node.store, path=parent_path, **kwargs)
-
-
-def infer_coords(
-    shape: Tuple[int, ...],
-    array_attrs: Dict[str, JSON],
-    group_attrs: Dict[str, JSON] = {},
-    array_path: str = "",
-) -> List[DataArray]:
-
-    if (transform := array_attrs.get("transform", None)) is not None:
-        coords = STTransform(**transform).to_coords(shape)
-
-    elif "pixelResolution" in array_attrs or "resolution" in array_attrs:
-        input_axes = N5_AXES_3D
-        output_axes = input_axes[::-1]
-        translates = {ax: 0 for ax in output_axes}
-        units = {ax: "nanometer" for ax in output_axes}
-
-        if "pixelResolution" in array_attrs:
-            pixelResolution = array_attrs["pixelResolution"]
-            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
-            units = {ax: pixelResolution["unit"] for ax in input_axes}
-
-        elif "resolution" in array_attrs:
-            _scales = array_attrs["resolution"]
-            scales = dict(zip(N5_AXES_3D, _scales))
-
-        coords = [
-            stt_coord(shape[idx], ax, scales[ax], translates[ax], units[ax])
-            for idx, ax in enumerate(output_axes)
-        ]
-    elif (multiscales := group_attrs.get("multiscales", None)) is not None:
-        if len(multiscales) > 0:
-            multiscale = multiscales[0]
-            if (ngff_version := multiscale.get("version", None)) == "0.4":
-                from pydantic_ome_ngff.v04 import Multiscale
-            elif multiscale["version"] == "0.5-dev":
-                from pydantic_ome_ngff.latest import Multiscale
-            else:
-                raise ValueError(
-                    f"""
-                    Could not resolve the version of the multiscales metadata 
-                    found in the group metadata {group_attrs}
-                    """
-                )
-        else:
-            raise ValueError("Multiscales attribute was empty")
-        xarray_adapters = get_adapters(ngff_version)
-        multiscales_meta = [Multiscale(**entry) for entry in multiscales]
-        transforms = []
-        axes = []
-        matched_multiscale = None
-        matched_dataset = None
-        # find the correct element in multiscales.datasets for this array
-        for multi in multiscales_meta:
-            for dataset in multi.datasets:
-                if dataset.path == array_path:
-                    matched_multiscale = multi
-                    matched_dataset = dataset
-        if matched_dataset is None or matched_multiscale is None:
-            raise ValueError(
-                f"""
-            Could not find an entry referencing array {array_path} in the `multiscales`
-            metadata of the parent group.
-            """
-            )
-        else:
-            transforms.extend(matched_multiscale.coordinateTransformations)
-            transforms.extend(matched_dataset.coordinateTransformations)
-            axes.extend(matched_multiscale.axes)
-            coords = xarray_adapters.transforms_to_coords(axes, transforms, shape)
-    else:
-        raise ValueError("Could not infer coordinates from the supplied attributes.")
-
-    return coords
 
 
 def is_n5(array: zarr.core.Array) -> bool:
@@ -388,3 +298,182 @@ def are_chunks_aligned(
     return all(
         s_chunk % d_chunk == 0 for s_chunk, d_chunk in zip(source_chunks, dest_chunks)
     )
+
+
+def infer_coords(array: zarr.Array) -> List[DataArray]:
+
+    group = access_parent(array, mode="r")
+
+    if (transform := array.attrs.get("transform", None)) is not None:
+        coords = STTransform(**transform).to_coords(array.shape)
+
+    elif "pixelResolution" in array.attrs or "resolution" in array.attrs:
+        input_axes = N5_AXES_3D
+        output_axes = input_axes[::-1]
+        translates = {ax: 0 for ax in output_axes}
+        units = {ax: "nanometer" for ax in output_axes}
+
+        if "pixelResolution" in array.attrs:
+            pixelResolution = array.attrs["pixelResolution"]
+            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
+            units = {ax: pixelResolution["unit"] for ax in input_axes}
+
+        elif "resolution" in array.attrs:
+            _scales = array.attrs["resolution"]
+            scales = dict(zip(N5_AXES_3D, _scales))
+
+        coords = [
+            stt_coord(array.shape[idx], ax, scales[ax], translates[ax], units[ax])
+            for idx, ax in enumerate(output_axes)
+        ]
+    elif (multiscales := group.attrs.get("multiscales", None)) is not None:
+        if len(multiscales) > 0:
+            multiscale = multiscales[0]
+            if (ngff_version := multiscale.get("version", None)) == "0.4":
+                from pydantic_ome_ngff.v04 import Multiscale
+            elif multiscale["version"] == "0.5-dev":
+                from pydantic_ome_ngff.latest import Multiscale
+            else:
+                raise ValueError(
+                    f"""
+                    Could not resolve the version of the multiscales metadata 
+                    found in the group metadata {dict(group.attrs)}
+                    """
+                )
+        else:
+            raise ValueError("Multiscales attribute was empty")
+        xarray_adapters = get_adapters(ngff_version)
+        multiscales_meta = [Multiscale(**entry) for entry in multiscales]
+        transforms = []
+        axes = []
+        matched_multiscale = None
+        matched_dataset = None
+        # find the correct element in multiscales.datasets for this array
+        for multi in multiscales_meta:
+            for dataset in multi.datasets:
+                if dataset.path == array.basename:
+                    matched_multiscale = multi
+                    matched_dataset = dataset
+        if matched_dataset is None or matched_multiscale is None:
+            raise ValueError(
+                f"""
+            Could not find an entry referencing array {array.basename} 
+            in the `multiscales` metadata of the parent group.
+            """
+            )
+        else:
+            transforms.extend(matched_multiscale.coordinateTransformations)
+            transforms.extend(matched_dataset.coordinateTransformations)
+            axes.extend(matched_multiscale.axes)
+            coords = xarray_adapters.transforms_to_coords(axes, transforms, array.shape)
+    else:
+        raise ValueError("Could not infer coordinates from the supplied attributes.")
+
+    return coords
+
+
+def to_xarray(
+    element: zarr.Array | zarr.Group,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    coords: Any = "auto",
+    name: str | None = None,
+):
+    if isinstance(element, zarr.Group):
+        return create_datatree(
+            element,
+            chunks=chunks,
+            coords=coords,
+            attrs=attrs,
+            use_dask=use_dask,
+            name=name,
+        )
+    elif isinstance(element, zarr.Array):
+        return create_dataarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            attrs=attrs,
+            use_dask=use_dask,
+            name=name,
+        )
+    else:
+        raise ValueError(
+            f"""
+        This function only accepts instances of zarr.Group and zarr.Array. 
+        Got {type(element)} instead.
+        """
+        )
+
+
+def create_dataarray(
+    element: zarr.Array,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    name: str | None = None,
+) -> xarray.DataArray:
+    """
+    Create an xarray.DataArray from a zarr array.
+    """
+
+    if name is None:
+        name = element.basename
+
+    if coords == "auto":
+        coords = infer_coords(element)
+
+    # todo: fix this unfortunate structure
+    elif hasattr(coords, "to_coords"):
+        coords = coords.to_coords(element.shape)
+
+    if use_dask:
+        if attrs is None:
+            attrs = dict(element.attrs)
+        element = to_dask(element, chunks=chunks, name=name)
+
+    result = xarray.DataArray(element, coords=coords, attrs=attrs, name=name)
+    return result
+
+
+def create_datatree(
+    element: zarr.Group,
+    chunks: Union[str, Tuple[int, ...]] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    name: str | None = None,
+) -> DataTree:
+
+    if coords != "auto":
+        raise NotImplementedError(
+            f"""
+        This function does not support values of `coords` other than `auto`. 
+        Got {coords}. This may change in the future.
+        """
+        )
+
+    if name is None:
+        name = element.basename
+
+    nodes = {
+        name: create_dataarray(
+            array,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=None,
+            name="data",
+        )
+        for name, array in element.arrays()
+    }
+    if attrs is None:
+        root_attrs = dict(element.attrs)
+    else:
+        root_attrs = attrs
+    # insert root element
+    nodes["/"] = xarray.Dataset(attrs=root_attrs)
+    dtree = DataTree.from_dict(nodes, name=name)
+    return dtree
