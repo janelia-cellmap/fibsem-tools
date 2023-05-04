@@ -2,6 +2,7 @@ import os
 import mrcfile
 import numpy as np
 import pytest
+from fibsem_tools.io.core import read_xarray
 from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.io.mrc import access, recarray_to_dict, to_dask, to_xarray
 from xarray.testing import assert_equal
@@ -46,7 +47,8 @@ def test_read_xarray(temp_dir, attrs):
         units=("nm", "nm", "nm"),
     )
 
-    observed = to_xarray(original, attrs=attrs)
-    assert_equal(observed, expected)
-    if attrs is None:
-        assert dict(observed.attrs) == recarray_to_dict(original.header)
+    observed = [to_xarray(original, attrs=attrs), read_xarray(mrc_path, attrs=attrs)]
+    for obs in observed:
+        assert_equal(obs, expected)
+        if attrs is None:
+            assert dict(obs.attrs) == recarray_to_dict(original.header)
