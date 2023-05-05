@@ -33,7 +33,7 @@ import fibsem_tools.io.h5
 import fibsem_tools.io.zarr
 import fibsem_tools.io.tif
 
-_formats = (".dat", ".mrc", ".tif")
+_formats = (".dat", ".mrc", ".tif", ".tiff")
 _container_extensions = (".zarr", ".n5", ".h5")
 _suffixes = (*_formats, *_container_extensions)
 
@@ -85,7 +85,7 @@ def access(
         accessor = fibsem_tools.io.zarr.access_n5
     elif suffix == ".h5":
         accessor = fibsem_tools.io.h5.access_h5
-    elif suffix == ".tif":
+    elif suffix in (".tif", ".tiff"):
         accessor = fibsem_tools.io.tif.access
     elif suffix == ".mrc":
         accessor = fibsem_tools.io.mrc.access
