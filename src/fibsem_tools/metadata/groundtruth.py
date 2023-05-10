@@ -1,5 +1,6 @@
+from __future__ import annotations
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -83,3 +84,32 @@ classNameDict = {
     38: InstanceName(short="Vimentin", long="Vimentin"),
     39: InstanceName(short="Glycogen", long="Glycogen"),
 }
+
+Possibility = Literal["unknown"] | Literal["absent"] | Literal["present"]
+
+
+class ArrayMetadata(BaseModel):
+    transform: Dict[str, Any]
+    encoding: Dict[int, Possibility]
+    census: Dict[int, int]
+
+
+class SemanticAnnotation(BaseModel):
+    type: Literal["semantic"]
+    id: int
+
+
+class InstanceAnnotation(BaseModel):
+    type: Literal["instance"]
+    max: int
+
+
+class GroupMetadata(BaseModel):
+    name: str
+    description: str
+    created_by: List[str]
+    created_with: List[str]
+    start_date: str | None
+    end_date: str | None
+    duration: int | None
+    annotation_type: SemanticAnnotation | InstanceAnnotation
