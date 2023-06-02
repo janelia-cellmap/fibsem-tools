@@ -1,13 +1,11 @@
 from __future__ import annotations
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel
 
 
-class AnnotationType(Enum):
-    semantic: str = "semantic"
-    instance: str = "instance"
+AnnotationType = Union[Literal["semantic"], Literal["instance"]]
 
 
 class InstanceName(BaseModel):
@@ -35,7 +33,7 @@ class Label(BaseModel):
 
 class LabelList(BaseModel):
     labels: List[Label]
-    annotation_type: AnnotationType = AnnotationType.semantic
+    annotation_type: AnnotationType = "semantic"
 
 
 classNameDict = {
@@ -85,31 +83,60 @@ classNameDict = {
     39: InstanceName(short="Glycogen", long="Glycogen"),
 }
 
-Possibility = Literal["unknown"] | Literal["absent"] | Literal["present"]
-
-
-class ArrayMetadata(BaseModel):
-    transform: Dict[str, Any]
-    encoding: Dict[int, Possibility]
-    census: Dict[int, int]
-
 
 class SemanticAnnotation(BaseModel):
     type: Literal["semantic"]
-    id: int
+    encoding: Dict[int, str]
 
 
 class InstanceAnnotation(BaseModel):
     type: Literal["instance"]
-    max: int
+    encoding: Dict[int, Possibility]
 
 
-class GroupMetadata(BaseModel):
+Possibility = Union[Literal["unknown"], Literal["absent"], Literal["present"]]
+
+AnnotationEncoding = Dict[Possibility, int]
+
+
+class AnnotationArrayAttrs(BaseModel):
+    """
+    The metadata for an array of annotated values.
+    """
+
+    objects: str
+    # a mapping from values to frequencies
+    census: Dict[int, int]
+    # a mapping from class names to values
+    # this is array metadata because labels might disappear during downsampling
+    encoding: AnnotationEncoding
+
+
+class AnnotationClassAttrs(BaseModel):
+    """
+    The metadata for an individual annotated semantic class.
+    In a storage hierarchy like zarr or hdf5, this metadata is associated with a
+    group-like container that contains a collection of arrays that contain the
+    annotation data in a multiscale representation.
+    """
+
     name: str
     description: str
     created_by: List[str]
     created_with: List[str]
     start_date: str | None
     end_date: str | None
-    duration: int | None
-    annotation_type: SemanticAnnotation | InstanceAnnotation
+    duration_days: int | None
+    type: AnnotationType
+    encoding: AnnotationEncoding
+
+
+class AnnotationCropAttrs(BaseModel):
+    """
+    The metadata for all annotations in a single crop.
+    """
+
+    name: Optional[str]
+    description: Optional[str]
+    protocol: Optional[str]
+    doi: Optional[str]
