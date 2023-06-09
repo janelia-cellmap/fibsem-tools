@@ -1,8 +1,9 @@
-from typing import Optional, Sequence
+from typing import Iterable, Optional, Sequence
+import numpy as np
 
 from pydantic import BaseModel
 from xarray import DataArray
-
+from pydantic_zarr import GroupSpec, ArraySpec
 from fibsem_tools.metadata.transform import STTransform
 
 
@@ -29,7 +30,7 @@ class COSEMGroupMetadataV1(BaseModel):
     multiscales: Sequence[MultiscaleMetaV1]
 
     @classmethod
-    def fromDataArrays(
+    def from_arrays(
         cls,
         arrays: Sequence[DataArray],
         paths: Sequence[str],
@@ -82,7 +83,7 @@ class COSEMGroupMetadataV2(BaseModel):
     multiscales: Sequence[MultiscaleMetaV2]
 
     @classmethod
-    def fromDataArrays(
+    def from_arrays(
         cls,
         arrays: Sequence[DataArray],
         paths: Sequence[str],
@@ -119,3 +120,36 @@ class COSEMGroupMetadataV2(BaseModel):
             )
         ]
         return cls(name=name, multiscales=multiscales, paths=paths)
+
+
+class CosemArrayAttrs(BaseModel):
+    transform: STTransform
+
+
+class CosemMultiscaleGroup(GroupSpec):
+    attrs: COSEMGroupMetadataV1
+    items: dict[str, ArraySpec[CosemArrayAttrs]]
+
+    @classmethod
+    def from_arrays(
+        cls, arrays: Iterable[DataArray], chunks: tuple[int, ...], name: str, **kwargs
+    ):
+        # sort arrays by shape
+        arrays_sorted: tuple[DataArray, ...] = tuple(
+            sorted(arrays, key=lambda v: np.prod(v.shape), reverse=True)
+        )
+        paths = [f"s{idx}" for idx in range(len(arrays_sorted))]
+        attrs = COSEMGroupMetadataV1.from_arrays(arrays_sorted, paths, name)
+
+        array_specs = {
+            path: ArraySpec(
+                attrs=CosemArrayAttrs(transform=STTransform.fromDataArray(arr)),
+                dtype=arr.dtype,
+                shape=arr.shape,
+                chunks=chunks,
+                **kwargs,
+            )
+            for path, arr in zip(paths, arrays_sorted)
+        }
+
+        return cls(attrs=attrs, items=array_specs)

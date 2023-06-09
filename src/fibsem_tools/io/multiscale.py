@@ -4,7 +4,7 @@ from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union, List
 from xarray import DataArray
 
 import zarr
-from fibsem_tools.io.core import AccessMode, create_group
+from fibsem_tools.io.core import AccessMode
 from fibsem_tools.metadata.cosem import COSEMGroupMetadataV1, COSEMGroupMetadataV2
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
 from fibsem_tools.metadata.transform import STTransform
@@ -137,19 +137,26 @@ def multiscale_group(
     _arr_attrs = [{**a, **m} for a, m in zip(array_attrs, marray_attrs)]
 
     _chunks = _normalize_chunks(arrays, chunks)
-    try:
-        group = create_group(
-            url,
-            arrays,
-            array_paths=array_paths,
-            chunks=_chunks,
-            group_attrs=_group_attrs,
-            array_attrs=_arr_attrs,
-            group_mode=group_mode,
-            array_mode=array_mode,
+
+    from pydantic_zarr.core import ArraySpec, GroupSpec
+
+    array_specs = {}
+    for idx, path in enumerate(array_paths):
+        arr = arrays[idx]
+        array_specs[path] = ArraySpec(
+            attrs=_arr_attrs[idx],
+            shape=arr.shape,
+            dtype=arr.dtype,
+            chunks=_chunks[idx],
             **kwargs,
         )
-        return group
+    GroupSpec(attrs=_group_attrs, items=array_specs)
+
+    try:
+        pass
+        # access()
+        # group_spec.to_zarr()
+        # return group
     except ContainsGroupError:
         raise FileExistsError(
             f"""

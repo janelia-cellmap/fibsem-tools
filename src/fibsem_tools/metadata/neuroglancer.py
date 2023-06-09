@@ -1,10 +1,10 @@
-from typing import List, Sequence
+from typing import Iterable, List, Sequence
 
 import numpy as np
-from pydantic import BaseModel, PositiveInt
+from pydantic import BaseModel, PositiveInt, ValidationError, validator
 from xarray import DataArray
-
-from .transform import STTransform
+from pydantic_zarr.core import GroupSpec, ArraySpec
+from fibsem_tools.metadata.transform import STTransform
 
 
 class PixelResolution(BaseModel):
@@ -67,3 +67,41 @@ class NeuroglancerN5GroupMetadata(BaseModel):
             scales=scales,
             pixelResolution=pixelresolution,
         )
+
+
+class NeuroglancerN5Group(GroupSpec):
+    attrs: NeuroglancerN5GroupMetadata
+
+    @validator("items")
+    def validate_items(cls, v: dict[str, ArraySpec]):
+        # sort array specs by shape
+        items_sorted = sorted(
+            v.items(), key=lambda x: np.prod(x[1].shape), reverse=True
+        )
+
+        # check that the names of the arrays are s0, s1, s2, etc
+        for key, spec in items_sorted:
+            assert key.startswith("s")
+            try:
+                int(key.split("s")[-1])
+            except ValueError as valerr:
+                raise ValidationError from valerr
+
+        assert len(set(item[1].dtype for item in items_sorted)) == 1
+        return v
+
+    @classmethod
+    def from_arrays(
+        cls, arrays: Iterable[DataArray], chunks, **kwargs
+    ) -> "NeuroglancerN5Group":
+        arrays_sorted: Iterable[DataArray] = sorted(
+            arrays, key=lambda v: np.prod(v.shape), reverse=True
+        )
+        array_specs = {
+            f"s{idx}": ArraySpec(
+                attrs={}, dtype=arr.dtype, shape=arr.shape, chunks=chunks, **kwargs
+            )
+            for idx, arr in enumerate(arrays_sorted)
+        }
+        attrs = NeuroglancerN5GroupMetadata.fromDataArrays(arrays)
+        return cls(attrs=attrs, items=array_specs)
