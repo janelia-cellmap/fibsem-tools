@@ -1,11 +1,14 @@
 from __future__ import annotations
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, Generic, List, Literal, Optional, TypeVar, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
+from pydantic.generics import GenericModel
 
 
-AnnotationType = Union[Literal["semantic"], Literal["instance"]]
+class StrictBase(BaseModel):
+    class Config:
+        extra = "forbid"
 
 
 class InstanceName(BaseModel):
@@ -83,36 +86,48 @@ classNameDict = {
     39: InstanceName(short="Glycogen", long="Glycogen"),
 }
 
-
-class SemanticAnnotation(BaseModel):
-    type: Literal["semantic"]
-    encoding: Dict[int, str]
+Possibility = Literal["unknown", "absent"]
 
 
-class InstanceAnnotation(BaseModel):
-    type: Literal["instance"]
-    encoding: Dict[int, Possibility]
+class SemanticSegmentation(BaseModel):
+    type: Literal["semantic_segmentation"] = "semantic_segmentation"
+    encoding: Dict[Union[Possibility, Literal["present"]], int]
 
 
-Possibility = Union[Literal["unknown"], Literal["absent"], Literal["present"]]
+class InstanceSegmentation(BaseModel):
+    type: Literal["instance_segmentation"] = "instance_segmentation"
+    encoding: Dict[Possibility, int]
 
-AnnotationEncoding = Dict[Possibility, int]
+
+AnnotationType = Union[SemanticSegmentation, InstanceSegmentation]
+
+TName = TypeVar("TName", bound=str)
 
 
-class AnnotationArrayAttrs(BaseModel):
+class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an array of annotated values.
     """
 
-    objects: str
+    className: TName
     # a mapping from values to frequencies
-    census: Dict[int, int]
+    histogram: Optional[Dict[Possibility, int]]
     # a mapping from class names to values
     # this is array metadata because labels might disappear during downsampling
-    encoding: AnnotationEncoding
+    annotation_type: AnnotationType
+
+    @root_validator()
+    def check_encoding(cls, values):
+        if (typ := values.get("type", False)) and (
+            hist := values.get("histogram", False)
+        ):
+            # check that everything in the histogram is encoded
+            assert set(typ.encoding.keys()).issuperset((hist.keys())), "Oh no"
+
+        return values
 
 
-class AnnotationClassAttrs(BaseModel):
+class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an individual annotated semantic class.
     In a storage hierarchy like zarr or hdf5, this metadata is associated with a
@@ -120,23 +135,27 @@ class AnnotationClassAttrs(BaseModel):
     annotation data in a multiscale representation.
     """
 
-    name: str
+    class_name: TName
     description: str
-    created_by: List[str]
-    created_with: List[str]
+    created_by: list[str]
+    created_with: list[str]
     start_date: str | None
     end_date: str | None
     duration_days: int | None
-    type: AnnotationType
-    encoding: AnnotationEncoding
+    annotation_type: AnnotationType
 
 
-class AnnotationCropAttrs(BaseModel):
+class AnnotationProtocol(GenericModel, Generic[TName]):
+    url: str
+    class_names: list[TName]
+
+
+class AnnotationCropAttrs(GenericModel, Generic[TName]):
     """
     The metadata for all annotations in a single crop.
     """
 
     name: Optional[str]
     description: Optional[str]
-    protocol: Optional[str]
+    protocol: AnnotationProtocol[TName]
     doi: Optional[str]

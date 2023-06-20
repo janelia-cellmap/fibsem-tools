@@ -2,16 +2,17 @@
 from fibsem_tools import read_xarray
 import json
 from fibsem_tools.metadata.groundtruth import (
-    AnnotationEncoding,
+    AnnotationProtocol,
+    MultiscaleGroupAttrs,
+    SemanticAnnotation,
     classNameDict,
     AnnotationArrayAttrs,
-    AnnotationClassAttrs,
     AnnotationCropAttrs,
 )
 from rich import print_json
 import numpy as np
 import datetime
-from typing import Dict, TypedDict, List, TypeVar
+from typing import Dict, Literal, TypedDict, List, TypeVar
 
 Key = TypeVar("Key", bound=str)
 
@@ -32,6 +33,9 @@ uri = f"s3://{bucket}/{dataset}/{dataset}.n5/labels/gt/"
 out_dtype = "uint8"
 out_dtype_max = np.iinfo(out_dtype).max
 
+tnamesT = Literal["ERES membrane"]
+tnames = ["ERES membrane"]
+
 crop_key: Key = "Crop13"
 group = read_xarray(uri)
 arr = group["s0"].data
@@ -48,7 +52,10 @@ selecter = {
 
 crop = arr.sel(selecter, method="nearest")
 crop_attrs = AnnotationCropAttrs(
-    name=crop_key, description="A crop", protocol=None, doi=None
+    name=crop_key,
+    description="A crop",
+    protocol=AnnotationProtocol[tnamesT](url="www.google.com", classNames=tnames),
+    doi=None,
 )
 
 out_attrs = {}
@@ -56,17 +63,21 @@ out_attrs[f"/{crop_key}"] = {"annotation": crop_attrs.dict()}
 # partition the subvolume into separate integer classes
 vals = np.unique(crop)
 
-
 for v in vals:
+
     name, description = classNameDict[v].short, classNameDict[v].long
+    if name != "ERES membrane":
+        continue
 
     subvol = (crop == v).astype(out_dtype)
-    census = {k: np.sum(subvol == k) for k in np.unique(subvol)}
-    encoding: AnnotationEncoding = {"absent": 0, "unknown": 255}
-    array_attrs = AnnotationArrayAttrs(census=census, encoding=encoding, object=name)
+    type = SemanticAnnotation(encoding={"absent": 0, "unknown": 255})
+    histogram = {key: np.sum(subvol == value) for key, value in type.encoding.items()}
+    array_attrs = AnnotationArrayAttrs[tnamesT](
+        specialValuesHist=histogram, type=type, className=name
+    )
 
-    group_attrs = AnnotationClassAttrs(
-        name=name,
+    group_attrs = MultiscaleGroupAttrs[tnamesT](
+        className=name,
         description=description,
         created_by=[
             "Cellmap annotators",
@@ -74,8 +85,7 @@ for v in vals:
         created_with=["Amira", "Paintera"],
         start_date=datetime.datetime.now().isoformat(),
         duration_days=10,
-        encoding=encoding,
-        type="instance",
+        type=type,
     )
 
     out_attrs[f"/{crop_key}/{name}"] = {"annotation": group_attrs.dict()}
