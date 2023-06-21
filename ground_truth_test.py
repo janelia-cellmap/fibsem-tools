@@ -4,7 +4,7 @@ import json
 from fibsem_tools.metadata.groundtruth import (
     AnnotationProtocol,
     MultiscaleGroupAttrs,
-    SemanticAnnotation,
+    SemanticSegmentation,
     classNameDict,
     AnnotationArrayAttrs,
     AnnotationCropAttrs,
@@ -54,7 +54,7 @@ crop = arr.sel(selecter, method="nearest")
 crop_attrs = AnnotationCropAttrs(
     name=crop_key,
     description="A crop",
-    protocol=AnnotationProtocol[tnamesT](url="www.google.com", classNames=tnames),
+    protocol=AnnotationProtocol[tnamesT](url="www.google.com", class_names=tnames),
     doi=None,
 )
 
@@ -70,14 +70,14 @@ for v in vals:
         continue
 
     subvol = (crop == v).astype(out_dtype)
-    type = SemanticAnnotation(encoding={"absent": 0, "unknown": 255})
+    type = SemanticSegmentation(encoding={"absent": 0, "unknown": 255})
     histogram = {key: np.sum(subvol == value) for key, value in type.encoding.items()}
     array_attrs = AnnotationArrayAttrs[tnamesT](
-        specialValuesHist=histogram, type=type, className=name
+        histogram=histogram, annotation_type=type, class_name=name
     )
 
     group_attrs = MultiscaleGroupAttrs[tnamesT](
-        className=name,
+        class_name=name,
         description=description,
         created_by=[
             "Cellmap annotators",
@@ -85,10 +85,12 @@ for v in vals:
         created_with=["Amira", "Paintera"],
         start_date=datetime.datetime.now().isoformat(),
         duration_days=10,
-        type=type,
+        annotation_type=type,
     )
 
-    out_attrs[f"/{crop_key}/{name}"] = {"annotation": group_attrs.dict()}
+    out_attrs[f"/{crop_key}/{name.lower().replace(' ', '_')}"] = {
+        "annotation": group_attrs.dict()
+    }
     out_attrs[f"/{crop_key}/{name}/s0"] = {"annotation": array_attrs.dict()}
 
 

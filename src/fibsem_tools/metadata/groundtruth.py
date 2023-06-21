@@ -109,7 +109,7 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     The metadata for an array of annotated values.
     """
 
-    className: TName
+    class_name: TName
     # a mapping from values to frequencies
     histogram: Optional[Dict[Possibility, int]]
     # a mapping from class names to values
@@ -148,6 +148,9 @@ class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
 class AnnotationProtocol(GenericModel, Generic[TName]):
     url: str
     class_names: list[TName]
+
+    class Config:
+        allow_extra = "forbid"
 
 
 class AnnotationCropAttrs(GenericModel, Generic[TName]):
