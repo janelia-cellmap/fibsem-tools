@@ -58,9 +58,7 @@ class STTransform(BaseModel):
         ]
 
     @classmethod
-    def fromDataArray(
-        cls, array: DataArray, reverse_axes: bool = False
-    ) -> "STTransform":
+    def from_array(cls, array: DataArray, reverse_axes: bool = False) -> "STTransform":
         """
         Generate a spatial transform from a DataArray.
 

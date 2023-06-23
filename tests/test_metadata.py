@@ -24,7 +24,7 @@ def test_sttransform():
     ]
 
     data = DataArray(np.zeros((10, 10, 10)), coords=coords)
-    transform = STTransform.fromDataArray(data)
+    transform = STTransform.from_array(data)
     assert all(c.equals(t) for c, t in zip(coords, transform.to_coords(data.shape)))
     assert transform == STTransform(
         order="C",
@@ -34,7 +34,7 @@ def test_sttransform():
         scale=[1.0, 1.0, 10.0],
     )
 
-    transform = STTransform.fromDataArray(data, reverse_axes=True)
+    transform = STTransform.from_array(data, reverse_axes=True)
     assert transform == STTransform(
         order="F",
         axes=["x", "y", "z"],
@@ -58,7 +58,7 @@ def test_neuroglancer_metadata():
     for idx in range(3):
         multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
 
-    neuroglancer_metadata = NeuroglancerN5GroupMetadata.fromDataArrays(multi)
+    neuroglancer_metadata = NeuroglancerN5GroupMetadata.from_arrays(multi)
 
     assert neuroglancer_metadata == NeuroglancerN5GroupMetadata(
         axes=["x", "y", "z"],
@@ -92,14 +92,14 @@ def test_cosem_ome(version: Literal["v1", "v2"]):
     paths = ["s0", "s1"]
     if version == "v1":
 
-        g_meta = COSEMGroupMetadataV1.fromDataArrays(multi, paths=paths, name="data")
+        g_meta = COSEMGroupMetadataV1.from_arrays(multi, paths=paths, name="data")
 
         assert g_meta == COSEMGroupMetadataV1(
             multiscales=[
                 MultiscaleMetaV1(
                     name="data",
                     datasets=[
-                        {"path": p, "transform": STTransform.fromDataArray(m)}
+                        {"path": p, "transform": STTransform.from_array(m)}
                         for p, m in zip(paths, multi)
                     ],
                 )
@@ -107,7 +107,7 @@ def test_cosem_ome(version: Literal["v1", "v2"]):
         )
 
     else:
-        g_meta = COSEMGroupMetadataV2.fromDataArrays(multi, paths=paths, name="data")
+        g_meta = COSEMGroupMetadataV2.from_arrays(multi, paths=paths, name="data")
         assert g_meta == COSEMGroupMetadataV2(
             multiscales=[MultiscaleMetaV2(name="data", datasets=paths)]
         )

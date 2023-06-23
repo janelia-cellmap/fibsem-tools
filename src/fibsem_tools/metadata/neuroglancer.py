@@ -32,11 +32,9 @@ class NeuroglancerN5GroupMetadata(BaseModel):
     pixelResolution: PixelResolution
 
     @classmethod
-    def fromDataArrays(
-        cls, arrays: Sequence[DataArray]
-    ) -> "NeuroglancerN5GroupMetadata":
+    def from_arrays(cls, arrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
         """
-        Create neuroglancer-compatibled N5 metadata from a collection of DataArrays.
+        Create neuroglancer-compatible N5 metadata from a collection of DataArrays.
 
         Parameters
         ----------
@@ -52,7 +50,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         NeuroglancerN5GroupMetadata
         """
         transforms = [
-            STTransform.fromDataArray(array, reverse_axes=True) for array in arrays
+            STTransform.from_array(array, reverse_axes=True) for array in arrays
         ]
         pixelresolution = PixelResolution(
             dimensions=transforms[0].scale, unit=transforms[0].units[0]
@@ -92,16 +90,14 @@ class NeuroglancerN5Group(GroupSpec):
 
     @classmethod
     def from_arrays(
-        cls, arrays: Iterable[DataArray], chunks, **kwargs
+        cls, arrays: Iterable[DataArray], chunks: tuple[int, ...], **kwargs
     ) -> "NeuroglancerN5Group":
         arrays_sorted: Iterable[DataArray] = sorted(
-            arrays, key=lambda v: np.prod(v.shape), reverse=True
+            arrays, key=lambda v: v.shape, reverse=True
         )
         array_specs = {
-            f"s{idx}": ArraySpec(
-                attrs={}, dtype=arr.dtype, shape=arr.shape, chunks=chunks, **kwargs
-            )
+            f"s{idx}": ArraySpec.from_array(arr, chunks=chunks, **kwargs)
             for idx, arr in enumerate(arrays_sorted)
         }
-        attrs = NeuroglancerN5GroupMetadata.fromDataArrays(arrays)
+        attrs = NeuroglancerN5GroupMetadata.from_arrays(arrays)
         return cls(attrs=attrs, items=array_specs)

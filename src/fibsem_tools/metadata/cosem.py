@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Literal, Optional, Sequence, Union
 import numpy as np
 
 from pydantic import BaseModel
@@ -65,9 +65,7 @@ class COSEMGroupMetadataV1(BaseModel):
             MultiscaleMetaV1(
                 name=name,
                 datasets=[
-                    ScaleMetaV1(
-                        path=path, transform=STTransform.fromDataArray(array=arr)
-                    )
+                    ScaleMetaV1(path=path, transform=STTransform.from_array(array=arr))
                     for path, arr in zip(paths, arrays)
                 ],
             )
@@ -86,7 +84,7 @@ class COSEMGroupMetadataV2(BaseModel):
     def from_arrays(
         cls,
         arrays: Sequence[DataArray],
-        paths: Sequence[str],
+        paths: Union[Sequence[str], Literal["auto"]] = "auto",
         name: Optional[str] = None,
     ):
         """
@@ -112,6 +110,12 @@ class COSEMGroupMetadataV2(BaseModel):
 
         COSEMGroupMetadata
         """
+        arrays_sorted: Iterable[DataArray] = sorted(
+            arrays, key=lambda v: v.shape, reverse=True
+        )
+
+        if paths == "auto":
+            paths = [f"s{idx}" for idx in enumerate(arrays_sorted)]
 
         multiscales = [
             MultiscaleMetaV2(
@@ -142,10 +146,9 @@ class CosemMultiscaleGroup(GroupSpec):
         attrs = COSEMGroupMetadataV1.from_arrays(arrays_sorted, paths, name)
 
         array_specs = {
-            path: ArraySpec(
-                attrs=CosemArrayAttrs(transform=STTransform.fromDataArray(arr)),
-                dtype=arr.dtype,
-                shape=arr.shape,
+            path: ArraySpec.from_array(
+                arr,
+                attrs=CosemArrayAttrs(transform=STTransform.from_array(arr)),
                 chunks=chunks,
                 **kwargs,
             )
