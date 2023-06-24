@@ -1,12 +1,16 @@
 from __future__ import annotations
-from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union, List
+from typing import Any, Literal, Optional, Sequence, Tuple, Union, List
 
 from xarray import DataArray
 
 import zarr
-from fibsem_tools.metadata.cosem import COSEMGroupMetadataV1, COSEMGroupMetadataV2
-from fibsem_tools.metadata.neuroglancer import NeuroglancerN5GroupMetadata
-from fibsem_tools.metadata.transform import STTransform
+from fibsem_tools.metadata.cosem import (
+    CosemMultiscaleGroupV1,
+    CosemMultiscaleGroupV2,
+)
+from fibsem_tools.metadata.neuroglancer import (
+    NeuroglancerN5Group,
+)
 from numcodecs.abc import Codec
 from xarray_ome_ngff.registry import get_adapters
 from pydantic_zarr import GroupSpec, ArraySpec
@@ -46,6 +50,7 @@ def multiscale_group(
     arrays: Sequence[DataArray],
     metadata_types: List[str],
     array_paths: Union[List[str], Literal["auto"]] = "auto",
+    name: Optional[str] = None,
     **kwargs,
 ) -> GroupSpec:
     """
@@ -57,8 +62,10 @@ def multiscale_group(
     A GroupSpec instance representing the multiscale group
 
     """
+    if array_paths == "auto":
+        array_paths = [f"s{idx}" for idx in range(len(arrays))]
     group_attrs = {}
-    array_attrs: List[Dict[str, Any]] = [{}] * len(arrays)
+    array_attrs = {path: {} for path in array_paths}
 
     if any(f.startswith("ome-ngff") for f in metadata_types) and any(
         f.startswith("cosem") for f in metadata_types
@@ -71,23 +78,20 @@ def multiscale_group(
 
     for flavor in metadata_types:
         flave, _, version = flavor.partition("@")
+
         if flave == "neuroglancer":
-            g_meta = NeuroglancerN5GroupMetadata.from_arrays(arrays)
-            group_attrs.update(g_meta.dict())
+            g_spec = NeuroglancerN5Group.from_arrays(arrays, **kwargs)
+            group_attrs.update(g_spec.attrs.dict())
         elif flave == "cosem":
             if version == "2":
-                g_meta = COSEMGroupMetadataV2.from_arrays(arrays, array_paths)
+                g_spec = CosemMultiscaleGroupV2.from_arrays(arrays, name=name, **kwargs)
             else:
-                g_meta = COSEMGroupMetadataV1.from_arrays(arrays, array_paths)
-            group_attrs.update(g_meta.dict())
-            for idx in range(len(array_attrs)):
-                array_attrs[idx] = {
-                    "transform": STTransform.from_array(arrays[idx]).dict(),
-                    **array_attrs[idx],
-                }
+                g_spec = CosemMultiscaleGroupV1.from_arrays(arrays, name=name, **kwargs)
+            group_attrs.update(g_spec.attrs.dict())
+
+            for key, value in g_spec.items.items():
+                array_attrs[key].update(**value.attrs.dict())
         elif flave == "ome-ngff":
-            if array_paths == "auto":
-                array_paths = [f"s{idx}" for idx in range(len(arrays))]
             if version == "":
                 version = NGFF_DEFAULT_VERSION
             adapters = get_adapters(version)
@@ -103,9 +107,9 @@ def multiscale_group(
                 {multiscale_metadata_types}
                 """
             )
-    items = items = {
-        path: ArraySpec.from_array(arr, attrs=arr_attrs, **kwargs)
-        for arr, path, arr_attrs in zip(arrays, array_paths, array_attrs)
+    items = {
+        path: ArraySpec.from_array(arr, attrs=array_attrs[path], **kwargs)
+        for arr, path in zip(arrays, array_paths)
     }
 
     return GroupSpec(attrs=group_attrs, items=items)

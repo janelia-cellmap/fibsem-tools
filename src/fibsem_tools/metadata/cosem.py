@@ -130,14 +130,21 @@ class CosemArrayAttrs(BaseModel):
     transform: STTransform
 
 
-class CosemMultiscaleGroup(GroupSpec):
-    attrs: COSEMGroupMetadataV1
-    items: dict[str, ArraySpec[CosemArrayAttrs]]
+class CosemMultiscaleArray(ArraySpec):
+    attrs: CosemArrayAttrs
 
     @classmethod
-    def from_arrays(
-        cls, arrays: Iterable[DataArray], chunks: tuple[int, ...], name: str, **kwargs
-    ):
+    def from_array(cls, array: DataArray, **kwargs):
+        attrs = CosemArrayAttrs(transform=STTransform.from_array(array))
+        return super().from_array(array, attrs=attrs, **kwargs)
+
+
+class CosemMultiscaleGroupV1(GroupSpec):
+    attrs: COSEMGroupMetadataV1
+    items: dict[str, CosemMultiscaleArray]
+
+    @classmethod
+    def from_arrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
         # sort arrays by shape
         arrays_sorted: tuple[DataArray, ...] = tuple(
             sorted(arrays, key=lambda v: np.prod(v.shape), reverse=True)
@@ -146,13 +153,29 @@ class CosemMultiscaleGroup(GroupSpec):
         attrs = COSEMGroupMetadataV1.from_arrays(arrays_sorted, paths, name)
 
         array_specs = {
-            path: ArraySpec.from_array(
-                arr,
-                attrs=CosemArrayAttrs(transform=STTransform.from_array(arr)),
-                chunks=chunks,
-                **kwargs,
-            )
-            for path, arr in zip(paths, arrays_sorted)
+            k: CosemMultiscaleArray.from_array(arr, **kwargs)
+            for k, arr in zip(paths, arrays_sorted)
+        }
+
+        return cls(attrs=attrs, items=array_specs)
+
+
+class CosemMultiscaleGroupV2(GroupSpec):
+    attrs: COSEMGroupMetadataV2
+    items: dict[str, ArraySpec[CosemArrayAttrs]]
+
+    @classmethod
+    def from_arrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
+        # sort arrays by shape
+        arrays_sorted: tuple[DataArray, ...] = tuple(
+            sorted(arrays, key=lambda v: np.prod(v.shape), reverse=True)
+        )
+        paths = [f"s{idx}" for idx in range(len(arrays_sorted))]
+        attrs = COSEMGroupMetadataV2.from_arrays(arrays_sorted, paths, name)
+
+        array_specs = {
+            k: CosemMultiscaleArray.from_array(arr, **kwargs)
+            for k, arr in zip(paths, arrays_sorted)
         }
 
         return cls(attrs=attrs, items=array_specs)
