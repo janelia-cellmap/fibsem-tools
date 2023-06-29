@@ -41,10 +41,7 @@ classNameDict = {
     1: InstanceName(short="ECS", long="Extracellular Space"),
     2: InstanceName(short="Plasma membrane", long="Plasma membrane"),
     3: InstanceName(short="Mito membrane", long="Mitochondrial membrane"),
-    4: InstanceName(
-        short="Mito lumen",
-        long="Mitochondrial lumen",
-    ),
+    4: InstanceName(short="Mito lumen",long="Mitochondrial lumen"),
     5: InstanceName(short="Mito DNA", long="Mitochondrial DNA"),
     6: InstanceName(short="Golgi Membrane", long="Golgi apparatus membrane"),
     7: InstanceName(short="Golgi lumen", long="Golgi apparatus lumen"),
@@ -58,9 +55,7 @@ classNameDict = {
     15: InstanceName(short="LD lumen", long="Lipid droplet lumen"),
     16: InstanceName(short="ER membrane", long="Endoplasmic reticulum membrane"),
     17: InstanceName(short="ER lumen", long="Endoplasmic reticulum membrane"),
-    18: InstanceName(
-        short="ERES membrane", long="Endoplasmic reticulum exit site membrane"
-    ),
+    18: InstanceName(short="ERES membrane", long="Endoplasmic reticulum exit site membrane"),
     19: InstanceName(short="ERES lumen", long="Endoplasmic reticulum exit site lumen"),
     20: InstanceName(short="NE membrane", long="Nuclear envelope membrane"),
     21: InstanceName(short="NE lumen", long="Nuclear envelope lumen"),
@@ -82,4 +77,13 @@ classNameDict = {
     37: InstanceName(short="Nucleus combined", long="Nucleus combined"),
     38: InstanceName(short="Vimentin", long="Vimentin"),
     39: InstanceName(short="Glycogen", long="Glycogen"),
+    40: InstanceName(short="Cardiac neurons", long="Cardiac neurons"),
+    41: InstanceName(short="Endothelial cells", long="Endothelial cells"),
+    42: InstanceName(short="Cardiomyocytes", long="Cardiomyocytes"),
+    43: InstanceName(short="Epicardial cells", long="Epicardial cells"),
+    44: InstanceName(short="Parietal pericardial cells", long="Parietal pericardial cells"),
+    45: InstanceName(short="Red blood cells", long="Red blood cells"),
+    46: InstanceName(short="White blood cells", long="White blood cells"),
+    47: InstanceName(short="Peroxisome membrane", long="Peroxisome membrane"),
+    48: InstanceName(short="Peroxisome lumen", long="Peroxisome lumen"),
 }
