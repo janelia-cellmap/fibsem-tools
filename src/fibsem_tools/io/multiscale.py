@@ -80,13 +80,17 @@ def multiscale_group(
         flave, _, version = flavor.partition("@")
 
         if flave == "neuroglancer":
-            g_spec = NeuroglancerN5Group.from_arrays(arrays, **kwargs)
+            g_spec = NeuroglancerN5Group.from_xarrays(arrays, **kwargs)
             group_attrs.update(g_spec.attrs.dict())
         elif flave == "cosem":
             if version == "2":
-                g_spec = CosemMultiscaleGroupV2.from_arrays(arrays, name=name, **kwargs)
+                g_spec = CosemMultiscaleGroupV2.from_xarrays(
+                    arrays, name=name, **kwargs
+                )
             else:
-                g_spec = CosemMultiscaleGroupV1.from_arrays(arrays, name=name, **kwargs)
+                g_spec = CosemMultiscaleGroupV1.from_xarrays(
+                    arrays, name=name, **kwargs
+                )
             group_attrs.update(g_spec.attrs.dict())
 
             for key, value in g_spec.items.items():

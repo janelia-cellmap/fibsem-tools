@@ -58,7 +58,7 @@ def test_read_xarray(temp_zarr):
 
     for key, value in data.items():
         zgroup[key] = value.data
-        zgroup[key].attrs["transform"] = STTransform.from_array(value).dict()
+        zgroup[key].attrs["transform"] = STTransform.from_xarray(value).dict()
 
     tree_expected = DataTree.from_dict(data, name=path)
     assert_equal(to_xarray(zgroup["s0"]), data["s0"])
@@ -110,7 +110,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
 
     for key, value in data.items():
         group[key] = value.data
-        group[key].attrs["transform"] = STTransform.from_array(value).dict()
+        group[key].attrs["transform"] = STTransform.from_xarray(value).dict()
 
     data_store = create_datatree(
         access_zarr(temp_zarr, path, mode="r"),
@@ -174,7 +174,7 @@ def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
         mode="w",
         shape=data.shape,
         dtype=data.dtype,
-        attrs={"transform": STTransform.from_array(data).dict(), **_attrs},
+        attrs={"transform": STTransform.from_xarray(data).dict(), **_attrs},
     )
 
     tmp_zarr[:] = data.data

@@ -13,12 +13,12 @@ class ScaleMetaV1(BaseModel):
 
 class MultiscaleMetaV1(BaseModel):
     name: Optional[str]
-    datasets: Sequence[ScaleMetaV1]
+    datasets: list[ScaleMetaV1]
 
 
 class MultiscaleMetaV2(BaseModel):
     name: Optional[str]
-    datasets: Sequence[str]
+    datasets: list[str]
 
 
 class COSEMGroupMetadataV1(BaseModel):
@@ -26,13 +26,13 @@ class COSEMGroupMetadataV1(BaseModel):
     Multiscale metadata used by COSEM for multiscale datasets saved in N5/Zarr groups.
     """
 
-    multiscales: Sequence[MultiscaleMetaV1]
+    multiscales: list[MultiscaleMetaV1]
 
     @classmethod
     def from_xarrays(
         cls,
         arrays: Sequence[DataArray],
-        paths: Sequence[str],
+        paths: Union[Sequence[str], Literal["auto"]],
         name: Optional[str] = None,
     ):
         """
@@ -46,9 +46,10 @@ class COSEMGroupMetadataV1(BaseModel):
             arrays are assumed to share the same `dims` attributes, albeit with varying
             `coords`.
 
-        paths : list or tuple of str or None, default=None
+        paths : Sequence of str or the string literal 'auto', default='auto'
             The name on the storage backend for each of the arrays in the multiscale
-            collection.
+            collection. If 'auto', then names will be automatically generated using the
+            format s0, s1, s2, etc
 
         name : str, optional
             The name for the multiresolution collection
@@ -59,6 +60,9 @@ class COSEMGroupMetadataV1(BaseModel):
 
         COSEMGroupMetadata
         """
+
+        if paths == "auto":
+            paths = [f"s{idx}" for idx in range(len(arrays))]
 
         multiscales = [
             MultiscaleMetaV1(
@@ -77,7 +81,7 @@ class COSEMGroupMetadataV2(BaseModel):
     Multiscale metadata used by COSEM for multiscale datasets saved in N5/Zarr groups.
     """
 
-    multiscales: Sequence[MultiscaleMetaV2]
+    multiscales: list[MultiscaleMetaV2]
 
     @classmethod
     def from_xarrays(
@@ -139,9 +143,18 @@ class CosemMultiscaleGroupV1(GroupSpec):
     items: dict[str, CosemMultiscaleArray]
 
     @classmethod
-    def from_xarrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
-        paths = [f"s{idx}" for idx in range(len(arrays))]
-        attrs = COSEMGroupMetadataV1.from_arrays(arrays, paths, name)
+    def from_xarrays(
+        cls,
+        arrays: Iterable[DataArray],
+        paths: Union[Sequence[str], Literal["auto"]] = "auto",
+        name: Optional[str] = None,
+        **kwargs,
+    ):
+
+        if paths == "auto":
+            paths = [f"s{idx}" for idx in range(len(arrays))]
+
+        attrs = COSEMGroupMetadataV1.from_xarrays(arrays, paths, name)
 
         array_specs = {
             k: CosemMultiscaleArray.from_xarray(arr, **kwargs)
@@ -156,8 +169,17 @@ class CosemMultiscaleGroupV2(GroupSpec):
     items: dict[str, ArraySpec[CosemArrayAttrs]]
 
     @classmethod
-    def from_xarrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
-        paths = [f"s{idx}" for idx in range(len(arrays))]
+    def from_xarrays(
+        cls,
+        arrays: Iterable[DataArray],
+        paths: Union[Sequence[str], Literal["auto"]] = "auto",
+        name: Optional[str] = None,
+        **kwargs,
+    ):
+
+        if paths == "auto":
+            paths = [f"s{idx}" for idx in range(len(arrays))]
+
         attrs = COSEMGroupMetadataV2.from_xarrays(arrays, paths, name)
 
         array_specs = {
