@@ -1,5 +1,4 @@
 from typing import Iterable, Literal, Optional, Sequence, Union
-import numpy as np
 
 from pydantic import BaseModel
 from xarray import DataArray
@@ -30,7 +29,7 @@ class COSEMGroupMetadataV1(BaseModel):
     multiscales: Sequence[MultiscaleMetaV1]
 
     @classmethod
-    def from_arrays(
+    def from_xarrays(
         cls,
         arrays: Sequence[DataArray],
         paths: Sequence[str],
@@ -65,7 +64,7 @@ class COSEMGroupMetadataV1(BaseModel):
             MultiscaleMetaV1(
                 name=name,
                 datasets=[
-                    ScaleMetaV1(path=path, transform=STTransform.from_array(array=arr))
+                    ScaleMetaV1(path=path, transform=STTransform.from_xarray(array=arr))
                     for path, arr in zip(paths, arrays)
                 ],
             )
@@ -81,7 +80,7 @@ class COSEMGroupMetadataV2(BaseModel):
     multiscales: Sequence[MultiscaleMetaV2]
 
     @classmethod
-    def from_arrays(
+    def from_xarrays(
         cls,
         arrays: Sequence[DataArray],
         paths: Union[Sequence[str], Literal["auto"]] = "auto",
@@ -110,12 +109,8 @@ class COSEMGroupMetadataV2(BaseModel):
 
         COSEMGroupMetadata
         """
-        arrays_sorted: Iterable[DataArray] = sorted(
-            arrays, key=lambda v: v.shape, reverse=True
-        )
-
         if paths == "auto":
-            paths = [f"s{idx}" for idx in enumerate(arrays_sorted)]
+            paths = [f"s{idx}" for idx in enumerate(arrays)]
 
         multiscales = [
             MultiscaleMetaV2(
@@ -134,8 +129,8 @@ class CosemMultiscaleArray(ArraySpec):
     attrs: CosemArrayAttrs
 
     @classmethod
-    def from_array(cls, array: DataArray, **kwargs):
-        attrs = CosemArrayAttrs(transform=STTransform.from_array(array))
+    def from_xarray(cls, array: DataArray, **kwargs):
+        attrs = CosemArrayAttrs(transform=STTransform.from_xarray(array))
         return super().from_array(array, attrs=attrs, **kwargs)
 
 
@@ -144,17 +139,13 @@ class CosemMultiscaleGroupV1(GroupSpec):
     items: dict[str, CosemMultiscaleArray]
 
     @classmethod
-    def from_arrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
-        # sort arrays by shape
-        arrays_sorted: tuple[DataArray, ...] = tuple(
-            sorted(arrays, key=lambda v: np.prod(v.shape), reverse=True)
-        )
-        paths = [f"s{idx}" for idx in range(len(arrays_sorted))]
-        attrs = COSEMGroupMetadataV1.from_arrays(arrays_sorted, paths, name)
+    def from_xarrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
+        paths = [f"s{idx}" for idx in range(len(arrays))]
+        attrs = COSEMGroupMetadataV1.from_arrays(arrays, paths, name)
 
         array_specs = {
-            k: CosemMultiscaleArray.from_array(arr, **kwargs)
-            for k, arr in zip(paths, arrays_sorted)
+            k: CosemMultiscaleArray.from_xarray(arr, **kwargs)
+            for k, arr in zip(paths, arrays)
         }
 
         return cls(attrs=attrs, items=array_specs)
@@ -165,17 +156,13 @@ class CosemMultiscaleGroupV2(GroupSpec):
     items: dict[str, ArraySpec[CosemArrayAttrs]]
 
     @classmethod
-    def from_arrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
-        # sort arrays by shape
-        arrays_sorted: tuple[DataArray, ...] = tuple(
-            sorted(arrays, key=lambda v: np.prod(v.shape), reverse=True)
-        )
-        paths = [f"s{idx}" for idx in range(len(arrays_sorted))]
-        attrs = COSEMGroupMetadataV2.from_arrays(arrays_sorted, paths, name)
+    def from_xarrays(cls, arrays: Iterable[DataArray], name: str, **kwargs):
+        paths = [f"s{idx}" for idx in range(len(arrays))]
+        attrs = COSEMGroupMetadataV2.from_xarrays(arrays, paths, name)
 
         array_specs = {
-            k: CosemMultiscaleArray.from_array(arr, **kwargs)
-            for k, arr in zip(paths, arrays_sorted)
+            k: CosemMultiscaleArray.from_xarray(arr, **kwargs)
+            for k, arr in zip(paths, arrays)
         }
 
         return cls(attrs=attrs, items=array_specs)

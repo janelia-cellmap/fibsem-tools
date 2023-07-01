@@ -32,7 +32,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
     pixelResolution: PixelResolution
 
     @classmethod
-    def from_arrays(cls, arrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
+    def from_xarrays(cls, arrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
         """
         Create neuroglancer-compatible N5 metadata from a collection of DataArrays.
 
@@ -50,7 +50,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         NeuroglancerN5GroupMetadata
         """
         transforms = [
-            STTransform.from_array(array, reverse_axes=True) for array in arrays
+            STTransform.from_xarray(array, reverse_axes=True) for array in arrays
         ]
         pixelresolution = PixelResolution(
             dimensions=transforms[0].scale, unit=transforms[0].units[0]
@@ -72,32 +72,24 @@ class NeuroglancerN5Group(GroupSpec):
 
     @validator("items")
     def validate_items(cls, v: dict[str, ArraySpec]):
-        # sort array specs by shape
-        items_sorted = sorted(
-            v.items(), key=lambda x: np.prod(x[1].shape), reverse=True
-        )
-
         # check that the names of the arrays are s0, s1, s2, etc
-        for key, spec in items_sorted:
+        for key, spec in v.items():
             assert key.startswith("s")
             try:
                 int(key.split("s")[-1])
             except ValueError as valerr:
                 raise ValidationError from valerr
 
-        assert len(set(item[1].dtype for item in items_sorted)) == 1
+        assert len(set(a.dtype for a in v.values())) == 1
         return v
 
     @classmethod
-    def from_arrays(
+    def from_xarrays(
         cls, arrays: Iterable[DataArray], chunks: tuple[int, ...], **kwargs
     ) -> "NeuroglancerN5Group":
-        arrays_sorted: Iterable[DataArray] = sorted(
-            arrays, key=lambda v: v.shape, reverse=True
-        )
         array_specs = {
             f"s{idx}": ArraySpec.from_array(arr, chunks=chunks, **kwargs)
-            for idx, arr in enumerate(arrays_sorted)
+            for idx, arr in enumerate(arrays)
         }
-        attrs = NeuroglancerN5GroupMetadata.from_arrays(arrays)
+        attrs = NeuroglancerN5GroupMetadata.from_xarrays(arrays)
         return cls(attrs=attrs, items=array_specs)
