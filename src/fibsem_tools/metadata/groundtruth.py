@@ -147,9 +147,9 @@ class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
     description: str
     created_by: list[str]
     created_with: list[str]
-    start_date: str | None
-    end_date: str | None
-    duration_days: int | None
+    start_date: Optional[str]
+    end_date: Optional[str]
+    duration_days: Optional[int]
     annotation_type: AnnotationType
 
 
