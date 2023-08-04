@@ -107,12 +107,13 @@ AnnotationType = Union[SemanticSegmentation, InstanceSegmentation]
 
 TName = TypeVar("TName", bound=str)
 
+AnnotationMetadataVersion = "0.1.0"
 
 class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an array of annotated values.
     """
-
+    version = AnnotationMetadataVersion
     class_name: TName
     # a mapping from values to frequencies
     histogram: Optional[Dict[Possibility, int]]
@@ -121,8 +122,8 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     annotation_type: AnnotationType
 
     @root_validator()
-    def check_encoding(cls, values):
-        if (typ := values.get("type", False)) and (
+    def check_hist(cls, values):
+        if (typ := values.get("annotation_type", False)) and (
             hist := values.get("histogram", False)
         ):
             # check that everything in the histogram is encoded
@@ -138,19 +139,19 @@ class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
     group-like container that contains a collection of arrays that contain the
     annotation data in a multiscale representation.
     """
-
+    version = AnnotationMetadataVersion
     class_name: TName
     description: str
     created_by: list[str]
     created_with: list[str]
-    start_date: str | None
-    end_date: str | None
-    duration_days: int | None
+    start_date: Optional[str]
+    end_date: Optional[str]
+    duration_days: Optional[int]
     annotation_type: AnnotationType
 
 
 class AnnotationProtocol(GenericModel, Generic[TName]):
-    url: str
+    url: Optional[str]
     class_names: list[TName]
 
     class Config:
@@ -161,7 +162,7 @@ class AnnotationCropAttrs(GenericModel, Generic[TName]):
     """
     The metadata for all annotations in a single crop.
     """
-
+    version = AnnotationMetadataVersion
     name: Optional[str]
     description: Optional[str]
     protocol: AnnotationProtocol[TName]
