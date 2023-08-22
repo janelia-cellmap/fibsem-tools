@@ -1,10 +1,10 @@
-from typing import List, Sequence
+from typing import Iterable, List, Sequence
 
 import numpy as np
-from pydantic import BaseModel, PositiveInt
+from pydantic import BaseModel, PositiveInt, ValidationError, validator
 from xarray import DataArray
-
-from .transform import STTransform
+from pydantic_zarr.core import GroupSpec, ArraySpec
+from fibsem_tools.metadata.transform import STTransform
 
 
 class PixelResolution(BaseModel):
@@ -32,11 +32,9 @@ class NeuroglancerN5GroupMetadata(BaseModel):
     pixelResolution: PixelResolution
 
     @classmethod
-    def fromDataArrays(
-        cls, arrays: Sequence[DataArray]
-    ) -> "NeuroglancerN5GroupMetadata":
+    def from_xarrays(cls, arrays: Sequence[DataArray]) -> "NeuroglancerN5GroupMetadata":
         """
-        Create neuroglancer-compatibled N5 metadata from a collection of DataArrays.
+        Create neuroglancer-compatible N5 metadata from a collection of DataArrays.
 
         Parameters
         ----------
@@ -52,7 +50,7 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         NeuroglancerN5GroupMetadata
         """
         transforms = [
-            STTransform.fromDataArray(array, reverse_axes=True) for array in arrays
+            STTransform.from_xarray(array, reverse_axes=True) for array in arrays
         ]
         pixelresolution = PixelResolution(
             dimensions=transforms[0].scale, unit=transforms[0].units[0]
@@ -67,3 +65,31 @@ class NeuroglancerN5GroupMetadata(BaseModel):
             scales=scales,
             pixelResolution=pixelresolution,
         )
+
+
+class NeuroglancerN5Group(GroupSpec):
+    attrs: NeuroglancerN5GroupMetadata
+
+    @validator("members")
+    def validate_members(cls, v: dict[str, ArraySpec]):
+        # check that the names of the arrays are s0, s1, s2, etc
+        for key, spec in v.items():
+            assert key.startswith("s")
+            try:
+                int(key.split("s")[-1])
+            except ValueError as valerr:
+                raise ValidationError from valerr
+
+        assert len(set(a.dtype for a in v.values())) == 1
+        return v
+
+    @classmethod
+    def from_xarrays(
+        cls, arrays: Iterable[DataArray], chunks: tuple[int, ...], **kwargs
+    ) -> "NeuroglancerN5Group":
+        array_specs = {
+            f"s{idx}": ArraySpec.from_array(arr, chunks=chunks, **kwargs)
+            for idx, arr in enumerate(arrays)
+        }
+        attrs = NeuroglancerN5GroupMetadata.from_xarrays(arrays)
+        return cls(attrs=attrs, members=array_specs)

@@ -4,11 +4,14 @@ from xarray import DataArray
 from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.metadata.cosem import (
     COSEMGroupMetadataV1,
+    CosemMultiscaleGroupV1,
+    CosemMultiscaleGroupV2,
     MultiscaleMetaV1,
     COSEMGroupMetadataV2,
     MultiscaleMetaV2,
 )
 from fibsem_tools.metadata.neuroglancer import (
+    NeuroglancerN5Group,
     NeuroglancerN5GroupMetadata,
     PixelResolution,
 )
@@ -24,7 +27,7 @@ def test_sttransform():
     ]
 
     data = DataArray(np.zeros((10, 10, 10)), coords=coords)
-    transform = STTransform.fromDataArray(data)
+    transform = STTransform.from_xarray(data)
     assert all(c.equals(t) for c, t in zip(coords, transform.to_coords(data.shape)))
     assert transform == STTransform(
         order="C",
@@ -34,7 +37,7 @@ def test_sttransform():
         scale=[1.0, 1.0, 10.0],
     )
 
-    transform = STTransform.fromDataArray(data, reverse_axes=True)
+    transform = STTransform.from_xarray(data, reverse_axes=True)
     assert transform == STTransform(
         order="F",
         axes=["x", "y", "z"],
@@ -58,7 +61,7 @@ def test_neuroglancer_metadata():
     for idx in range(3):
         multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
 
-    neuroglancer_metadata = NeuroglancerN5GroupMetadata.fromDataArrays(multi)
+    neuroglancer_metadata = NeuroglancerN5GroupMetadata.from_xarrays(multi)
 
     assert neuroglancer_metadata == NeuroglancerN5GroupMetadata(
         axes=["x", "y", "z"],
@@ -67,9 +70,13 @@ def test_neuroglancer_metadata():
         pixelResolution=PixelResolution(dimensions=[100.1, 1.0, 1.0], unit="km"),
     )
 
+    spec = NeuroglancerN5Group.from_xarrays(multi, chunks=(16, 16, 16))
+    assert spec.attrs == neuroglancer_metadata
+    assert tuple(spec.members.keys()) == ("s0", "s1", "s2", "s3")
+
 
 @pytest.mark.parametrize("version", ("v1", "v2"))
-def test_cosem_ome(version: Literal["v1", "v2"]):
+def test_cosem(version: Literal["v1", "v2"]):
 
     transform_base = {
         "axes": ["z", "y", "x"],
@@ -89,25 +96,31 @@ def test_cosem_ome(version: Literal["v1", "v2"]):
     coarsen_kwargs = {"z": 2, "y": 2, "x": 2, "boundary": "trim"}
     multi: List[DataArray] = [data.coarsen(**coarsen_kwargs).mean()]
     multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
-    paths = ["s0", "s1"]
+    paths = ("s0", "s1")
     if version == "v1":
 
-        g_meta = COSEMGroupMetadataV1.fromDataArrays(multi, paths=paths, name="data")
+        g_meta = COSEMGroupMetadataV1.from_xarrays(multi, paths=paths, name="data")
 
         assert g_meta == COSEMGroupMetadataV1(
             multiscales=[
                 MultiscaleMetaV1(
                     name="data",
                     datasets=[
-                        {"path": p, "transform": STTransform.fromDataArray(m)}
+                        {"path": p, "transform": STTransform.from_xarray(m)}
                         for p, m in zip(paths, multi)
                     ],
                 )
             ]
         )
+        spec = CosemMultiscaleGroupV1.from_xarrays(multi, name="data")
+        assert spec.attrs == g_meta
+        assert tuple(spec.items.keys()) == paths
 
     else:
-        g_meta = COSEMGroupMetadataV2.fromDataArrays(multi, paths=paths, name="data")
+        g_meta = COSEMGroupMetadataV2.from_xarrays(multi, paths=paths, name="data")
         assert g_meta == COSEMGroupMetadataV2(
             multiscales=[MultiscaleMetaV2(name="data", datasets=paths)]
         )
+        spec = CosemMultiscaleGroupV2.from_xarrays(multi, name="data")
+        assert spec.attrs == g_meta
+        assert tuple(spec.items.keys()) == paths

@@ -51,17 +51,17 @@ def test_read_xarray(temp_zarr):
     data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
     data["s1"].name = "data"
 
-    zgroup = multiscale_group(
-        url,
-        tuple(data.values()),
-        tuple(data.keys()),
-        chunks=((64, 64, 64), (64, 64, 64)),
+    g_spec = multiscale_group(
+        arrays=tuple(data.values()),
         metadata_types=["cosem"],
-        group_attrs={},
+        array_paths=tuple(data.keys()),
+        chunks=(64, 64, 64),
     )
+    zgroup = g_spec.to_zarr(zarr.NestedDirectoryStore(temp_zarr), path=path)
+
     for key, value in data.items():
         zgroup[key] = value.data
-        zgroup[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
+        zgroup[key].attrs["transform"] = STTransform.from_xarray(value).dict()
 
     tree_expected = DataTree.from_dict(data, name=path)
     assert_equal(to_xarray(zgroup["s0"]), data["s0"])
@@ -76,9 +76,9 @@ def test_read_xarray(temp_zarr):
 @pytest.mark.parametrize("name", (None, "foo"))
 def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     path = "test"
-    url = os.path.join(temp_zarr, path)
+    os.path.join(temp_zarr, path)
     base_data = np.zeros((10, 10, 10))
-
+    store = zarr.NestedDirectoryStore(temp_zarr)
     if attrs is None:
         _attrs = {}
     else:
@@ -102,17 +102,18 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
     data["s1"].name = "data"
 
-    tmp_zarr = multiscale_group(
-        url,
-        tuple(data.values()),
-        tuple(data.keys()),
-        chunks=((64, 64, 64), (64, 64, 64)),
+    g_spec = multiscale_group(
+        arrays=tuple(data.values()),
+        array_paths=tuple(data.keys()),
+        chunks=(64, 64, 64),
         metadata_types=["cosem"],
-        group_attrs=_attrs,
     )
+    g_spec.attrs.update(**_attrs)
+    group = g_spec.to_zarr(store, path=path)
+
     for key, value in data.items():
-        tmp_zarr[key] = value.data
-        tmp_zarr[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
+        group[key] = value.data
+        group[key].attrs["transform"] = STTransform.from_xarray(value).dict()
 
     data_store = create_datatree(
         access_zarr(temp_zarr, path, mode="r"),
@@ -123,7 +124,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     )
 
     if name is None:
-        assert data_store.name == tmp_zarr.basename
+        assert data_store.name == group.basename
     else:
         assert data_store.name == name
 
@@ -146,7 +147,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
 
     assert tree_expected.equals(data_store)
     if attrs is None:
-        assert dict(data_store.attrs) == dict(tmp_zarr.attrs)
+        assert dict(data_store.attrs) == dict(group.attrs)
     else:
         assert dict(data_store.attrs) == attrs
 
@@ -176,7 +177,7 @@ def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
         mode="w",
         shape=data.shape,
         dtype=data.dtype,
-        attrs={"transform": STTransform.fromDataArray(data).dict(), **_attrs},
+        attrs={"transform": STTransform.from_xarray(data).dict(), **_attrs},
     )
 
     tmp_zarr[:] = data.data
