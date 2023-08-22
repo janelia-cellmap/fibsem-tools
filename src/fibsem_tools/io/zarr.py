@@ -216,7 +216,7 @@ def access_zarr(
 
     array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
 
-    if access_mode != "r":
+    if access_mode != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
@@ -329,9 +329,10 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
     elif (multiscales := group.attrs.get("multiscales", None)) is not None:
         if len(multiscales) > 0:
             multiscale = multiscales[0]
-            if (ngff_version := multiscale.get("version", None)) == "0.4":
+            ngff_version = multiscale.get("version", None)
+            if ngff_version == "0.4":
                 from pydantic_ome_ngff.v04 import Multiscale
-            elif multiscale["version"] == "0.5-dev":
+            elif ngff_version == "0.5-dev":
                 from pydantic_ome_ngff.latest import Multiscale
             else:
                 raise ValueError(
@@ -341,7 +342,7 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
                     """
                 )
         else:
-            raise ValueError("Multiscales attribute was empty")
+            raise ValueError("Multiscales attribute was empty.")
         xarray_adapters = get_adapters(ngff_version)
         multiscales_meta = [Multiscale(**entry) for entry in multiscales]
         transforms = []

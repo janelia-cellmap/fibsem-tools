@@ -1,11 +1,14 @@
 from __future__ import annotations
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, Generic, List, Literal, Optional, TypeVar, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
+from pydantic.generics import GenericModel
 
 
-AnnotationType = Union[Literal["semantic"], Literal["instance"]]
+class StrictBase(BaseModel):
+    class Config:
+        extra = "forbid"
 
 
 class InstanceName(BaseModel):
@@ -40,10 +43,7 @@ classNameDict = {
     1: InstanceName(short="ECS", long="Extracellular Space"),
     2: InstanceName(short="Plasma membrane", long="Plasma membrane"),
     3: InstanceName(short="Mito membrane", long="Mitochondrial membrane"),
-    4: InstanceName(
-        short="Mito lumen",
-        long="Mitochondrial lumen",
-    ),
+    4: InstanceName(short="Mito lumen",long="Mitochondrial lumen"),
     5: InstanceName(short="Mito DNA", long="Mitochondrial DNA"),
     6: InstanceName(short="Golgi Membrane", long="Golgi apparatus membrane"),
     7: InstanceName(short="Golgi lumen", long="Golgi apparatus lumen"),
@@ -57,9 +57,7 @@ classNameDict = {
     15: InstanceName(short="LD lumen", long="Lipid droplet lumen"),
     16: InstanceName(short="ER membrane", long="Endoplasmic reticulum membrane"),
     17: InstanceName(short="ER lumen", long="Endoplasmic reticulum membrane"),
-    18: InstanceName(
-        short="ERES membrane", long="Endoplasmic reticulum exit site membrane"
-    ),
+    18: InstanceName(short="ERES membrane", long="Endoplasmic reticulum exit site membrane"),
     19: InstanceName(short="ERES lumen", long="Endoplasmic reticulum exit site lumen"),
     20: InstanceName(short="NE membrane", long="Nuclear envelope membrane"),
     21: InstanceName(short="NE lumen", long="Nuclear envelope lumen"),
@@ -81,38 +79,59 @@ classNameDict = {
     37: InstanceName(short="Nucleus combined", long="Nucleus combined"),
     38: InstanceName(short="Vimentin", long="Vimentin"),
     39: InstanceName(short="Glycogen", long="Glycogen"),
+    40: InstanceName(short="Cardiac neurons", long="Cardiac neurons"),
+    41: InstanceName(short="Endothelial cells", long="Endothelial cells"),
+    42: InstanceName(short="Cardiomyocytes", long="Cardiomyocytes"),
+    43: InstanceName(short="Epicardial cells", long="Epicardial cells"),
+    44: InstanceName(short="Parietal pericardial cells", long="Parietal pericardial cells"),
+    45: InstanceName(short="Red blood cells", long="Red blood cells"),
+    46: InstanceName(short="White blood cells", long="White blood cells"),
+    47: InstanceName(short="Peroxisome membrane", long="Peroxisome membrane"),
+    48: InstanceName(short="Peroxisome lumen", long="Peroxisome lumen"),
 }
 
-
-class SemanticAnnotation(BaseModel):
-    type: Literal["semantic"]
-    encoding: Dict[int, str]
+Possibility = Literal["unknown", "absent"]
 
 
-class InstanceAnnotation(BaseModel):
-    type: Literal["instance"]
-    encoding: Dict[int, Possibility]
+class SemanticSegmentation(BaseModel):
+    type: Literal["semantic_segmentation"] = "semantic_segmentation"
+    encoding: Dict[Union[Possibility, Literal["present"]], int]
 
 
-Possibility = Union[Literal["unknown"], Literal["absent"], Literal["present"]]
+class InstanceSegmentation(BaseModel):
+    type: Literal["instance_segmentation"] = "instance_segmentation"
+    encoding: Dict[Possibility, int]
 
-AnnotationEncoding = Dict[Possibility, int]
+
+AnnotationType = Union[SemanticSegmentation, InstanceSegmentation]
+
+TName = TypeVar("TName", bound=str)
 
 
-class AnnotationArrayAttrs(BaseModel):
+class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an array of annotated values.
     """
 
-    objects: str
+    class_name: TName
     # a mapping from values to frequencies
-    census: Dict[int, int]
+    histogram: Optional[Dict[Possibility, int]]
     # a mapping from class names to values
     # this is array metadata because labels might disappear during downsampling
-    encoding: AnnotationEncoding
+    annotation_type: AnnotationType
+
+    @root_validator()
+    def check_encoding(cls, values):
+        if (typ := values.get("type", False)) and (
+            hist := values.get("histogram", False)
+        ):
+            # check that everything in the histogram is encoded
+            assert set(typ.encoding.keys()).issuperset((hist.keys())), "Oh no"
+
+        return values
 
 
-class AnnotationClassAttrs(BaseModel):
+class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an individual annotated semantic class.
     In a storage hierarchy like zarr or hdf5, this metadata is associated with a
@@ -120,23 +139,30 @@ class AnnotationClassAttrs(BaseModel):
     annotation data in a multiscale representation.
     """
 
-    name: str
+    class_name: TName
     description: str
-    created_by: List[str]
-    created_with: List[str]
+    created_by: list[str]
+    created_with: list[str]
     start_date: str | None
     end_date: str | None
     duration_days: int | None
-    type: AnnotationType
-    encoding: AnnotationEncoding
+    annotation_type: AnnotationType
 
 
-class AnnotationCropAttrs(BaseModel):
+class AnnotationProtocol(GenericModel, Generic[TName]):
+    url: str
+    class_names: list[TName]
+
+    class Config:
+        allow_extra = "forbid"
+
+
+class AnnotationCropAttrs(GenericModel, Generic[TName]):
     """
     The metadata for all annotations in a single crop.
     """
 
     name: Optional[str]
     description: Optional[str]
-    protocol: Optional[str]
+    protocol: AnnotationProtocol[TName]
     doi: Optional[str]
