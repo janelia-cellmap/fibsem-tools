@@ -3,8 +3,10 @@ from datatree import DataTree
 import pytest
 from xarray import DataArray
 from zarr.storage import FSStore
+from pathlib import Path
 import zarr
 import numpy as np
+import itertools
 from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools.io.xr import stt_from_array
@@ -15,6 +17,7 @@ from fibsem_tools.io.zarr import (
     access_zarr,
     create_dataarray,
     create_datatree,
+    get_chunk_keys,
     get_url,
     to_dask,
     to_xarray,
@@ -247,3 +250,23 @@ def test_dask(temp_zarr, chunks):
     assert np.array_equal(observed, data)
 
     assert np.array_equal(read_dask(get_url(zarray), chunks).compute(), data)
+
+
+@pytest.mark.parametrize(
+    "store_class", (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
+)
+@pytest.mark.parametrize("shape", ((10,), (10, 11, 12)))
+def test_chunk_keys(tmp_path: Path, store_class, shape):
+    store: zarr.storage.BaseStore = store_class(tmp_path)
+    arr_path = "test"
+    arr = zarr.create(
+        shape=shape, store=store, path=arr_path, chunks=(2,) * len(shape), dtype="uint8"
+    )
+
+    dim_sep = arr._dimension_separator
+    chunk_idcs = itertools.product(*(range(c_s) for c_s in arr.cdata_shape))
+    expected = tuple(
+        os.path.join(arr.path, dim_sep.join(map(str, idx))) for idx in chunk_idcs
+    )
+    observed = tuple(get_chunk_keys(arr))
+    assert observed == expected
