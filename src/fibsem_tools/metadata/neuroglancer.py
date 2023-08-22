@@ -70,8 +70,8 @@ class NeuroglancerN5GroupMetadata(BaseModel):
 class NeuroglancerN5Group(GroupSpec):
     attrs: NeuroglancerN5GroupMetadata
 
-    @validator("items")
-    def validate_items(cls, v: dict[str, ArraySpec]):
+    @validator("members")
+    def validate_members(cls, v: dict[str, ArraySpec]):
         # check that the names of the arrays are s0, s1, s2, etc
         for key, spec in v.items():
             assert key.startswith("s")
@@ -92,4 +92,4 @@ class NeuroglancerN5Group(GroupSpec):
             for idx, arr in enumerate(arrays)
         }
         attrs = NeuroglancerN5GroupMetadata.from_xarrays(arrays)
-        return cls(attrs=attrs, items=array_specs)
+        return cls(attrs=attrs, members=array_specs)

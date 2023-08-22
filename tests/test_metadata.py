@@ -72,7 +72,7 @@ def test_neuroglancer_metadata():
 
     spec = NeuroglancerN5Group.from_xarrays(multi, chunks=(16, 16, 16))
     assert spec.attrs == neuroglancer_metadata
-    assert tuple(spec.items.keys()) == ("s0", "s1", "s2", "s3")
+    assert tuple(spec.members.keys()) == ("s0", "s1", "s2", "s3")
 
 
 @pytest.mark.parametrize("version", ("v1", "v2"))

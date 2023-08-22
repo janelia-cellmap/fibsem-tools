@@ -111,12 +111,12 @@ def multiscale_group(
                 {multiscale_metadata_types}
                 """
             )
-    items = {
+    members = {
         path: ArraySpec.from_array(arr, attrs=array_attrs[path], **kwargs)
         for arr, path in zip(arrays, array_paths)
     }
 
-    return GroupSpec(attrs=group_attrs, items=items)
+    return GroupSpec(attrs=group_attrs, members=members)
 
 
 def prepare_multiscale(
