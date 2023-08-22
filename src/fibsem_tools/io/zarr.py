@@ -216,7 +216,7 @@ def access_zarr(
 
     array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
 
-    if access_mode != "r":
+    if access_mode != "r" and len(attrs) > 0:
         array_or_group.attrs.update(attrs)
     return array_or_group
 
