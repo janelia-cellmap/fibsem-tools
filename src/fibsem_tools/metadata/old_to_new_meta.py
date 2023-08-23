@@ -95,7 +95,7 @@ def split_annotations(source: str, dest: str, name: Optional[str] = None) -> zar
         arr = zarr.Array(
             store=crop_group.store,
             path=os.path.join(observed_class_names[idx], array_name),
-            mode="a",
+            mode="w-",
             write_empty_chunks=False,
         )
         arr[:] = data_unique
