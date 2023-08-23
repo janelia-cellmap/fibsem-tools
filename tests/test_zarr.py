@@ -3,8 +3,10 @@ from datatree import DataTree
 import pytest
 from xarray import DataArray
 from zarr.storage import FSStore
+from pathlib import Path
 import zarr
 import numpy as np
+import itertools
 from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools.io.xr import stt_from_array
@@ -15,6 +17,7 @@ from fibsem_tools.io.zarr import (
     access_zarr,
     create_dataarray,
     create_datatree,
+    get_chunk_keys,
     get_url,
     to_dask,
     to_xarray,
@@ -48,17 +51,17 @@ def test_read_xarray(temp_zarr):
     data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
     data["s1"].name = "data"
 
-    zgroup = multiscale_group(
-        url,
-        tuple(data.values()),
-        tuple(data.keys()),
-        chunks=((64, 64, 64), (64, 64, 64)),
+    g_spec = multiscale_group(
+        arrays=tuple(data.values()),
         metadata_types=["cosem"],
-        group_attrs={},
+        array_paths=tuple(data.keys()),
+        chunks=(64, 64, 64),
     )
+    zgroup = g_spec.to_zarr(zarr.NestedDirectoryStore(temp_zarr), path=path)
+
     for key, value in data.items():
         zgroup[key] = value.data
-        zgroup[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
+        zgroup[key].attrs["transform"] = STTransform.from_xarray(value).dict()
 
     tree_expected = DataTree.from_dict(data, name=path)
     assert_equal(to_xarray(zgroup["s0"]), data["s0"])
@@ -73,9 +76,9 @@ def test_read_xarray(temp_zarr):
 @pytest.mark.parametrize("name", (None, "foo"))
 def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     path = "test"
-    url = os.path.join(temp_zarr, path)
+    os.path.join(temp_zarr, path)
     base_data = np.zeros((10, 10, 10))
-
+    store = zarr.NestedDirectoryStore(temp_zarr)
     if attrs is None:
         _attrs = {}
     else:
@@ -99,17 +102,18 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     data["s1"] = data["s0"].coarsen({d: 2 for d in data["s0"].dims}).mean()
     data["s1"].name = "data"
 
-    tmp_zarr = multiscale_group(
-        url,
-        tuple(data.values()),
-        tuple(data.keys()),
-        chunks=((64, 64, 64), (64, 64, 64)),
+    g_spec = multiscale_group(
+        arrays=tuple(data.values()),
+        array_paths=tuple(data.keys()),
+        chunks=(64, 64, 64),
         metadata_types=["cosem"],
-        group_attrs=_attrs,
     )
+    g_spec.attrs.update(**_attrs)
+    group = g_spec.to_zarr(store, path=path)
+
     for key, value in data.items():
-        tmp_zarr[key] = value.data
-        tmp_zarr[key].attrs["transform"] = STTransform.fromDataArray(value).dict()
+        group[key] = value.data
+        group[key].attrs["transform"] = STTransform.from_xarray(value).dict()
 
     data_store = create_datatree(
         access_zarr(temp_zarr, path, mode="r"),
@@ -120,7 +124,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     )
 
     if name is None:
-        assert data_store.name == tmp_zarr.basename
+        assert data_store.name == group.basename
     else:
         assert data_store.name == name
 
@@ -143,7 +147,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
 
     assert tree_expected.equals(data_store)
     if attrs is None:
-        assert dict(data_store.attrs) == dict(tmp_zarr.attrs)
+        assert dict(data_store.attrs) == dict(group.attrs)
     else:
         assert dict(data_store.attrs) == attrs
 
@@ -173,7 +177,7 @@ def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
         mode="w",
         shape=data.shape,
         dtype=data.dtype,
-        attrs={"transform": STTransform.fromDataArray(data).dict(), **_attrs},
+        attrs={"transform": STTransform.from_xarray(data).dict(), **_attrs},
     )
 
     tmp_zarr[:] = data.data
@@ -247,3 +251,23 @@ def test_dask(temp_zarr, chunks):
     assert np.array_equal(observed, data)
 
     assert np.array_equal(read_dask(get_url(zarray), chunks).compute(), data)
+
+
+@pytest.mark.parametrize(
+    "store_class", (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
+)
+@pytest.mark.parametrize("shape", ((10,), (10, 11, 12)))
+def test_chunk_keys(tmp_path: Path, store_class, shape):
+    store: zarr.storage.BaseStore = store_class(tmp_path)
+    arr_path = "test"
+    arr = zarr.create(
+        shape=shape, store=store, path=arr_path, chunks=(2,) * len(shape), dtype="uint8"
+    )
+
+    dim_sep = arr._dimension_separator
+    chunk_idcs = itertools.product(*(range(c_s) for c_s in arr.cdata_shape))
+    expected = tuple(
+        os.path.join(arr.path, dim_sep.join(map(str, idx))) for idx in chunk_idcs
+    )
+    observed = tuple(get_chunk_keys(arr))
+    assert observed == expected

@@ -1,7 +1,8 @@
 from __future__ import annotations
+from datetime import date
 from enum import Enum
-from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar, Union
-
+from typing import Dict, Generic, List, Literal, Optional, TypeVar, Union
+from pydantic_zarr import GroupSpec, ArraySpec
 from pydantic import BaseModel, root_validator
 from pydantic.generics import GenericModel
 
@@ -11,7 +12,18 @@ class StrictBase(BaseModel):
         extra = "forbid"
 
 
-class InstanceName(BaseModel):
+T = TypeVar("T")
+
+
+class CellmapWrapper(StrictBase, GenericModel, Generic[T]):
+    cellmap: T
+
+
+class AnnotationWrapper(StrictBase, GenericModel, Generic[T]):
+    annotation: T
+
+
+class InstanceName(StrictBase):
     long: str
     short: str
 
@@ -22,21 +34,21 @@ class Annotated(str, Enum):
     empty: str = "empty"
 
 
-class AnnotationState(BaseModel):
+class AnnotationState(StrictBase):
     present: bool
     annotated: Annotated
 
 
-class Label(BaseModel):
+class Label(StrictBase):
     value: int
     name: InstanceName
     annotationState: AnnotationState
     count: Optional[int]
 
 
-class LabelList(BaseModel):
+class LabelList(StrictBase):
     labels: List[Label]
-    annotation_type: Literal["semantic", "instance"] = "semantic"
+    annotation_type: AnnotationType = "semantic"
 
 
 classNameDict = {
@@ -97,12 +109,12 @@ classNameDict = {
 Possibility = Literal["unknown", "absent"]
 
 
-class SemanticSegmentation(BaseModel):
+class SemanticSegmentation(StrictBase):
     type: Literal["semantic_segmentation"] = "semantic_segmentation"
     encoding: Dict[Union[Possibility, Literal["present"]], int]
 
 
-class InstanceSegmentation(BaseModel):
+class InstanceSegmentation(StrictBase):
     type: Literal["instance_segmentation"] = "instance_segmentation"
     encoding: Dict[Possibility, int]
 
@@ -125,7 +137,7 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     annotation_type: AnnotationType
 
     @root_validator()
-    def check_encoding(cls, values: Any) -> Any:
+    def check_encoding(cls, values):
         if (typ := values.get("type", False)) and (
             hist := values.get("histogram", False)
         ):
@@ -135,7 +147,7 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
         return values
 
 
-class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
+class AnnotationGroupAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an individual annotated semantic class.
     In a storage hierarchy like zarr or hdf5, this metadata is associated with a
@@ -144,29 +156,45 @@ class MultiscaleGroupAttrs(GenericModel, Generic[TName]):
     """
 
     class_name: TName
-    description: str
-    created_by: list[str]
-    created_with: list[str]
-    start_date: Optional[str]
-    end_date: Optional[str]
-    duration_days: Optional[int]
     annotation_type: AnnotationType
 
 
-class AnnotationProtocol(GenericModel, Generic[TName]):
-    url: str
-    class_names: list[TName]
-
-    class Config:
-        allow_extra = "forbid"
-
-
-class AnnotationCropAttrs(GenericModel, Generic[TName]):
+class CropGroupAttrs(GenericModel, Generic[TName]):
     """
     The metadata for all annotations in a single crop.
     """
 
     name: Optional[str]
     description: Optional[str]
-    protocol: AnnotationProtocol[TName]
+    created_by: list[str]
+    created_with: list[str]
+    start_date: Optional[date]
+    end_date: Optional[date]
+    duration_days: Optional[int]
+    protocol_url: str
+    class_names: list[TName]
+    index: dict[TName, str]
     doi: Optional[str]
+
+
+AnnotationArray = ArraySpec[AnnotationArrayAttrs]
+AnnotationGroup = GroupSpec[
+    CellmapWrapper[AnnotationWrapper[AnnotationGroupAttrs]], AnnotationArray
+]
+CropGroup = GroupSpec[
+    CellmapWrapper[AnnotationWrapper[CropGroupAttrs]], AnnotationGroup
+]
+
+
+def annotation_attrs_wrapper(
+    value: T,
+) -> dict[Literal["cellmap"], dict[Literal["annotation"], T]]:
+    return {"cellmap": {"annotation": value}}
+
+
+def annotation_array_metadata():
+    pass
+
+
+def annotation_group_metadata():
+    pass
