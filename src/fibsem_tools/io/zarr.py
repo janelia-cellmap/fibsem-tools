@@ -12,7 +12,7 @@ import dask.array as da
 import numpy as np
 import xarray
 import zarr
-from zarr.storage import FSStore, contains_array, contains_group
+from zarr.storage import FSStore, contains_array, contains_group, BaseStore
 from dask import bag, delayed
 from distributed import Client, Lock
 from toolz import concat
@@ -168,15 +168,17 @@ def get_url(node: Union[zarr.Group, zarr.Array]):
         cannot be resolved to a url"""
         )
 
+def get_store(path: PathLike) -> zarr.storage.BaseStore:
+    if isinstance(path, Path):
+        path = str(path)
+    
+    return DEFAULT_ZARR_STORE(path)
 
 def access_zarr(
-    store: PathLike, path: PathLike, **kwargs: Any
+    store: Union[PathLike, BaseStore], path: PathLike, **kwargs: Any
 ) -> zarr.Array | zarr.Group:
-    if isinstance(store, Path):
-        store = str(store)
-
-    if isinstance(store, str):
-        store = DEFAULT_ZARR_STORE(store)
+    if isinstance(store, (Path, str)):
+        store = get_store(store)
 
     # set default dimension separator to /
     if "shape" in kwargs and "dimension_separator" not in kwargs:

@@ -171,7 +171,7 @@ class CropGroupAttrs(GenericModel, Generic[TName]):
     start_date: Optional[date]
     end_date: Optional[date]
     duration_days: Optional[int]
-    protocol_url: str
+    protocol_url: Optional[str]
     class_names: list[TName]
     index: dict[TName, str]
     doi: Optional[str]

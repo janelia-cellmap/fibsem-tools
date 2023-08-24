@@ -127,7 +127,8 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> Tuple[str, str, s
     suffixed = [Path(part).suffix in suffixes for part in parts]
 
     if not any(suffixed):
-        raise ValueError(f"No path elements found with the suffix(es) {suffixes}")
+        msg = f"No path elements found with the suffix(es) {suffixes} in {uri}"
+        raise ValueError(msg)
 
     index = [idx for idx, val in enumerate(suffixed) if val][-1]
     if index == (len(parts) - 1):
