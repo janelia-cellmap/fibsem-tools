@@ -110,6 +110,27 @@ Possibility = Literal["unknown", "absent"]
 
 
 class SemanticSegmentation(StrictBase):
+    """
+    Metadata for a semantic segmentation, i.e. a segmentation where numerical values
+    represent different semantic classes.
+
+    Attributes
+    ----------
+
+    type: string
+        Must be the literal 'semantic_segmentation'.
+
+    encoding: dict with string keys and numeric values
+        This dict represents the mapping from possibilities to numeric values. The keys
+        must be strings in the set {'unknown', 'absent', 'present'}, and the values
+        must be numeric values contained in the array described by this metadata.
+
+        For example, if an annotator produces an array where 0 represents 'unknown' and
+        1 represents the presence of class X then `encoding` would take the value
+        {'unknown': 0, 'present': 1}
+
+    """
+
     type: Literal["semantic_segmentation"] = "semantic_segmentation"
     encoding: Dict[Union[Possibility, Literal["present"]], int]
 
@@ -127,6 +148,24 @@ TName = TypeVar("TName", bound=str)
 class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an array of annotated values.
+
+    Attributes
+    ----------
+
+    class_name: string
+        The name of the semantic class annotated in this array.
+
+    histogram: dict with string keys and integer values, or None
+        The frequency of 'absent' and / or 'missing' values in the array data.
+
+        The total number of elements in the array that represent "positive" examples can
+        be calculated from this histogram -- take the number of elements in the array
+        minus the sum of the values in the histogram.
+
+    annotation_type: SemanticSegmentation or InstanceSegmentation
+        The type of the annotation. Must be either an instance of SemanticSegmentation
+        or an instance of InstanceSegmentation.
+
     """
 
     class_name: TName
@@ -153,6 +192,15 @@ class AnnotationGroupAttrs(GenericModel, Generic[TName]):
     In a storage hierarchy like zarr or hdf5, this metadata is associated with a
     group-like container that contains a collection of arrays that contain the
     annotation data in a multiscale representation.
+
+    Attributes
+    ----------
+
+    class_name: string
+        The name of the semantic class annotated by the data in this group.
+
+    annotation_type: AnnotationType
+        The type of annotation represented by the data in this group.
     """
 
     class_name: TName
@@ -161,7 +209,43 @@ class AnnotationGroupAttrs(GenericModel, Generic[TName]):
 
 class CropGroupAttrs(GenericModel, Generic[TName]):
     """
-    The metadata for all annotations in a single crop.
+    The metadata for all annotations in zarr group representing a single crop.
+
+    Attributes
+    ----------
+    name: string or None
+        The name of the crop. Optional.
+
+    description: string or None.
+        A description of the crop. Optional.
+
+    created_by: list of strings
+        The people or entities responsible for creating the annotations in the crop.
+
+    created_with: list of strings
+        The tool(s) used to create the annotations in the crop. Optional.
+
+    start_date: datetime.date or None
+        The calendar date when the crop was started. Optional.
+
+    end_date: datetime.date or None
+        The calendar date when the crop was completed. None may be used here if the date
+        of completion is unknown, for example if the crop is not yet finished.
+
+    duration_days: int or None
+        The number of days spent annotating the crop. Optional.
+
+    protocol_uri: string or None
+        A URI pointing to a description of the annotation protocol used to produce the
+        annotations. Optional.
+
+    class_names: list of strings
+        The names of the semantic classes that **could** be annotated in this crop.
+
+    index: dict with string keys and string values
+        Each key of this dict is an element of the `class_names` attribute. Each
+        value is the relative path to the zarr group containing the label data for that
+        class name.
     """
 
     name: Optional[str]
@@ -171,10 +255,9 @@ class CropGroupAttrs(GenericModel, Generic[TName]):
     start_date: Optional[date]
     end_date: Optional[date]
     duration_days: Optional[int]
-    protocol_url: Optional[str]
+    protocol_uri: Optional[str]
     class_names: list[TName]
     index: dict[TName, str]
-    doi: Optional[str]
 
 
 AnnotationArray = ArraySpec[AnnotationArrayAttrs]
