@@ -60,7 +60,7 @@ def check_zarray(array: zarr.Array) -> dict[str, Union[Missing, Invalid, Valid]]
     Returns
     -------
 
-    A dict with string keys and  where each key is the location of a chunk in the key
+    A dict with string keys, where each key is the location of a chunk in the key
     space of the store object associated with the array, and each value is either a
     Valid, Missing, or Invalid object.
     """

@@ -44,6 +44,8 @@ nav:
         - zarr: api/io/zarr.md
       - metadata:
         - groundtruth: api/metadata/groundtruth.md
+        - transform: api/metadata/transform.md
+        - neuroglancer: api/metadata/neuroglancer.md
       - cli:
         - tiff2zarr: api/cli/tiff2zarr.md
         - zarr_scan: api/cli/zarr_scan.md
@@ -54,7 +56,13 @@ plugins:
     handlers:
         python:
           options:
-            show_signature_annotations: true
+            docstring_style: numpy
+            members_order: source
+            separate_signature: true
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
 
 markdown_extensions:
   - pymdownx.highlight:

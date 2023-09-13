@@ -119,7 +119,6 @@ class SemanticSegmentation(StrictBase):
 
     type: string
         Must be the literal 'semantic_segmentation'.
-
     encoding: dict with string keys and numeric values
         This dict represents the mapping from possibilities to numeric values. The keys
         must be strings in the set {'unknown', 'absent', 'present'}, and the values
@@ -152,20 +151,17 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     Attributes
     ----------
 
-    class_name: string
+    class_name: str
         The name of the semantic class annotated in this array.
-
-    histogram: dict with string keys and integer values, or None
+    histogram: Optional[Dict[str, int]]
         The frequency of 'absent' and / or 'missing' values in the array data.
-
         The total number of elements in the array that represent "positive" examples can
         be calculated from this histogram -- take the number of elements in the array
         minus the sum of the values in the histogram.
 
-    annotation_type: SemanticSegmentation or InstanceSegmentation
+    annotation_type: SemanticSegmentation | InstanceSegmentation
         The type of the annotation. Must be either an instance of SemanticSegmentation
         or an instance of InstanceSegmentation.
-
     """
 
     class_name: TName
@@ -196,7 +192,7 @@ class AnnotationGroupAttrs(GenericModel, Generic[TName]):
     Attributes
     ----------
 
-    class_name: string
+    class_name: str
         The name of the semantic class annotated by the data in this group.
 
     annotation_type: AnnotationType
@@ -213,36 +209,36 @@ class CropGroupAttrs(GenericModel, Generic[TName]):
 
     Attributes
     ----------
-    name: string or None
+    name: Optional[str]
         The name of the crop. Optional.
 
-    description: string or None.
+    description: Optional[str]
         A description of the crop. Optional.
 
-    created_by: list of strings
+    created_by: list[str]
         The people or entities responsible for creating the annotations in the crop.
 
-    created_with: list of strings
+    created_with: list[str]
         The tool(s) used to create the annotations in the crop. Optional.
 
-    start_date: datetime.date or None
+    start_date: Optional[datetime.date]
         The calendar date when the crop was started. Optional.
 
-    end_date: datetime.date or None
+    end_date: Optional[datetime.date]
         The calendar date when the crop was completed. None may be used here if the date
         of completion is unknown, for example if the crop is not yet finished.
 
-    duration_days: int or None
+    duration_days: Optional[int]
         The number of days spent annotating the crop. Optional.
 
-    protocol_uri: string or None
+    protocol_uri: Optional[str]
         A URI pointing to a description of the annotation protocol used to produce the
         annotations. Optional.
 
-    class_names: list of strings
+    class_names: list[str]
         The names of the semantic classes that **could** be annotated in this crop.
 
-    index: dict with string keys and string values
+    index: dict[str, str]
         Each key of this dict is an element of the `class_names` attribute. Each
         value is the relative path to the zarr group containing the label data for that
         class name.
