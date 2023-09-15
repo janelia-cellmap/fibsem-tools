@@ -3,11 +3,15 @@ from fibsem_tools.io.dask import (
     copy_array,
     ensure_minimum_chunksize,
     autoscale_chunk_shape,
+    write_blocks_delayed,
 )
 import pytest
 import zarr
 import numpy as np
 import dask
+from pydantic_zarr import ArraySpec
+from numpy.testing import assert_array_equal
+from dask.array.core import slices_from_chunks
 
 
 def test_ensure_minimum_chunksize():
@@ -85,3 +89,14 @@ def test_array_copy_from_path(temp_zarr, shape):
     copy_op = copy_array(arr_1, arr_2)
     dask.compute(copy_op)
     assert np.array_equal(arr_2, arr_1)
+
+
+def test_write_blocks_delayed():
+    arr = da.random.randint(0, 255, (10, 10, 10), dtype="uint8")
+    store = zarr.MemoryStore()
+    arr_spec = ArraySpec.from_array(arr, chunks=(2, 2, 2))
+    z_arr = arr_spec.to_zarr(store, path="array")
+    w_ops = write_blocks_delayed(arr, z_arr)
+    result = dask.compute(w_ops)[0]
+    assert result == slices_from_chunks(arr.chunks)
+    assert_array_equal(np.array(arr), z_arr)

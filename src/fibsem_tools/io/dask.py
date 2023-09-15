@@ -19,12 +19,13 @@ from dask.core import flatten
 from dask.delayed import Delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.optimization import fuse
-from dask.utils import is_arraylike, parse_bytes
+from dask.utils import parse_bytes
 from zarr.util import normalize_chunks as normalize_chunksize
 from numpy.typing import NDArray, DTypeLike
 import random
 from fibsem_tools.io.core import access, read
 from fibsem_tools.io.zarr import are_chunks_aligned
+from dask import delayed
 
 random.seed(0)
 
@@ -65,33 +66,49 @@ def sequential_rechunk(
 
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def store_chunk(x: NDArray[Any], out: Any, index: Tuple[slice, ...]) -> Literal[0]:
+def store_chunk(
+    target: NDArray[Any], key: Tuple[slice, ...], value: NDArray[Any]
+) -> Literal[0]:
     """
     A function inserted in a Dask graph for storing a chunk.
 
     Parameters
     ----------
-    x: array-like
-        An array (potentially a NumPy one)
-    out: array-like
-        Where to store results to.
-    index: slice-like
-        Where to store result from ``x`` in ``out``.
+    target: NDArray
+        Where to store the value.
+    key: Tuple[slice, ...]
+        The location in the array for the value.
+    value: NDArray
+        The value to be stored.
 
     Examples
     --------
-
-    >>> a = np.ones((5, 6))
-    >>> b = np.empty(a.shape)
-    >>> load_store_chunk(a, b, (slice(None), slice(None)), False, False, False)
     """
-
-    if is_arraylike(x):
-        out[index] = x
-    else:
-        out[index] = np.asanyarray(x)
-
+    target[key] = value
     return 0
+
+
+@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+def store_value(
+    target: NDArray[Any], key: Tuple[slice, ...], value: NDArray[Any]
+) -> Literal[0]:
+    """
+    A function inserted in a Dask graph for storing a chunk.
+
+    Parameters
+    ----------
+    target: NDArray
+        Where to store the value.
+    key: Tuple[slice, ...]
+        The location in the array for the value.
+    value: NDArray
+        The value to be stored.
+
+    Examples
+    --------
+    """
+    target[key] = value
+    return key
 
 
 def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
@@ -124,14 +141,14 @@ def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Arra
     dsk = {}
     chunks = tuple((1,) * s for s in source.blocks.shape)
 
-    for slice, key in zip(slices, flatten(source.__dask_keys__())):
+    for slce, key in zip(slices, flatten(source.__dask_keys__())):
         dsk[(store_name,) + key[1:]] = (
             ndwrapper,
             store_chunk,
             source.ndim,
-            key,
             target,
-            slice,
+            slce,
+            key,
         )
 
     layers[store_name] = dsk
@@ -179,6 +196,29 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.A
         result.append(write_blocks(source, target, region))
 
     return result
+
+
+def write_blocks_delayed(
+    source, target, region: Optional[Tuple[slice, ...]] = None
+) -> Sequence[Any]:
+    """
+    Return a collection fo task each task returns the result of writing
+    each chunk of `source` to `target`.
+    """
+
+    # handle xarray
+    if hasattr(source, "data") and isinstance(source.data, da.Array):
+        source = source.data
+
+    slices = slices_from_chunks(source.chunks)
+    if region:
+        slices = [fuse_slice(region, slc) for slc in slices]
+    blocks_flat = source.blocks.ravel()
+    assert len(slices) == len(blocks_flat)
+    return [
+        delayed(store_value)(target, slce, block)
+        for slce, block in zip(slices, blocks_flat)
+    ]
 
 
 def ensure_minimum_chunksize(array, chunksize):

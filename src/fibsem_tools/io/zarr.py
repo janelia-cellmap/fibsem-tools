@@ -20,6 +20,7 @@ from zarr.indexing import BasicIndexer
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
 from xarray_ome_ngff.registry import get_adapters
+from zarr.errors import ReadOnlyError
 
 ureg = pint.UnitRegistry()
 
@@ -30,9 +31,51 @@ ZARR_AXES_3D = ["z", "y", "x"]
 # default axis order of raw n5 spatial metadata
 # is x,y,z
 N5_AXES_3D = ZARR_AXES_3D[::-1]
-DEFAULT_ZARR_STORE = FSStore
-DEFAULT_N5_STORE = zarr.N5FSStore
 logger = logging.getLogger(__name__)
+
+
+class FSStorePatched(FSStore):
+    """
+    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
+    This is temporary and should be removed when
+    https://github.com/zarr-developers/zarr-python/issues/1336
+    is resolved.
+    """
+
+    def delitems(self, keys):
+        if self.mode == "r":
+            raise ReadOnlyError()
+        try:  # should much faster
+            nkeys = [self._normalize_key(key) for key in keys]
+            # rm errors if you pass an empty collection
+            self.map.delitems(nkeys)
+        except FileNotFoundError:
+            nkeys = [self._normalize_key(key) for key in keys if key in self]
+            # rm errors if you pass an empty collection
+            if len(nkeys) > 0:
+                self.map.delitems(nkeys)
+
+
+class N5FSStorePatched(zarr.N5FSStore):
+    """
+    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
+    This is temporary and should be removed when
+    https://github.com/zarr-developers/zarr-python/issues/1336
+    is resolved.
+    """
+
+    def delitems(self, keys):
+        if self.mode == "r":
+            raise ReadOnlyError()
+        try:  # should much faster
+            nkeys = [self._normalize_key(key) for key in keys]
+            # rm errors if you pass an empty collection
+            self.map.delitems(nkeys)
+        except FileNotFoundError:
+            nkeys = [self._normalize_key(key) for key in keys if key in self]
+            # rm errors if you pass an empty collection
+            if len(nkeys) > 0:
+                self.map.delitems(nkeys)
 
 
 def get_arrays(obj: Any) -> Tuple[zarr.Array]:
@@ -61,6 +104,10 @@ def delete_zbranch(branch: Union[zarr.Group, zarr.Array], compute: bool = True):
             {type(branch)}
             """
         )
+
+
+DEFAULT_ZARR_STORE = FSStorePatched
+DEFAULT_N5_STORE = N5FSStorePatched
 
 
 def delete_zgroup(zgroup: zarr.Group, compute: bool = True):
