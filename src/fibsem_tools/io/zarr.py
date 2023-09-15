@@ -2,7 +2,6 @@ from __future__ import annotations
 import logging
 import os
 from os import PathLike
-import time
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Literal, Sequence, Tuple, Union
 from datatree import DataTree
@@ -12,7 +11,7 @@ import dask.array as da
 import numpy as np
 import xarray
 import zarr
-from zarr.storage import FSStore, contains_array, contains_group
+from zarr.storage import FSStore
 from dask import bag, delayed
 from distributed import Client, Lock
 from toolz import concat
@@ -187,32 +186,6 @@ def access_zarr(
 
     attrs = kwargs.pop("attrs", {})
     access_mode = kwargs.pop("mode", "a")
-
-    if access_mode == "w":
-        if contains_group(store, path) or contains_array(store, path):
-            # zarr is extremely slow to delete existing directories, so we do it in
-            # parallel
-            existing = zarr.open(store, path=path, **kwargs, mode="a")
-            # todo: move this logic to methods on the stores themselves
-            if isinstance(
-                existing.store,
-                (
-                    zarr.N5Store,
-                    zarr.N5FSStore,
-                    zarr.DirectoryStore,
-                    zarr.NestedDirectoryStore,
-                ),
-            ):
-                url = os.path.join(existing.store.path, existing.path)
-                logger.info(f"Beginning parallel deletion of chunks in {url}...")
-                pre = time.time()
-                delete_zbranch(existing)
-                logger.info(
-                    f"""
-                    Completed parallel deletion of chunks in {url} in 
-                    {time.time() - pre}s.
-                    """
-                )
 
     array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
 
