@@ -2,7 +2,6 @@ from __future__ import annotations
 import logging
 import os
 from os import PathLike
-import time
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Literal, Sequence, Tuple, Union
 from datatree import DataTree
@@ -12,7 +11,7 @@ import dask.array as da
 import numpy as np
 import xarray
 import zarr
-from zarr.storage import FSStore, contains_array, contains_group
+from zarr.storage import FSStore
 from dask import bag, delayed
 from distributed import Client, Lock
 from toolz import concat
@@ -21,6 +20,7 @@ from zarr.indexing import BasicIndexer
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
 from xarray_ome_ngff.registry import get_adapters
+from zarr.errors import ReadOnlyError
 
 ureg = pint.UnitRegistry()
 
@@ -31,9 +31,51 @@ ZARR_AXES_3D = ["z", "y", "x"]
 # default axis order of raw n5 spatial metadata
 # is x,y,z
 N5_AXES_3D = ZARR_AXES_3D[::-1]
-DEFAULT_ZARR_STORE = FSStore
-DEFAULT_N5_STORE = zarr.N5FSStore
 logger = logging.getLogger(__name__)
+
+
+class FSStorePatched(FSStore):
+    """
+    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
+    This is temporary and should be removed when
+    https://github.com/zarr-developers/zarr-python/issues/1336
+    is resolved.
+    """
+
+    def delitems(self, keys):
+        if self.mode == "r":
+            raise ReadOnlyError()
+        try:  # should much faster
+            nkeys = [self._normalize_key(key) for key in keys]
+            # rm errors if you pass an empty collection
+            self.map.delitems(nkeys)
+        except FileNotFoundError:
+            nkeys = [self._normalize_key(key) for key in keys if key in self]
+            # rm errors if you pass an empty collection
+            if len(nkeys) > 0:
+                self.map.delitems(nkeys)
+
+
+class N5FSStorePatched(zarr.N5FSStore):
+    """
+    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
+    This is temporary and should be removed when
+    https://github.com/zarr-developers/zarr-python/issues/1336
+    is resolved.
+    """
+
+    def delitems(self, keys):
+        if self.mode == "r":
+            raise ReadOnlyError()
+        try:  # should much faster
+            nkeys = [self._normalize_key(key) for key in keys]
+            # rm errors if you pass an empty collection
+            self.map.delitems(nkeys)
+        except FileNotFoundError:
+            nkeys = [self._normalize_key(key) for key in keys if key in self]
+            # rm errors if you pass an empty collection
+            if len(nkeys) > 0:
+                self.map.delitems(nkeys)
 
 
 def get_arrays(obj: Any) -> Tuple[zarr.Array]:
@@ -62,6 +104,10 @@ def delete_zbranch(branch: Union[zarr.Group, zarr.Array], compute: bool = True):
             {type(branch)}
             """
         )
+
+
+DEFAULT_ZARR_STORE = FSStorePatched
+DEFAULT_N5_STORE = N5FSStorePatched
 
 
 def delete_zgroup(zgroup: zarr.Group, compute: bool = True):
@@ -187,32 +233,6 @@ def access_zarr(
 
     attrs = kwargs.pop("attrs", {})
     access_mode = kwargs.pop("mode", "a")
-
-    if access_mode == "w":
-        if contains_group(store, path) or contains_array(store, path):
-            # zarr is extremely slow to delete existing directories, so we do it in
-            # parallel
-            existing = zarr.open(store, path=path, **kwargs, mode="a")
-            # todo: move this logic to methods on the stores themselves
-            if isinstance(
-                existing.store,
-                (
-                    zarr.N5Store,
-                    zarr.N5FSStore,
-                    zarr.DirectoryStore,
-                    zarr.NestedDirectoryStore,
-                ),
-            ):
-                url = os.path.join(existing.store.path, existing.path)
-                logger.info(f"Beginning parallel deletion of chunks in {url}...")
-                pre = time.time()
-                delete_zbranch(existing)
-                logger.info(
-                    f"""
-                    Completed parallel deletion of chunks in {url} in 
-                    {time.time() - pre}s.
-                    """
-                )
 
     array_or_group = zarr.open(store, path=path, **kwargs, mode=access_mode)
 
