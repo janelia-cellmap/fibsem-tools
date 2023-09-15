@@ -48,7 +48,10 @@ class ArrayMoveStrict(BaseModel):
     chunks: List[int]
 
 
-def represents_int(s):
+def represents_int(s: Any) -> bool:
+    """
+    Returns `True` if the value can be parsed as an int, and `False` otherwise.
+    """
     try:
         int(s)
     except ValueError:

@@ -1,0 +1,78 @@
+site_name: "fibsem-tools"
+site_url: https://janelia-cellmap.github.io/fibsem-tools/
+site_author: Davis Bennett
+site_description: >-
+  Documentation for fibsem-tools
+
+# Repository
+repo_name: janelia-cellmap/pydantic-zarr
+repo_url: https://github.com/janelia-cellmap/pydantic-zarr
+
+# Copyright
+copyright: Copyright &copy; 2016 - 2023 HHMI / Janelia
+
+theme:
+  name: material
+  palette: 
+  # Palette toggle for light mode
+  - scheme: default
+    toggle:
+      icon: material/brightness-7 
+      name: Switch to dark mode
+
+  # Palette toggle for dark mode
+  - scheme: slate
+    toggle:
+      icon: material/brightness-4
+      name: Switch to light mode
+
+nav:
+    - About: index.md
+    - Usage: usage.md
+    - API:
+      - io:
+        - core: api/io/core.md
+        - dask: api/io/dask.md
+        - dat: api/io/dat.md
+        - hdf5: api/io/h5.md
+        - mrc: api/io/mrc.md
+        - multiscale: api/io/multiscale.md
+        - neuroglancer: api/io/neuroglancer.md
+        - tif: api/io/tif.md
+        - util: api/io/util.md
+        - xarray: api/io/xr.md
+        - zarr: api/io/zarr.md
+      - metadata:
+        - groundtruth: api/metadata/groundtruth.md
+        - transform: api/metadata/transform.md
+        - neuroglancer: api/metadata/neuroglancer.md
+      - cli:
+        - tiff2zarr: api/cli/tiff2zarr.md
+        - zarr_scan: api/cli/zarr_scan.md
+        - zarr2json: api/cli/zarr2json.md
+
+plugins:
+- mkdocstrings:
+    handlers:
+        python:
+          options:
+            docstring_style: numpy
+            members_order: source
+            separate_signature: true
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - toc:
+      baselevel: 2
+      toc_depth: 4
+      permalink: "#"

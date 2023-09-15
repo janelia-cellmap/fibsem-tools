@@ -56,6 +56,19 @@ def multiscale_group(
     """
     Generate multiscale metadata of the desired flavor from a list of DataArrays
 
+    Arguments
+    ---------
+
+    arrays : Sequence[DataArray]
+        The arrays to store.
+    metadata_types : List[str]
+        The metadata flavor(s) to use.
+    array_paths : Sequence[str]
+        The path for each array in storage, relative to the parent group.
+    name : Optional[str]
+        The name for the multiscale group. Only relevant for metadata flavors that
+        support this field, e.g. ome-ngff
+
     Returns
     -------
 
