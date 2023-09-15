@@ -158,7 +158,6 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
         The total number of elements in the array that represent "positive" examples can
         be calculated from this histogram -- take the number of elements in the array
         minus the sum of the values in the histogram.
-
     annotation_type: SemanticSegmentation | InstanceSegmentation
         The type of the annotation. Must be either an instance of SemanticSegmentation
         or an instance of InstanceSegmentation.
@@ -194,7 +193,6 @@ class AnnotationGroupAttrs(GenericModel, Generic[TName]):
 
     class_name: str
         The name of the semantic class annotated by the data in this group.
-
     annotation_type: AnnotationType
         The type of annotation represented by the data in this group.
     """
@@ -211,37 +209,29 @@ class CropGroupAttrs(GenericModel, Generic[TName]):
     ----------
     name: Optional[str]
         The name of the crop. Optional.
-
     description: Optional[str]
         A description of the crop. Optional.
-
     created_by: list[str]
         The people or entities responsible for creating the annotations in the crop.
-
     created_with: list[str]
         The tool(s) used to create the annotations in the crop. Optional.
-
     start_date: Optional[datetime.date]
         The calendar date when the crop was started. Optional.
-
     end_date: Optional[datetime.date]
         The calendar date when the crop was completed. None may be used here if the date
         of completion is unknown, for example if the crop is not yet finished.
-
     duration_days: Optional[int]
         The number of days spent annotating the crop. Optional.
-
     protocol_uri: Optional[str]
         A URI pointing to a description of the annotation protocol used to produce the
         annotations. Optional.
-
     class_names: list[str]
         The names of the semantic classes that **could** be annotated in this crop.
-
     index: dict[str, str]
-        Each key of this dict is an element of the `class_names` attribute. Each
-        value is the relative path to the zarr group containing the label data for that
-        class name.
+        A dict that expresses the mapping from class names to relative locations of
+        Zarr Groups. Keys of this dict are elements drawn (nonexhaustively) from the
+        `class_names` attribute. Values are relative paths to the zarr groups containing
+        label data.
     """
 
     name: Optional[str]
