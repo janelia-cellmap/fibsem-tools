@@ -3,11 +3,11 @@ import numpy as np
 from xarray import DataArray
 from fibsem_tools.io.xr import stt_from_array
 from fibsem_tools.metadata.cosem import (
-    COSEMGroupMetadataV1,
+    CosemGroupMetadataV1,
     CosemMultiscaleGroupV1,
     CosemMultiscaleGroupV2,
     MultiscaleMetaV1,
-    COSEMGroupMetadataV2,
+    CosemGroupMetadataV2,
     MultiscaleMetaV2,
 )
 from fibsem_tools.metadata.neuroglancer import (
@@ -99,9 +99,9 @@ def test_cosem(version: Literal["v1", "v2"]):
     paths = ("s0", "s1")
     if version == "v1":
 
-        g_meta = COSEMGroupMetadataV1.from_xarrays(multi, paths=paths, name="data")
+        g_meta = CosemGroupMetadataV1.from_xarrays(multi, paths=paths, name="data")
 
-        assert g_meta == COSEMGroupMetadataV1(
+        assert g_meta == CosemGroupMetadataV1(
             multiscales=[
                 MultiscaleMetaV1(
                     name="data",
@@ -114,13 +114,13 @@ def test_cosem(version: Literal["v1", "v2"]):
         )
         spec = CosemMultiscaleGroupV1.from_xarrays(multi, name="data")
         assert spec.attrs == g_meta
-        assert tuple(spec.items.keys()) == paths
+        assert tuple(spec.members.keys()) == paths
 
     else:
-        g_meta = COSEMGroupMetadataV2.from_xarrays(multi, paths=paths, name="data")
-        assert g_meta == COSEMGroupMetadataV2(
+        g_meta = CosemGroupMetadataV2.from_xarrays(multi, paths=paths, name="data")
+        assert g_meta == CosemGroupMetadataV2(
             multiscales=[MultiscaleMetaV2(name="data", datasets=paths)]
         )
         spec = CosemMultiscaleGroupV2.from_xarrays(multi, name="data")
         assert spec.attrs == g_meta
-        assert tuple(spec.items.keys()) == paths
+        assert tuple(spec.members.keys()) == paths

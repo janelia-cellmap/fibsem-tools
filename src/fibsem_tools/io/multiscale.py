@@ -4,6 +4,7 @@ from typing import Any, Literal, Optional, Sequence, Tuple, Union, List
 from xarray import DataArray
 
 import zarr
+from fibsem_tools.io.util import normalize_chunks
 from fibsem_tools.metadata.cosem import (
     CosemMultiscaleGroupV1,
     CosemMultiscaleGroupV2,
@@ -20,36 +21,11 @@ NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem", "ome-ngff"]
 
 
-def _normalize_chunks(
-    arrays: Sequence[DataArray],
-    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], None],
-) -> Tuple[Tuple[int, ...], ...]:
-    if chunks is None:
-        result: Tuple[Tuple[int, ...]] = tuple(v.data.chunksize for v in arrays)
-    elif all(isinstance(c, tuple) for c in chunks):
-        result = chunks
-    else:
-        try:
-            all_ints = all((isinstance(c, int) for c in chunks))
-            if all_ints:
-                result = (chunks,) * len(arrays)
-            else:
-                msg = f"All values in chunks must be ints. Got {chunks}"
-                raise ValueError(msg)
-        except TypeError as e:
-            raise e
-
-    assert len(result) == len(arrays)
-    assert tuple(map(len, result)) == tuple(
-        x.ndim for x in arrays
-    ), "Number of chunks per array does not equal rank of arrays"
-    return result
-
-
 def multiscale_group(
     arrays: Sequence[DataArray],
     metadata_types: List[str],
     array_paths: Union[List[str], Literal["auto"]] = "auto",
+    chunks: Union[Tuple[Tuple[int, ...], ...], Literal["auto"]] = "auto",
     name: Optional[str] = None,
     **kwargs,
 ) -> GroupSpec:
@@ -65,6 +41,13 @@ def multiscale_group(
         The metadata flavor(s) to use.
     array_paths : Sequence[str]
         The path for each array in storage, relative to the parent group.
+    chunks : Union[Tuple[Tuple[int, ...], ...], Literal["auto"]], default is "auto"
+        The chunks for the arrays instances. Either an explicit collection of
+        chunk sizes, one per array, or the string "auto". If `chunks` is "auto" and
+        the `data` attribute of the arrays is chunked, then each stored array
+        will inherit the chunks of the input arrays. If the `data` attribute
+        is not chunked, then each stored array will have chunks equal to the shape of
+        the input array.
     name : Optional[str]
         The name for the multiscale group. Only relevant for metadata flavors that
         support this field, e.g. ome-ngff
@@ -77,6 +60,8 @@ def multiscale_group(
     """
     if array_paths == "auto":
         array_paths = [f"s{idx}" for idx in range(len(arrays))]
+    _chunks = normalize_chunks(arrays, chunks)
+
     group_attrs = {}
     array_attrs = {path: {} for path in array_paths}
 
@@ -93,20 +78,19 @@ def multiscale_group(
         flave, _, version = flavor.partition("@")
 
         if flave == "neuroglancer":
-            g_spec = NeuroglancerN5Group.from_xarrays(arrays, **kwargs)
+            g_spec = NeuroglancerN5Group.from_xarrays(arrays, chunks=_chunks, **kwargs)
             group_attrs.update(g_spec.attrs.dict())
         elif flave == "cosem":
             if version == "2":
                 g_spec = CosemMultiscaleGroupV2.from_xarrays(
-                    arrays, name=name, **kwargs
+                    arrays, name=name, chunks=_chunks, **kwargs
                 )
             else:
                 g_spec = CosemMultiscaleGroupV1.from_xarrays(
-                    arrays, name=name, **kwargs
+                    arrays, name=name, chunks=_chunks, **kwargs
                 )
             group_attrs.update(g_spec.attrs.dict())
-
-            for key, value in g_spec.items.items():
+            for key, value in g_spec.members.items():
                 array_attrs[key].update(**value.attrs.dict())
         elif flave == "ome-ngff":
             if version == "":
@@ -118,17 +102,16 @@ def multiscale_group(
                 ).dict()
             ]
         else:
-            raise ValueError(
-                f"""
-                Multiscale metadata type {flavor} is unknown. Try one of 
-                {multiscale_metadata_types}
-                """
+            msg = (
+                "Multiscale metadata type {flavor} is unknown."
+                f"Try one of {multiscale_metadata_types}"
             )
-    members = {
-        path: ArraySpec.from_array(arr, attrs=array_attrs[path], **kwargs)
-        for arr, path in zip(arrays, array_paths)
-    }
+            raise ValueError(msg)
 
+    members = {
+        path: ArraySpec.from_array(arr, attrs=array_attrs[path], chunks=cnks, **kwargs)
+        for arr, path, cnks in zip(arrays, array_paths, _chunks)
+    }
     return GroupSpec(attrs=group_attrs, members=members)
 
 
