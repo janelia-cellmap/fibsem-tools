@@ -1,4 +1,4 @@
-from os import PathLike
+from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
 import backoff
@@ -26,6 +26,7 @@ import random
 from fibsem_tools.io.core import access, read
 from fibsem_tools.io.zarr import are_chunks_aligned
 from dask import delayed
+from fibsem_tools.io.util import PathLike
 
 random.seed(0)
 
@@ -385,12 +386,12 @@ def copy_array(
     A dask bag which, when computed, will copy data from source to dest.
 
     """
-    if isinstance(source, PathLike):
+    if isinstance(source, (str, Path)):
         source_arr = read(source)
     else:
         source_arr = source
 
-    if isinstance(dest, PathLike):
+    if isinstance(dest, (str, Path)):
         dest_arr = access(dest, mode="a", write_empty_chunks=write_empty_chunks)
     else:
         dest_arr = dest
