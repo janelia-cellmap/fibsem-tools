@@ -1,9 +1,10 @@
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Literal, Sequence, Union
 
 import numpy as np
 from pydantic import BaseModel, PositiveInt, ValidationError, validator
 from xarray import DataArray
 from pydantic_zarr.core import GroupSpec, ArraySpec
+from fibsem_tools.io.util import normalize_chunks
 from fibsem_tools.metadata.transform import STTransform
 
 
@@ -126,11 +127,17 @@ class NeuroglancerN5Group(GroupSpec):
 
     @classmethod
     def from_xarrays(
-        cls, arrays: Iterable[DataArray], chunks: tuple[int, ...], **kwargs
+        cls,
+        arrays: Iterable[DataArray],
+        chunks: Union[tuple[tuple[int, ...]], Literal["auto"]],
+        **kwargs,
     ) -> "NeuroglancerN5Group":
+
+        _chunks = normalize_chunks(arrays, chunks)
+
         array_specs = {
-            f"s{idx}": ArraySpec.from_array(arr, chunks=chunks, **kwargs)
-            for idx, arr in enumerate(arrays)
+            f"s{idx}": ArraySpec.from_array(arr, chunks=cnks, **kwargs)
+            for idx, arr, cnks in zip(range(len(arrays)), arrays, _chunks)
         }
         attrs = NeuroglancerN5GroupMetadata.from_xarrays(arrays)
         return cls(attrs=attrs, members=array_specs)

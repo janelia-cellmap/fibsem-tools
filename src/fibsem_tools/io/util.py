@@ -10,6 +10,8 @@ import toolz as tz
 from dask import bag, delayed
 from typing import Protocol, runtime_checkable
 
+from xarray import DataArray
+
 JSON = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, None]
 Attrs = Dict[str, JSON]
 PathLike = Union[Path, str]
@@ -143,3 +145,51 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> Tuple[str, str, s
     if protocol:
         pre = f"{protocol}://{pre}"
     return pre, post, suffix
+
+
+def normalize_chunks(
+    arrays: Sequence[DataArray],
+    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], Literal["auto"]],
+) -> Tuple[Tuple[int, ...], ...]:
+    """
+    Normalize a chunk specification, given a list of arrays.
+
+    Parameters
+    ----------
+
+    arrays: Sequence[DataArray]
+        The list of arrays to define chunks for.
+    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], Literal["auto"]]
+        The specification of chunks. This parameter is either a tuple of tuple of ints,
+        in which case it is already normalized and it passes right through, or it is
+        a tuple of ints, which will be "broadcast" to the length of `arrays`, or it is
+        the string "auto", in which case the existing chunks on the arrays with be used
+        if they are chunked, and otherwise chunks will be set to the shape of each
+        array.
+
+    Returns
+    -------
+        Tuple[Tuple[int, ...], ...]
+    """
+    result: Tuple[Tuple[int, ...]] = ()
+    if chunks == "auto":
+        for arr in arrays:
+            if arr.chunks is None:
+                result += (arr.shape,)
+            else:
+                result += (arr.chunks,)
+    elif all(isinstance(c, tuple) for c in chunks):
+        result = chunks
+    else:
+        all_ints = all((isinstance(c, int) for c in chunks))
+        if all_ints:
+            result = (chunks,) * len(arrays)
+        else:
+            msg = f"All values in chunks must be ints. Got {chunks}"
+            raise ValueError(msg)
+
+    assert len(result) == len(arrays)
+    assert tuple(map(len, result)) == tuple(
+        x.ndim for x in arrays
+    ), "Number of chunks per array does not equal rank of arrays"
+    return result

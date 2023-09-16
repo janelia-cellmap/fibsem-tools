@@ -51,6 +51,5 @@ def test_multiscale_storage(temp_zarr, metadata_types: Tuple[str, ...]):
 
     array_urls = [f"{temp_zarr}/{ap}" for ap in array_paths]
     da.compute(store_blocks(multi, [access(a_url, mode="a") for a_url in array_urls]))
-
     assert dict(group.attrs) == g_spec.attrs
     assert all(read(a).chunks == chunks for a in array_urls)

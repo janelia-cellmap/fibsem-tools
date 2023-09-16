@@ -105,7 +105,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
     g_spec = multiscale_group(
         arrays=tuple(data.values()),
         array_paths=tuple(data.keys()),
-        chunks=(64, 64, 64),
+        chunks=((64, 64, 64),) * len(data),
         metadata_types=["cosem"],
     )
     g_spec.attrs.update(**_attrs)
