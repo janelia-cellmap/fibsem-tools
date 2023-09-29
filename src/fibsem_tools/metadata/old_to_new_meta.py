@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 import click
 from pydantic import BaseModel
 from xarray import DataArray
@@ -20,7 +20,8 @@ from cellmap_schemas.annotation import (
     AnnotationGroupAttrs,
     CropGroupAttrs,
 )
-
+from dotenv import load_dotenv
+load_dotenv()
 ome_adapters = get_adapters("0.4")
 out_chunks = (256,) * 3
 
@@ -54,9 +55,38 @@ class ImageRow(BaseModel):
 
 def get_airbase():
     from pyairtable import Api
-
     return Api(os.environ["AIRTABLE_API_KEY"]).base(os.environ["AIRTABLE_BASE_ID"])
 
+class AnnotationState(BaseModel):
+    present: Optional[bool]
+    annotated: Optional[bool]
+    sparse: Optional[bool]
+
+
+def class_encoding_from_airtable(image_name: str):
+    airbase = get_airbase()
+    annotation_table = airbase.table('annotation')
+    annotation_types = airbase.table('annotation_type').all(fields=['name','present', 'annotated', 'sparse'])
+    annotation_types_parsed = {a['id']: AnnotationState(**{**{'present': False, 'annotated': False, 'sparse': False}, **a['fields']}) for a in annotation_types}
+    result = annotation_table.first(
+        formula='{image} = "' + image_name + '"')
+    if result is None:
+        raise ValueError(f'Airtable does not contain a record named {image_name}')
+    else:
+        fields = result['fields']
+        out = fields.copy()
+        for key in tuple(fields.keys()):
+            try:
+                value_str, *rest = key.split('_')
+                value = int(value_str)
+                # raises if the prefix is not an int
+                annotation_type = annotation_types_parsed[fields[key][0]]
+                if annotation_type.annotated:
+                    out['_'.join(rest)] = int(value)
+            except ValueError:
+                # the field name was not of the form <number>_<class>
+                pass
+    return out       
 
 def image_from_airtable(image_name: str) -> ImageRow:
     airbase = get_airbase()
@@ -72,7 +102,7 @@ def image_from_airtable(image_name: str) -> ImageRow:
 
 
 def coords_from_airtable(image_name: str, shape: Tuple[int, ...]) -> STTransform:
-    return image_from_airtable(image_name).to_stt(shape=shape)
+    return image_from_airtable(image_name).to_stt().to_coords(shape=shape)
 
 
 def create_spec(
@@ -161,7 +191,7 @@ def split_annotations(
         from fibsem_tools.io.tif import access as access_tif
 
         _data = access_tif(source, memmap=False)
-        coords = coords_from_airtable(crop_name)
+        coords = coords_from_airtable(crop_name, _data.shape)
         data = DataArray(_data, coords=coords)
     else:
         data = read_xarray(source)
@@ -195,10 +225,10 @@ def split_annotations(
 @click.command
 @click.argument("source", type=click.STRING)
 @click.argument("dest", type=click.STRING)
-@click.option("--name", type=click.STRING)
+@click.argument("name", type=click.STRING)
 def cli(source, dest, name):
-    split_annotations(source, dest, name)
-
+    class_encoding = class_encoding_from_airtable(name)
+    split_annotations(source, dest, name, class_encoding)
 
 if __name__ == "__main__":
     cli()
