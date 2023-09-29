@@ -1,86 +1,117 @@
 import os
-from typing import Optional
+from typing import Dict, Tuple
 import click
+from pydantic import BaseModel
 from xarray import DataArray
 from fibsem_tools import read_xarray
-from fibsem_tools import access
 import numpy as np
 from fibsem_tools.io.zarr import get_store
-import fibsem_tools.metadata.groundtruth as gt
 from pydantic_zarr import GroupSpec, ArraySpec
-from pathlib import Path
 import zarr
 from zarr.storage import contains_array, contains_group
 from fibsem_tools.io.util import split_by_suffix
+from fibsem_tools.metadata.transform import STTransform
 from numcodecs import Blosc
 from xarray_ome_ngff import get_adapters
-import dask.array as da
 from zarr.errors import ContainsArrayError, ContainsGroupError
+from cellmap_schemas.annotation import (
+    SemanticSegmentation,
+    AnnotationArrayAttrs,
+    AnnotationGroupAttrs,
+    CropGroupAttrs,
+)
+
 ome_adapters = get_adapters("0.4")
 out_chunks = (256,) * 3
 
-annotation_type = gt.SemanticSegmentation(encoding={"absent": 0, "present": 1})
+annotation_type = SemanticSegmentation(encoding={"absent": 0, "present": 1})
 
 
-def split_annotations(source: str, dest: str, name: Optional[str] = None) -> zarr.Group:
-    pre, post, _ = split_by_suffix(dest, (".zarr",))
-    # fail fast if there's already a group there
-    store = get_store(pre)
-    if contains_group(store, post):
-        raise ContainsGroupError(f'{store.path}/{post}')
-    
-    if contains_array(store, post):
-        raise ContainsArrayError(f'{store.path}/{post}')
+class ImageRow(BaseModel):
+    id: str
+    size_x_pix: int
+    size_y_pix: int
+    size_z_pix: int
+    resolution_x_nm: float
+    resolution_y_nm: float
+    resolution_z_nm: float
+    offset_x_nm: float
+    offset_y_nm: float
+    offset_z_nm: float
+    value_type: str
+    image_type: str
+    title: str
 
-    tree = read_xarray(source)
-    # todo: don't assume the biggest array is named s0!
-    array_name = "s0"
-    source_xr: DataArray = tree[array_name].data
+    def to_stt(self):
+        return STTransform(
+            order="C",
+            units=("nm", "nm", "nm"),
+            axes=("z", "y", "x"),
+            scale=(self.resolution_z_nm, self.resolution_y_nm, self.resolution_x_nm),
+            translate=(self.offset_z_nm, self.offset_y_nm, self.offset_x_nm),
+        )
 
-    ome_meta = ome_adapters.multiscale_metadata([source_xr], [array_name])
-    if name is None:
-        crop_name = Path(source).stem
+
+def get_airbase():
+    from pyairtable import Api
+
+    return Api(os.environ["AIRTABLE_API_KEY"]).base(os.environ["AIRTABLE_BASE_ID"])
+
+
+def image_from_airtable(image_name: str) -> ImageRow:
+    airbase = get_airbase()
+    result = airbase.table("image").first(formula='{name} = "' + image_name + '"')
+    if result is None:
+        raise ValueError(f"Airtable does not contain a record named {image_name}")
     else:
-        crop_name = name
+        fields = result["fields"]
+        try:
+            return ImageRow(**fields, id=result["id"])
+        except KeyError as e:
+            raise ValueError(f"Missing field in airtable: {e}")
 
-    uniques = da.unique(source_xr.data).compute()
-    all_class_names = tuple(g.short for g in gt.classNameDict.values())
-    observed_class_names = [gt.classNameDict.get(u).short for u in uniques]
-    annotation_group_names = tuple(
-        c.lower().replace(" ", "_") for c in observed_class_names
-    )
+
+def coords_from_airtable(image_name: str, shape: Tuple[int, ...]) -> STTransform:
+    return image_from_airtable(image_name).to_stt(shape=shape)
+
+
+def create_spec(
+    data: DataArray, crop_name: str, array_name: str, class_encoding: Dict[str, int]
+):
+
+    ome_meta = ome_adapters.multiscale_metadata([data], [array_name])
+
     annotation_group_specs: dict[str, GroupSpec] = {}
 
-    for idx, un in enumerate(uniques):
-        class_name = gt.classNameDict.get(un).short
-        data_unique = (source_xr == un).astype("uint8").compute()
+    for class_name, value in class_encoding.items():
+        data_unique = (data == value).astype("uint8")
         num_present = int(data_unique.sum())
         num_absent = data_unique.size - num_present
         hist = {"absent": num_absent}
 
-        annotation_group_attrs = gt.AnnotationGroupAttrs(
+        annotation_group_attrs = AnnotationGroupAttrs(
             class_name=class_name, description="", annotation_type=annotation_type
         )
 
-        annotation_array_attrs = gt.AnnotationArrayAttrs(
+        annotation_array_attrs = AnnotationArrayAttrs(
             class_name=class_name, histogram=hist, annotation_type=annotation_type
         )
         label_array_spec = ArraySpec.from_array(
             data_unique,
             chunks=out_chunks,
             compressor=Blosc(cname="zstd"),
-            attrs=gt.annotation_attrs_wrapper(annotation_array_attrs.dict()),
+            attrs={"cellmap": {"annotation": annotation_array_attrs}},
         )
 
-        annotation_group_specs[annotation_group_names[idx]] = GroupSpec(
+        annotation_group_specs[class_name] = GroupSpec(
             attrs={
-                **gt.annotation_attrs_wrapper(annotation_group_attrs.dict()),
+                "cellmap": {"annotation": annotation_group_attrs},
                 "multiscales": [ome_meta.dict()],
             },
             members={array_name: label_array_spec},
         )
 
-    crop_attrs = gt.CropGroupAttrs(
+    crop_attrs = CropGroupAttrs(
         name=crop_name,
         description=None,
         created_by=[],
@@ -88,26 +119,72 @@ def split_annotations(source: str, dest: str, name: Optional[str] = None) -> zar
         start_date=None,
         end_date=None,
         duration_days=None,
-        class_names=all_class_names,
-        index=dict(zip(observed_class_names, annotation_group_specs)),
+        class_names=tuple(class_encoding.keys()),
     )
 
     crop_group_spec = GroupSpec(
-        attrs=gt.annotation_attrs_wrapper(crop_attrs.dict()),
+        attrs={"cellmap": {"annotation": {crop_attrs}}},
         members=annotation_group_specs,
     )
 
-    crop_group = crop_group_spec.to_zarr(
+    return crop_group_spec
+
+
+def guess_format(path: str):
+    if path.endswith(".tiff") or path.endswith(".tif"):
+        return "tif"
+    elif ".zarr" in path:
+        return "zarr"
+    elif ".n5" in path:
+        return "n5"
+    else:
+        raise ValueError(
+            f"Could not figure out what format the file at {path} is using."
+        )
+
+
+def split_annotations(
+    source: str, dest: str, crop_name: str, class_encoding: Dict[str, int]
+) -> zarr.Group:
+
+    pre, post, _ = split_by_suffix(dest, (".zarr",))
+    # fail fast if there's already a group there
+
+    store = get_store(pre)
+    if contains_group(store, post):
+        raise ContainsGroupError(f"{store.path}/{post}")
+
+    if contains_array(store, post):
+        raise ContainsArrayError(f"{store.path}/{post}")
+    source_fmt = guess_format(source)
+    if source_fmt == "tif":
+        from fibsem_tools.io.tif import access as access_tif
+
+        _data = access_tif(source, memmap=False)
+        coords = coords_from_airtable(crop_name)
+        data = DataArray(_data, coords=coords)
+    else:
+        data = read_xarray(source)
+
+    # todo: don't assume the biggest array is named s0!
+    array_name = "s0"
+
+    spec = create_spec(
+        data=data,
+        crop_name=crop_name,
+        array_name=array_name,
+        class_encoding=class_encoding,
+    )
+
+    crop_group = spec.to_zarr(
         zarr.NestedDirectoryStore(pre), path=post, overwrite=False
     )
 
-    # save data inside arrays
-
-    for idx, un in enumerate(uniques):
-        data_unique = np.array((source_xr == un).astype("uint8"))
+    for class_name, value in class_encoding.items():
+        data_unique = np.array((data == value).astype("uint8"))
         arr = zarr.Array(
             store=crop_group.store,
-            path=os.path.join(crop_group.path, annotation_group_names[idx], array_name),
+            path=os.path.join(crop_group.path, class_name, array_name),
             write_empty_chunks=False,
         )
         arr[:] = data_unique
@@ -122,5 +199,6 @@ def split_annotations(source: str, dest: str, name: Optional[str] = None) -> zar
 def cli(source, dest, name):
     split_annotations(source, dest, name)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     cli()
