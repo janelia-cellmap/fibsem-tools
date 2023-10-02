@@ -1,16 +1,15 @@
 import os
-from typing import Dict, Optional, Tuple
+from typing import Dict
 import click
-from pydantic import BaseModel
 from xarray import DataArray
 from fibsem_tools import read_xarray
 import numpy as np
+from fibsem_tools.io.airtable import class_encoding_from_airtable_by_image, coords_from_airtable
 from fibsem_tools.io.zarr import get_store
 from pydantic_zarr import GroupSpec, ArraySpec
 import zarr
 from zarr.storage import contains_array, contains_group
 from fibsem_tools.io.util import split_by_suffix
-from fibsem_tools.metadata.transform import STTransform
 from numcodecs import Blosc
 from xarray_ome_ngff import get_adapters
 from zarr.errors import ContainsArrayError, ContainsGroupError
@@ -19,90 +18,13 @@ from cellmap_schemas.annotation import (
     AnnotationArrayAttrs,
     AnnotationGroupAttrs,
     CropGroupAttrs,
+    wrap_attributes
 )
-from dotenv import load_dotenv
-load_dotenv()
+
 ome_adapters = get_adapters("0.4")
 out_chunks = (256,) * 3
 
 annotation_type = SemanticSegmentation(encoding={"absent": 0, "present": 1})
-
-
-class ImageRow(BaseModel):
-    id: str
-    size_x_pix: int
-    size_y_pix: int
-    size_z_pix: int
-    resolution_x_nm: float
-    resolution_y_nm: float
-    resolution_z_nm: float
-    offset_x_nm: float
-    offset_y_nm: float
-    offset_z_nm: float
-    value_type: str
-    image_type: str
-    title: str
-
-    def to_stt(self):
-        return STTransform(
-            order="C",
-            units=("nm", "nm", "nm"),
-            axes=("z", "y", "x"),
-            scale=(self.resolution_z_nm, self.resolution_y_nm, self.resolution_x_nm),
-            translate=(self.offset_z_nm, self.offset_y_nm, self.offset_x_nm),
-        )
-
-
-def get_airbase():
-    from pyairtable import Api
-    return Api(os.environ["AIRTABLE_API_KEY"]).base(os.environ["AIRTABLE_BASE_ID"])
-
-class AnnotationState(BaseModel):
-    present: Optional[bool]
-    annotated: Optional[bool]
-    sparse: Optional[bool]
-
-
-def class_encoding_from_airtable(image_name: str):
-    airbase = get_airbase()
-    annotation_table = airbase.table('annotation')
-    annotation_types = airbase.table('annotation_type').all(fields=['name','present', 'annotated', 'sparse'])
-    annotation_types_parsed = {a['id']: AnnotationState(**{**{'present': False, 'annotated': False, 'sparse': False}, **a['fields']}) for a in annotation_types}
-    result = annotation_table.first(
-        formula='{image} = "' + image_name + '"')
-    if result is None:
-        raise ValueError(f'Airtable does not contain a record named {image_name}')
-    else:
-        fields = result['fields']
-        out = fields.copy()
-        for key in tuple(fields.keys()):
-            try:
-                value_str, *rest = key.split('_')
-                value = int(value_str)
-                # raises if the prefix is not an int
-                annotation_type = annotation_types_parsed[fields[key][0]]
-                if annotation_type.annotated:
-                    out['_'.join(rest)] = int(value)
-            except ValueError:
-                # the field name was not of the form <number>_<class>
-                pass
-    return out       
-
-def image_from_airtable(image_name: str) -> ImageRow:
-    airbase = get_airbase()
-    result = airbase.table("image").first(formula='{name} = "' + image_name + '"')
-    if result is None:
-        raise ValueError(f"Airtable does not contain a record named {image_name}")
-    else:
-        fields = result["fields"]
-        try:
-            return ImageRow(**fields, id=result["id"])
-        except KeyError as e:
-            raise ValueError(f"Missing field in airtable: {e}")
-
-
-def coords_from_airtable(image_name: str, shape: Tuple[int, ...]) -> STTransform:
-    return image_from_airtable(image_name).to_stt().to_coords(shape=shape)
 
 
 def create_spec(
@@ -153,7 +75,7 @@ def create_spec(
     )
 
     crop_group_spec = GroupSpec(
-        attrs={"cellmap": {"annotation": {crop_attrs}}},
+        attrs=wrap_attributes(crop_attrs).dict(),
         members=annotation_group_specs,
     )
 
@@ -169,7 +91,8 @@ def guess_format(path: str):
         return "n5"
     else:
         raise ValueError(
-            f"Could not figure out what format the file at {path} is using."
+            f"Could not figure out what format the file at {path} is using. ",
+            "Failed to find tif, tiff, n5, and zarr extensions."
         )
 
 
@@ -191,7 +114,7 @@ def split_annotations(
         from fibsem_tools.io.tif import access as access_tif
 
         _data = access_tif(source, memmap=False)
-        coords = coords_from_airtable(crop_name, _data.shape)
+        coords = coords_from_airtable(crop_name, shape=_data.shape)
         data = DataArray(_data, coords=coords)
     else:
         data = read_xarray(source)
@@ -227,7 +150,7 @@ def split_annotations(
 @click.argument("dest", type=click.STRING)
 @click.argument("name", type=click.STRING)
 def cli(source, dest, name):
-    class_encoding = class_encoding_from_airtable(name)
+    class_encoding = class_encoding_from_airtable_by_image(name)
     split_annotations(source, dest, name, class_encoding)
 
 if __name__ == "__main__":
