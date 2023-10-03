@@ -133,7 +133,7 @@ def split_annotations(
         data = read_xarray(source)
 
 
-    multi = {m.name: m for m in multiscale(data, (2,2,2), windowed_mode, chunks=out_chunks)}
+    multi = {m.name: m for m in multiscale(data, windowed_mode, (2,2,2), chunks=out_chunks)}
 
     spec = create_spec(
         data=multi,
