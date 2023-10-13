@@ -164,7 +164,7 @@ def split_annotations(
 @click.argument("name", type=click.STRING)
 def cli(source, dest, name):
     class_encoding = class_encoding_from_airtable_by_image(name)
-    split_annotations(source, dest, name, class_encoding, chunks)
+    split_annotations(source, dest, name, class_encoding)
 
 if __name__ == "__main__":
     cli()
