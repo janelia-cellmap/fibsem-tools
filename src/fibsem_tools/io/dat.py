@@ -1,10 +1,10 @@
 """
-Functions for reading FIB-SEM data from Harald Hess' proprietary format
-Adapted from https://github.com/janelia-cosem/FIB-SEM-Aligner/blob/master/fibsem.py
+Functions for reading FIB-SEM data from Shan Xu's proprietary format. The core routines here were 
+adapted from David Hoffman's work which can be found in https://github.com/janelia-cellmap/FIB-SEM-Aligner/blob/master/fibsem.py
 """
 from __future__ import annotations
 import os
-from typing import Any, Dict, Literal, Sequence, Tuple
+from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
 
 import dask.array as da
 import numpy as np
@@ -931,13 +931,36 @@ def create_datatree(
 
 
 def to_xarray(
-    element: FIBSEMData | FibsemDataset,
-    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    element: Union[FIBSEMData, FibsemDataset],
+    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
-    name: str | None = None,
+    attrs: Optional[Dict[str, Any]] = None,
+    name: Optional[str] = None,
 ):
+    """
+    Convert an instance of FIBSEMData or a FibsemDataset to an xarray data structure. 
+    `FIBSEMData` is converted to an `xarray.DataArray`; FibsemDataset will eventually 
+    be converted to a `DataTree` object, but this functionality has not been implemented
+    yet, so supplying a FibsemDataset to this function will raise `NotImplementedError`.
+
+    Parameters
+    ----------
+
+    element: Union[FIBSEMData, FibsemDataset]
+        The FIBSEM data to convert to an xarray data structure
+    chunks: Union[Literal["auto"], Tuple[int, ...]], default is "auto"
+        The chunking to use. Only meaningful if dask middleware is used.
+    coords: Any, default is "auto"
+        Coordinates to use. The default behavior, signalled by the string "auto",
+        is to infer to coordinates from the FIBSEM data.
+    attrs: Optional[Dict[str, Any]], default is `None`
+        Any additional attributes to give the resulting xarray data structure. Optional.
+    name: Optional[str] , default is `None`
+        The name for the resulting xarray data structure. Optional.
+
+
+    """
     if isinstance(element, FibsemDataset):
         return create_datatree(
             element,
