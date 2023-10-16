@@ -119,8 +119,8 @@ def split_annotations(
     else:
         data = read_xarray(source)
 
-    # todo: don't assume the biggest array is named s0!
-    array_name = "s0"
+
+    multi = {m.name: m for m in multiscale(data, windowed_mode, (2,2,2), chunks=out_chunks)}
 
     spec = create_spec(
         data=data,
