@@ -206,7 +206,13 @@ def get_url(node: Union[zarr.Group, zarr.Array]):
                 protocol = store.fs.protocol
         else:
             protocol = "file"
-        return f"{protocol}://{os.path.join(node.store.path, node.path)}"
+        
+        # fsstore keeps the protocol in the path, but not s3store
+        if '://' in store.path:
+            store_path = store.path.split('://')[-1]
+        else:
+            store_path = store.path
+        return f"{protocol}://{os.path.join(store_path, node.path)}"
     else:
         raise ValueError(
             f"""
