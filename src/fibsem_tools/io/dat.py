@@ -17,8 +17,7 @@ from fibsem_tools.io.xr import stt_coord
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3_555_587_570
-# This is the size of the header, in bytes. Everything beyond this number of bytes is
-# data.
+# This is the size of the header, in bytes.
 OFFSET = 1024
 
 
@@ -47,7 +46,8 @@ class FIBSEMHeader:
 
     def to_native_types(self):
         """
-        Replace numpy numeric types with stdlib equivalents
+        Replace numpy numeric types with stdlib equivalents. This method modifies an 
+        object in place, which is terrible. Sorry about that.
         """
 
         for k, v in self.__dict__.items():
@@ -124,8 +124,22 @@ class _DTypeDict:
         return np.dtype(self.dict)
 
 
-def read_header(path: PathLike):
-    # make emtpy header to fill
+def parse_header(header_bytes: bytes) -> FIBSEMHeader:
+    """
+    Parse bytes into a FIBSEMHeader.
+
+    Parameters
+    ----------
+
+    header_bytes : bytes
+        A `bytes` object representing the header of a .dat file. Conventionally,
+        the header is the first 1024 bytes of the file.
+
+    Returns
+    -------
+
+    FIBSEMHeader
+    """
     header_dtype = _DTypeDict()
     header_dtype.update(
         [
@@ -140,478 +154,489 @@ def read_header(path: PathLike):
         [">u4", ">u2", ">u2", ">S10", ">f8", ">u1", ">u1"],
         [0, 4, 6, 8, 24, 32, 33],
     )
-    # read initial header
-    with open(path, mode="rb") as fobj:
-        base_header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
+    
+    base_header = np.frombuffer(header_bytes, dtype=header_dtype.dtype, count=1)
 
-        if len(base_header) == 0:
-            raise RuntimeError(f"Base header is missing for {fobj.name}")
-
-        fibsem_header = FIBSEMHeader(
-            **dict(zip(base_header.dtype.names, base_header[0]))
+    fibsem_header = FIBSEMHeader(
+        **dict(zip(base_header.dtype.names, base_header[0]))
+    )
+    if fibsem_header.FileMagicNum != MAGIC_NUMBER:
+        raise RuntimeError(
+            f"""
+            FileMagicNum should be {MAGIC_NUMBER} but is 
+            {fibsem_header.FileMagicNum}
+            """
         )
-        # now fobj is at position 34, return to 0
-        fobj.seek(0, os.SEEK_SET)
-        if fibsem_header.FileMagicNum != MAGIC_NUMBER:
-            raise RuntimeError(
-                f"""
-                FileMagicNum should be {MAGIC_NUMBER} but is 
-                {fibsem_header.FileMagicNum}
-                """
-            )
 
-        _scaling_offset = 36
-        if fibsem_header.FileVersion == 1:
-            header_dtype.update(
-                "Scaling", (">f8", (fibsem_header.ChanNum, 4)), _scaling_offset
-            )
-        elif fibsem_header.FileVersion in {2, 3, 4, 5, 6}:
-            header_dtype.update(
-                "Scaling", (">f4", (fibsem_header.ChanNum, 4)), _scaling_offset
-            )
-        else:
-            # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain,
-            # 2nd order, 3rd order)
-            header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
-
-        if fibsem_header.FileVersion >= 9:
-            header_dtype.update(
-                ["Restart", "StageMove", "FirstX", "FirstY"],
-                [">u1", ">u1", ">i4", ">i4"],
-                [68, 69, 70, 74],
-            )
-
+    _scaling_offset = 36
+    if fibsem_header.FileVersion == 1:
         header_dtype.update(
-            ["XResolution", "YResolution"],  # X Resolution  # Y Resolution
-            [">u4", ">u4"],
-            [100, 104],
+            "Scaling", (">f8", (fibsem_header.ChanNum, 4)), _scaling_offset
+        )
+    elif fibsem_header.FileVersion in {2, 3, 4, 5, 6}:
+        header_dtype.update(
+            "Scaling", (">f4", (fibsem_header.ChanNum, 4)), _scaling_offset
+        )
+    else:
+        # Read in AI channel scaling factors, (col#: AI#), (row#: offset, gain,
+        # 2nd order, 3rd order)
+        header_dtype.update("Scaling", (">f4", (2, 4)), _scaling_offset)
+
+    if fibsem_header.FileVersion >= 9:
+        header_dtype.update(
+            ["Restart", "StageMove", "FirstX", "FirstY"],
+            [">u1", ">u1", ">i4", ">i4"],
+            [68, 69, 70, 74],
         )
 
-        if fibsem_header.FileVersion in {1, 2, 3}:
-            header_dtype.update(
-                ["Oversampling", "AIDelay"],  # AI oversampling  # Read AI delay (
-                [">u1", ">i2"],
-                [108, 109],
-            )
-        else:
-            header_dtype.update("Oversampling", ">u2", 108)  # AI oversampling
+    header_dtype.update(
+        ["XResolution", "YResolution"],  # X Resolution  # Y Resolution
+        [">u4", ">u4"],
+        [100, 104],
+    )
 
-        header_dtype.update("ZeissScanSpeed", ">u1", 111)  # Scan speed (Zeiss #)
-        if fibsem_header.FileVersion in {1, 2, 3}:
-            header_dtype.update(
-                [
-                    "ScanRate",  # Actual AO (scanning) rate
-                    "FramelineRampdownRatio",  # Frameline rampdown ratio
-                    "Xmin",  # X coil minimum voltage
-                    "Xmax",  # X coil maximum voltage
-                ],
-                [">f8", ">f8", ">f8", ">f8"],
-                [112, 120, 128, 136],
-            )
-            # fibsem_header.Detmin = -10 # Detector minimum voltage
-            # fibsem_header.Detmax = 10 # Detector maximum voltage
-        else:
-            header_dtype.update(
-                [
-                    "ScanRate",  # Actual AO (scanning) rate
-                    "FramelineRampdownRatio",  # Frameline rampdown ratio
-                    "Xmin",  # X coil minimum voltage
-                    "Xmax",  # X coil maximum voltage
-                    "Detmin",  # Detector minimum voltage
-                    "Detmax",  # Detector maximum voltage
-                    "DecimatingFactor",  # Decimating factor
-                ],
-                [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u2"],
-                [112, 116, 120, 124, 128, 132, 136],
-            )
+    if fibsem_header.FileVersion in {1, 2, 3}:
+        header_dtype.update(
+            ["Oversampling", "AIDelay"],  # AI oversampling  # Read AI delay (
+            [">u1", ">i2"],
+            [108, 109],
+        )
+    else:
+        header_dtype.update("Oversampling", ">u2", 108)  # AI oversampling
 
+    header_dtype.update("ZeissScanSpeed", ">u1", 111)  # Scan speed (Zeiss #)
+    if fibsem_header.FileVersion in {1, 2, 3}:
         header_dtype.update(
             [
-                "AI1",  # AI Ch1
-                "AI2",  # AI Ch2
-                "AI3",  # AI Ch3
-                "AI4",  # AI Ch4
+                "ScanRate",  # Actual AO (scanning) rate
+                "FramelineRampdownRatio",  # Frameline rampdown ratio
+                "Xmin",  # X coil minimum voltage
+                "Xmax",  # X coil maximum voltage
             ],
-            [">u1", ">u1", ">u1", ">u1"],
-            [151, 152, 153, 154],
+            [">f8", ">f8", ">f8", ">f8"],
+            [112, 120, 128, 136],
         )
-
-        if fibsem_header.FileVersion >= 9:
-            header_dtype.update(
-                ["SampleID"],
-                ["S25"],
-                [155],
-            )
-
+        # fibsem_header.Detmin = -10 # Detector minimum voltage
+        # fibsem_header.Detmax = 10 # Detector maximum voltage
+    else:
         header_dtype.update(
-            ["Notes"],
-            [">S200"],
-            [180],
+            [
+                "ScanRate",  # Actual AO (scanning) rate
+                "FramelineRampdownRatio",  # Frameline rampdown ratio
+                "Xmin",  # X coil minimum voltage
+                "Xmax",  # X coil maximum voltage
+                "Detmin",  # Detector minimum voltage
+                "Detmax",  # Detector maximum voltage
+                "DecimatingFactor",  # Decimating factor
+            ],
+            [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u2"],
+            [112, 116, 120, 124, 128, 132, 136],
         )
 
-        if fibsem_header.FileVersion in {1, 2}:
-            header_dtype.update(
-                [
-                    "DetA",  # Name of detector A
-                    "DetB",  # Name of detector B
-                    "DetC",  # Name of detector C
-                    "DetD",  # Name of detector D
-                    "Mag",  # Magnification
-                    "PixelSize",  # Pixel size in nm
-                    "WD",  # Working distance in mm
-                    "EHT",  # EHT in kV
-                    "SEMApr",  # SEM aperture number
-                    "HighCurrent",  # high current mode (1=on, 0=off)
-                    "SEMCurr",  # SEM probe current in A
-                    "SEMRot",  # SEM scan roation in degree
-                    "ChamVac",  # Chamber vacuum
-                    "GunVac",  # E-gun vacuum
-                    "SEMStiX",  # SEM stigmation X
-                    "SEMStiY",  # SEM stigmation Y
-                    "SEMAlnX",  # SEM aperture alignment X
-                    "SEMAlnY",  # SEM aperture alignment Y
-                    "StageX",  # Stage position X in mm
-                    "StageY",  # Stage position Y in mm
-                    "StageZ",  # Stage position Z in mm
-                    "StageT",  # Stage position T in degree
-                    "StageR",  # Stage position R in degree
-                    "StageM",  # Stage position M in mm
-                    "BrightnessA",  # Detector A brightness (
-                    "ContrastA",  # Detector A contrast (
-                    "BrightnessB",  # Detector B brightness (
-                    "ContrastB",  # Detector B contrast (
-                    "Mode",
-                    # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM
-                    # Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External,
-                    # 9=External+SEM
-                    "FIBFocus",  # FIB focus in kV
-                    "FIBProb",  # FIB probe number
-                    "FIBCurr",  # FIB emission current
-                    "FIBRot",  # FIB scan rotation
-                    "FIBAlnX",  # FIB aperture alignment X
-                    "FIBAlnY",  # FIB aperture alignment Y
-                    "FIBStiX",  # FIB stigmation X
-                    "FIBStiY",  # FIB stigmation Y
-                    "FIBShiftX",  # FIB beam shift X in micron
-                    "FIBShiftY",  # FIB beam shift Y in micron
-                ],
-                [
-                    ">S10",
-                    ">S18",
-                    ">S20",
-                    ">S20",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">u1",
-                    ">u1",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">u1",
-                    ">f8",
-                    ">u1",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                    ">f8",
-                ],
-                [
-                    380,
-                    390,
-                    700,
-                    720,
-                    408,
-                    416,
-                    424,
-                    432,
-                    440,
-                    441,
-                    448,
-                    456,
-                    464,
-                    472,
-                    480,
-                    488,
-                    496,
-                    504,
-                    512,
-                    520,
-                    528,
-                    536,
-                    544,
-                    552,
-                    560,
-                    568,
-                    576,
-                    584,
-                    600,
-                    608,
-                    616,
-                    624,
-                    632,
-                    640,
-                    648,
-                    656,
-                    664,
-                    672,
-                    680,
-                ],
-            )
-        else:
-            header_dtype.update(
-                [
-                    "DetA",  # Name of detector A
-                    "DetB",  # Name of detector B
-                    "DetC",  # Name of detector C
-                    "DetD",  # Name of detector D
-                    "Mag",  # Magnification
-                    "PixelSize",  # Pixel size in nm
-                    "WD",  # Working distance in mm
-                    "EHT",  # EHT in kV
-                    "SEMApr",  # SEM aperture number
-                    "HighCurrent",  # high current mode (1=on, 0=off)
-                    "SEMCurr",  # SEM probe current in A
-                    "SEMRot",  # SEM scan roation in degree
-                    "ChamVac",  # Chamber vacuum
-                    "GunVac",  # E-gun vacuum
-                    "SEMShiftX",  # SEM beam shift X
-                    "SEMShiftY",  # SEM beam shift Y
-                    "SEMStiX",  # SEM stigmation X
-                    "SEMStiY",  # SEM stigmation Y
-                    "SEMAlnX",  # SEM aperture alignment X
-                    "SEMAlnY",  # SEM aperture alignment Y
-                    "StageX",  # Stage position X in mm
-                    "StageY",  # Stage position Y in mm
-                    "StageZ",  # Stage position Z in mm
-                    "StageT",  # Stage position T in degree
-                    "StageR",  # Stage position R in degree
-                    "StageM",  # Stage position M in mm
-                    "BrightnessA",  # Detector A brightness (#)
-                    "ContrastA",  # Detector A contrast (#)
-                    "BrightnessB",  # Detector B brightness (#)
-                    "ContrastB",  # Detector B contrast (#)
-                    "Mode",
-                    # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM
-                    # Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External,
-                    # 9=External+SEM
-                    "FIBFocus",  # FIB focus in kV
-                    "FIBProb",  # FIB probe number
-                    "FIBCurr",  # FIB emission current
-                    "FIBRot",  # FIB scan rotation
-                    "FIBAlnX",  # FIB aperture alignment X
-                    "FIBAlnY",  # FIB aperture alignment Y
-                    "FIBStiX",  # FIB stigmation X
-                    "FIBStiY",  # FIB stigmation Y
-                    "FIBShiftX",  # FIB beam shift X in micron
-                    "FIBShiftY",  # FIB beam shift Y in micron
-                ],
-                [
-                    ">S10",
-                    ">S18",
-                    ">S20",
-                    ">S20",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">u1",
-                    ">u1",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">u1",
-                    ">f4",
-                    ">u1",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                ],
-                [
-                    380,
-                    390,
-                    410,
-                    430,
-                    460,
-                    464,
-                    468,
-                    472,
-                    480,
-                    481,
-                    490,
-                    494,
-                    498,
-                    502,
-                    510,
-                    514,
-                    518,
-                    522,
-                    526,
-                    530,
-                    534,
-                    538,
-                    542,
-                    546,
-                    550,
-                    554,
-                    560,
-                    564,
-                    568,
-                    572,
-                    600,
-                    604,
-                    608,
-                    620,
-                    624,
-                    628,
-                    632,
-                    636,
-                    640,
-                    644,
-                    648,
-                ],
-            )
+    header_dtype.update(
+        [
+            "AI1",  # AI Ch1
+            "AI2",  # AI Ch2
+            "AI3",  # AI Ch3
+            "AI4",  # AI Ch4
+        ],
+        [">u1", ">u1", ">u1", ">u1"],
+        [151, 152, 153, 154],
+    )
 
-        if fibsem_header.FileVersion >= 5:
-            header_dtype.update(
-                [
-                    "MillingXResolution",  # FIB milling X resolution
-                    "MillingYResolution",  # FIB milling Y resolution
-                    "MillingXSize",  # FIB milling X size (um)
-                    "MillingYSize",  # FIB milling Y size (um)
-                    "MillingULAng",  # FIB milling upper left inner angle (deg)
-                    "MillingURAng",  # FIB milling upper right inner angle (deg)
-                    "MillingLineTime",  # FIB line milling time (s)
-                    "FIBFOV",  # FIB FOV (um)
-                    "MillingLinesPerImage",  # FIB milling lines per image
-                    "MillingPIDOn",  # FIB milling PID on
-                    "MillingPIDMeasured",  # FIB milling PID measured (0:specimen,
-                    # 1:beamdump)
-                    "MillingPIDTarget",  # FIB milling PID target
-                    "MillingPIDTargetSlope",  # FIB milling PID target slope
-                    "MillingPIDP",  # FIB milling PID P
-                    "MillingPIDI",  # FIB milling PID I
-                    "MillingPIDD",  # FIB milling PID D
-                    "MachineID",  # Machine ID
-                    "SEMSpecimenI",  # SEM specimen current (nA)
-                ],
-                [
-                    ">u4",
-                    ">u4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">u2",
-                    ">u1",
-                    ">u1",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">f4",
-                    ">S30",
-                    ">f4",
-                ],
-                [
-                    652,
-                    656,
-                    660,
-                    664,
-                    668,
-                    672,
-                    676,
-                    680,
-                    684,
-                    686,
-                    689,
-                    690,
-                    694,
-                    698,
-                    702,
-                    706,
-                    800,
-                    980,
-                ],
-            )
+    if fibsem_header.FileVersion >= 9:
+        header_dtype.update(
+            ["SampleID"],
+            ["S25"],
+            [155],
+        )
 
-        if fibsem_header.FileVersion >= 6:
-            header_dtype.update(
-                [
-                    "Temperature",  # Temperature (F)
-                    "FaradayCupI",  # Faraday cup current (nA)
-                    "FIBSpecimenI",  # FIB specimen current (nA)
-                    "BeamDump1I",  # Beam dump 1 current (nA)
-                    "SEMSpecimenICurrent",  # SEM specimen current (nA)
-                    "MillingYVoltage",  # Milling Y voltage (V)
-                    "FocusIndex",  # Focus index
-                    "FIBSliceNum",  # FIB slice #
-                ],
-                [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u4"],
-                [850, 854, 858, 862, 866, 870, 874, 878],
-            )
-        if fibsem_header.FileVersion >= 8:
-            header_dtype.update(
-                [
-                    "BeamDump2I",  # Beam dump 2 current (nA)
-                    "MillingI",  # Milling current (nA)
-                ],
-                [">f4", ">f4"],
-                [882, 886],
-            )
-        header_dtype.update("FileLength", ">i8", 1000)  # Read in file length in bytes
+    header_dtype.update(
+        ["Notes"],
+        [">S200"],
+        [180],
+    )
 
-        # read header
-        header = np.fromfile(fobj, dtype=header_dtype.dtype, count=1)
-        fibsem_header = FIBSEMHeader(**dict(zip(header.dtype.names, header[0])))
-        fibsem_header.to_native_types()
+    if fibsem_header.FileVersion in {1, 2}:
+        header_dtype.update(
+            [
+                "DetA",  # Name of detector A
+                "DetB",  # Name of detector B
+                "DetC",  # Name of detector C
+                "DetD",  # Name of detector D
+                "Mag",  # Magnification
+                "PixelSize",  # Pixel size in nm
+                "WD",  # Working distance in mm
+                "EHT",  # EHT in kV
+                "SEMApr",  # SEM aperture number
+                "HighCurrent",  # high current mode (1=on, 0=off)
+                "SEMCurr",  # SEM probe current in A
+                "SEMRot",  # SEM scan roation in degree
+                "ChamVac",  # Chamber vacuum
+                "GunVac",  # E-gun vacuum
+                "SEMStiX",  # SEM stigmation X
+                "SEMStiY",  # SEM stigmation Y
+                "SEMAlnX",  # SEM aperture alignment X
+                "SEMAlnY",  # SEM aperture alignment Y
+                "StageX",  # Stage position X in mm
+                "StageY",  # Stage position Y in mm
+                "StageZ",  # Stage position Z in mm
+                "StageT",  # Stage position T in degree
+                "StageR",  # Stage position R in degree
+                "StageM",  # Stage position M in mm
+                "BrightnessA",  # Detector A brightness (
+                "ContrastA",  # Detector A contrast (
+                "BrightnessB",  # Detector B brightness (
+                "ContrastB",  # Detector B contrast (
+                "Mode",
+                # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM
+                # Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External,
+                # 9=External+SEM
+                "FIBFocus",  # FIB focus in kV
+                "FIBProb",  # FIB probe number
+                "FIBCurr",  # FIB emission current
+                "FIBRot",  # FIB scan rotation
+                "FIBAlnX",  # FIB aperture alignment X
+                "FIBAlnY",  # FIB aperture alignment Y
+                "FIBStiX",  # FIB stigmation X
+                "FIBStiY",  # FIB stigmation Y
+                "FIBShiftX",  # FIB beam shift X in micron
+                "FIBShiftY",  # FIB beam shift Y in micron
+            ],
+            [
+                ">S10",
+                ">S18",
+                ">S20",
+                ">S20",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">u1",
+                ">u1",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">u1",
+                ">f8",
+                ">u1",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+                ">f8",
+            ],
+            [
+                380,
+                390,
+                700,
+                720,
+                408,
+                416,
+                424,
+                432,
+                440,
+                441,
+                448,
+                456,
+                464,
+                472,
+                480,
+                488,
+                496,
+                504,
+                512,
+                520,
+                528,
+                536,
+                544,
+                552,
+                560,
+                568,
+                576,
+                584,
+                600,
+                608,
+                616,
+                624,
+                632,
+                640,
+                648,
+                656,
+                664,
+                672,
+                680,
+            ],
+        )
+    else:
+        header_dtype.update(
+            [
+                "DetA",  # Name of detector A
+                "DetB",  # Name of detector B
+                "DetC",  # Name of detector C
+                "DetD",  # Name of detector D
+                "Mag",  # Magnification
+                "PixelSize",  # Pixel size in nm
+                "WD",  # Working distance in mm
+                "EHT",  # EHT in kV
+                "SEMApr",  # SEM aperture number
+                "HighCurrent",  # high current mode (1=on, 0=off)
+                "SEMCurr",  # SEM probe current in A
+                "SEMRot",  # SEM scan roation in degree
+                "ChamVac",  # Chamber vacuum
+                "GunVac",  # E-gun vacuum
+                "SEMShiftX",  # SEM beam shift X
+                "SEMShiftY",  # SEM beam shift Y
+                "SEMStiX",  # SEM stigmation X
+                "SEMStiY",  # SEM stigmation Y
+                "SEMAlnX",  # SEM aperture alignment X
+                "SEMAlnY",  # SEM aperture alignment Y
+                "StageX",  # Stage position X in mm
+                "StageY",  # Stage position Y in mm
+                "StageZ",  # Stage position Z in mm
+                "StageT",  # Stage position T in degree
+                "StageR",  # Stage position R in degree
+                "StageM",  # Stage position M in mm
+                "BrightnessA",  # Detector A brightness (#)
+                "ContrastA",  # Detector A contrast (#)
+                "BrightnessB",  # Detector B brightness (#)
+                "ContrastB",  # Detector B contrast (#)
+                "Mode",
+                # FIB mode: 0=SEM, 1=FIB, 2=Milling, 3=SEM+FIB, 4=Mill+SEM, 5=SEM
+                # Drift Correction, 6=FIB Drift Correction, 7=No Beam, 8=External,
+                # 9=External+SEM
+                "FIBFocus",  # FIB focus in kV
+                "FIBProb",  # FIB probe number
+                "FIBCurr",  # FIB emission current
+                "FIBRot",  # FIB scan rotation
+                "FIBAlnX",  # FIB aperture alignment X
+                "FIBAlnY",  # FIB aperture alignment Y
+                "FIBStiX",  # FIB stigmation X
+                "FIBStiY",  # FIB stigmation Y
+                "FIBShiftX",  # FIB beam shift X in micron
+                "FIBShiftY",  # FIB beam shift Y in micron
+            ],
+            [
+                ">S10",
+                ">S18",
+                ">S20",
+                ">S20",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">u1",
+                ">u1",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">u1",
+                ">f4",
+                ">u1",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+            ],
+            [
+                380,
+                390,
+                410,
+                430,
+                460,
+                464,
+                468,
+                472,
+                480,
+                481,
+                490,
+                494,
+                498,
+                502,
+                510,
+                514,
+                518,
+                522,
+                526,
+                530,
+                534,
+                538,
+                542,
+                546,
+                550,
+                554,
+                560,
+                564,
+                568,
+                572,
+                600,
+                604,
+                608,
+                620,
+                624,
+                628,
+                632,
+                636,
+                640,
+                644,
+                648,
+            ],
+        )
 
+    if fibsem_header.FileVersion >= 5:
+        header_dtype.update(
+            [
+                "MillingXResolution",  # FIB milling X resolution
+                "MillingYResolution",  # FIB milling Y resolution
+                "MillingXSize",  # FIB milling X size (um)
+                "MillingYSize",  # FIB milling Y size (um)
+                "MillingULAng",  # FIB milling upper left inner angle (deg)
+                "MillingURAng",  # FIB milling upper right inner angle (deg)
+                "MillingLineTime",  # FIB line milling time (s)
+                "FIBFOV",  # FIB FOV (um)
+                "MillingLinesPerImage",  # FIB milling lines per image
+                "MillingPIDOn",  # FIB milling PID on
+                "MillingPIDMeasured",  # FIB milling PID measured (0:specimen,
+                # 1:beamdump)
+                "MillingPIDTarget",  # FIB milling PID target
+                "MillingPIDTargetSlope",  # FIB milling PID target slope
+                "MillingPIDP",  # FIB milling PID P
+                "MillingPIDI",  # FIB milling PID I
+                "MillingPIDD",  # FIB milling PID D
+                "MachineID",  # Machine ID
+                "SEMSpecimenI",  # SEM specimen current (nA)
+            ],
+            [
+                ">u4",
+                ">u4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">u2",
+                ">u1",
+                ">u1",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">f4",
+                ">S30",
+                ">f4",
+            ],
+            [
+                652,
+                656,
+                660,
+                664,
+                668,
+                672,
+                676,
+                680,
+                684,
+                686,
+                689,
+                690,
+                694,
+                698,
+                702,
+                706,
+                800,
+                980,
+            ],
+        )
+
+    if fibsem_header.FileVersion >= 6:
+        header_dtype.update(
+            [
+                "Temperature",  # Temperature (F)
+                "FaradayCupI",  # Faraday cup current (nA)
+                "FIBSpecimenI",  # FIB specimen current (nA)
+                "BeamDump1I",  # Beam dump 1 current (nA)
+                "SEMSpecimenICurrent",  # SEM specimen current (nA)
+                "MillingYVoltage",  # Milling Y voltage (V)
+                "FocusIndex",  # Focus index
+                "FIBSliceNum",  # FIB slice #
+            ],
+            [">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">f4", ">u4"],
+            [850, 854, 858, 862, 866, 870, 874, 878],
+        )
+    if fibsem_header.FileVersion >= 8:
+        header_dtype.update(
+            [
+                "BeamDump2I",  # Beam dump 2 current (nA)
+                "MillingI",  # Milling current (nA)
+            ],
+            [">f4", ">f4"],
+            [882, 886],
+        )
+    header_dtype.update("FileLength", ">i8", 1000)  # Read in file length in bytes
+
+    # read header
+    header = np.frombuffer(header_bytes, dtype=header_dtype.dtype, count=1)
+    fibsem_header = FIBSEMHeader(**dict(zip(header.dtype.names, header[0])))
+    fibsem_header.to_native_types()
     return fibsem_header
 
+def read_header(path: PathLike) -> FIBSEMHeader:
+    """
+    Opens a .dat file, reads the first 1024 bytes, 
+    and parses those bytes as a FIBSEMHeader.
+
+    Parameters
+    ----------
+
+    path : PathLike
+        A path to a .dat file.
+
+    Returns
+    -------
+
+    FIBSEMHeader
+    """
+    with open(path, mode="rb") as fobj:
+        return parse_header(fobj.read(OFFSET))
 
 def access(path: PathLike, mode: AccessMode) -> FIBSEMData:
     """
