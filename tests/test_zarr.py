@@ -8,6 +8,7 @@ from pathlib import Path
 import zarr
 import numpy as np
 import itertools
+from xarray_multiscale import multiscale, windowed_mean
 from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools.io.xr import stt_from_array
@@ -26,6 +27,7 @@ from fibsem_tools.io.zarr import (
     n5_spec_wrapper,
     n5_spec_unwrapper,
 )
+from fibsem_tools.metadata.neuroglancer import NeuroglancerN5Group
 from fibsem_tools.metadata.transform import STTransform
 import dask.array as da
 from xarray.testing import assert_equal
@@ -317,3 +319,9 @@ def test_n5_wrapping(temp_n5: str) -> None:
     spec_wrapped = n5_spec_wrapper(spec_unwrapped)
     group2 = spec_wrapped.to_zarr(group.store, path="group2")
     assert GroupSpec.from_zarr(group2) == spec_n5
+
+    # test with N5 metadata
+    test_data = np.zeros((10, 10, 10))
+    multi = multiscale(test_data, windowed_mean, (2, 2, 2))
+    n5_neuroglancer_spec = NeuroglancerN5Group.from_xarrays(multi, chunks="auto")
+    assert n5_spec_wrapper(n5_neuroglancer_spec)
