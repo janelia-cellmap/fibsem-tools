@@ -596,8 +596,9 @@ def n5_group_wrapper(spec: GroupSpec) -> GroupSpec:
         if hasattr(member, "shape"):
             new_members[key] = n5_array_wrapper(member)
         else:
-            new_members[key] = n5_spec_wrapper(member)
-    return GroupSpec(attrs=spec.attrs, members=new_members)
+            new_members[key] = n5_group_wrapper(member)
+
+    return spec.__class__(attrs=spec.attrs, members=new_members)
 
 
 def n5_array_wrapper(spec: ArraySpec) -> ArraySpec:
@@ -620,7 +621,7 @@ def n5_array_wrapper(spec: ArraySpec) -> ArraySpec:
         raise ValueError(
             "N5 storage is not compatible with the '.' dimension separator"
         )
-    return ArraySpec(**{**spec.dict(), **dict(dimension_separator="/")})
+    return spec.__class__(**{**spec.dict(), **dict(dimension_separator="/")})
 
 
 def n5_array_unwrapper(spec: ArraySpec) -> ArraySpec:
@@ -641,7 +642,7 @@ def n5_array_unwrapper(spec: ArraySpec) -> ArraySpec:
     new_attributes = dict(
         compressor=spec.compressor["compressor_config"], dimension_separator="/"
     )
-    return ArraySpec(**{**spec.dict(), **new_attributes})
+    return spec.__class__(**{**spec.dict(), **new_attributes})
 
 
 def n5_group_unwrapper(spec: GroupSpec) -> GroupSpec:
@@ -666,7 +667,7 @@ def n5_group_unwrapper(spec: GroupSpec) -> GroupSpec:
             new_members[key] = n5_array_unwrapper(member)
         else:
             new_members[key] = n5_group_unwrapper(member)
-    return GroupSpec(attrs=spec.attrs, members=new_members)
+    return spec.__class__(attrs=spec.attrs, members=new_members)
 
 
 @overload
