@@ -603,10 +603,8 @@ def n5_group_wrapper(spec: GroupSpec) -> GroupSpec:
 
 def n5_array_wrapper(spec: ArraySpec) -> ArraySpec:
     """
-    Transform an ArraySpec into one that is compatible with N5 stores. This function
-     ensures that the `dimension_separator` of the ArraySpec is "/".
-    If the input ArraySpec uses "." as its dimension separator, a `ValueError`
-    is raised.
+    Transform an ArraySpec into one that is compatible with N5FSStore. This function
+     ensures that the `dimension_separator` of the ArraySpec is ".".
 
     Parameters
     ----------
@@ -617,11 +615,7 @@ def n5_array_wrapper(spec: ArraySpec) -> ArraySpec:
     -------
     ArraySpec
     """
-    if spec.dimension_separator == ".":
-        raise ValueError(
-            "N5 storage is not compatible with the '.' dimension separator"
-        )
-    return spec.__class__(**{**spec.dict(), **dict(dimension_separator="/")})
+    return spec.__class__(**{**spec.dict(), **dict(dimension_separator=".")})
 
 
 def n5_array_unwrapper(spec: ArraySpec) -> ArraySpec:
@@ -648,7 +642,7 @@ def n5_array_unwrapper(spec: ArraySpec) -> ArraySpec:
 def n5_group_unwrapper(spec: GroupSpec) -> GroupSpec:
     """
     Transform a GroupSpec to remove the N5-specific attributes. Used when generating
-    GroupSpec instances from Zarr groups that are stored using N5Store or N5FSStore.
+    GroupSpec instances from Zarr groups that are stored using N5FSStore.
     This function will be applied recursively to subgroups; subarrays will be
     transformed with `n5_array_unwrapper`.
 
@@ -684,7 +678,7 @@ def n5_spec_unwrapper(spec: Union[GroupSpec, ArraySpec]) -> Union[GroupSpec, Arr
     """
     Transform a GroupSpec or ArraySpec to remove the N5-specific attributes.
     Used when generating GroupSpec or ArraySpec instances from Zarr groups that are
-    stored using N5Store or N5FSStore. If the input is an instance of GroupSpec, this
+    stored using N5FSStore. If the input is an instance of GroupSpec, this
     function will be applied recursively to subgroups; subarrays will be transformed
     via `n5_array_unwrapper`. If the input is an ArraySpec, it will be transformed with
     `n5_array_unwrapper`.
