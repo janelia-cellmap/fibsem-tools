@@ -1,9 +1,19 @@
 from __future__ import annotations
 import logging
 import os
-from os import PathLike
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Literal, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    List,
+    Literal,
+    MutableMapping,
+    Sequence,
+    Tuple,
+    Union,
+    overload,
+)
 from datatree import DataTree
 import pint
 
@@ -11,16 +21,18 @@ import dask.array as da
 import numpy as np
 import xarray
 import zarr
-from zarr.storage import FSStore, contains_array, contains_group, BaseStore
+from zarr.storage import FSStore, BaseStore
 from dask import bag, delayed
 from distributed import Client, Lock
 from toolz import concat
-from xarray import DataArray
+from xarray import DataArray, Dataset
 from zarr.indexing import BasicIndexer
+from fibsem_tools.io.util import PathLike
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
 from xarray_ome_ngff.registry import get_adapters
 from zarr.errors import ReadOnlyError
+from pydantic_zarr import GroupSpec, ArraySpec
 
 ureg = pint.UnitRegistry()
 
@@ -42,7 +54,7 @@ class FSStorePatched(FSStore):
     is resolved.
     """
 
-    def delitems(self, keys):
+    def delitems(self, keys: Sequence[str]) -> None:
         if self.mode == "r":
             raise ReadOnlyError()
         try:  # should much faster
@@ -64,7 +76,7 @@ class N5FSStorePatched(zarr.N5FSStore):
     is resolved.
     """
 
-    def delitems(self, keys):
+    def delitems(self, keys: Sequence[str]) -> None:
         if self.mode == "r":
             raise ReadOnlyError()
         try:  # should much faster
@@ -78,7 +90,9 @@ class N5FSStorePatched(zarr.N5FSStore):
                 self.map.delitems(nkeys)
 
 
-def get_arrays(obj: Any) -> Tuple[zarr.Array]:
+def get_arrays(obj: Any) -> Tuple[zarr.Array, ...]:
+    # Probably this can be removed, since zarr groups already
+    # support recursively getting sub-arrays
     result = ()
     if isinstance(obj, zarr.core.Array):
         result = (obj,)
@@ -128,7 +142,7 @@ def delete_zgroup(zgroup: zarr.Group, compute: bool = True):
         return to_delete
 
 
-def delete_zarray(arr: zarr.Array, compute: bool = True):
+def delete_zarray(arr: zarr.Array, compute: bool = True) -> None:
     """
     Delete all the chunks in a zarr array.
     """
@@ -206,10 +220,10 @@ def get_url(node: Union[zarr.Group, zarr.Array]):
                 protocol = store.fs.protocol
         else:
             protocol = "file"
-        
+
         # fsstore keeps the protocol in the path, but not s3store
-        if '://' in store.path:
-            store_path = store.path.split('://')[-1]
+        if "://" in store.path:
+            store_path = store.path.split("://")[-1]
         else:
             store_path = store.path
         return f"{protocol}://{os.path.join(store_path, node.path)}"
@@ -220,11 +234,13 @@ def get_url(node: Union[zarr.Group, zarr.Array]):
         cannot be resolved to a url"""
         )
 
+
 def get_store(path: PathLike) -> zarr.storage.BaseStore:
     if isinstance(path, Path):
         path = str(path)
-    
+
     return DEFAULT_ZARR_STORE(path)
+
 
 def access_zarr(
     store: Union[PathLike, BaseStore], path: PathLike, **kwargs: Any
@@ -364,10 +380,8 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
                 from pydantic_ome_ngff.latest import Multiscale
             else:
                 raise ValueError(
-                    f"""
-                    Could not resolve the version of the multiscales metadata 
-                    found in the group metadata {dict(group.attrs)}
-                    """
+                    "Could not resolve the version of the multiscales metadata ",
+                    f"found in the group metadata {dict(group.attrs)}",
                 )
         else:
             raise ValueError("Multiscales attribute was empty.")
@@ -401,6 +415,30 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
     return coords
 
 
+@overload
+def to_xarray(
+    element: zarr.Array,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    coords: Any = "auto",
+    name: str | None = None,
+) -> DataArray:
+    ...
+
+
+@overload
+def to_xarray(
+    element: zarr.Group,
+    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    use_dask: bool = True,
+    attrs: Dict[str, Any] | None = None,
+    coords: Any = "auto",
+    name: str | None = None,
+) -> DataTree:
+    ...
+
+
 def to_xarray(
     element: zarr.Array | zarr.Group,
     chunks: Literal["auto"] | Tuple[int, ...] = "auto",
@@ -408,7 +446,7 @@ def to_xarray(
     attrs: Dict[str, Any] | None = None,
     coords: Any = "auto",
     name: str | None = None,
-):
+) -> Union[DataArray, DataTree]:
     if isinstance(element, zarr.Group):
         return create_datatree(
             element,
@@ -429,10 +467,8 @@ def to_xarray(
         )
     else:
         raise ValueError(
-            f"""
-        This function only accepts instances of zarr.Group and zarr.Array. 
-        Got {type(element)} instead.
-        """
+            "This function only accepts instances of zarr.Group and zarr.Array. ",
+            f"Got {type(element)} instead.",
         )
 
 
@@ -443,7 +479,7 @@ def create_dataarray(
     use_dask: bool = True,
     attrs: Dict[str, Any] | None = None,
     name: str | None = None,
-) -> xarray.DataArray:
+) -> DataArray:
     """
     Create an xarray.DataArray from a zarr array.
     """
@@ -487,7 +523,7 @@ def create_datatree(
     if name is None:
         name = element.basename
 
-    nodes = {
+    nodes: MutableMapping[str, Dataset | DataArray | DataTree | None] = {
         name: create_dataarray(
             array,
             chunks=chunks,
@@ -506,3 +542,162 @@ def create_datatree(
     nodes["/"] = xarray.Dataset(attrs=root_attrs)
     dtree = DataTree.from_dict(nodes, name=name)
     return dtree
+
+
+@overload
+def n5_spec_wrapper(spec: ArraySpec) -> ArraySpec:
+    ...
+
+
+@overload
+def n5_spec_wrapper(spec: GroupSpec) -> GroupSpec:
+    ...
+
+
+def n5_spec_wrapper(spec: Union[GroupSpec, ArraySpec]) -> Union[GroupSpec, ArraySpec]:
+    """
+    Convert an instance of GroupSpec into one that can be materialized
+    via N5Store or N5FSStore. This requires changing array compressor metadata
+    and checking that the `dimension_separator` attribute is compatible with N5.
+
+    Parameters
+    ----------
+    spec: Union[GroupSpec, ArraySpec]
+        The spec to transform. An n5-compatible version of this spec will be generated.
+
+    Returns
+    -------
+    Union[GroupSpec, ArraySpec]
+    """
+    if isinstance(spec, ArraySpec):
+        return n5_array_wrapper(spec)
+    else:
+        return n5_group_wrapper(spec)
+
+
+def n5_group_wrapper(spec: GroupSpec) -> GroupSpec:
+    """
+    Transform a GroupSpec to make it compatible with N5 storage. This function
+    recursively applies itself `n5_spec_wrapper` on its members to produce an
+    n5-compatible spec.
+
+    Parameters
+    ----------
+    spec: GroupSpec
+        The spec to transform. Only array descendants of this spec will actually be
+        altered after the transformation.
+
+    Returns
+    -------
+    GroupSpec
+    """
+    new_members = {}
+    for key, member in spec.members.items():
+        if hasattr(member, "shape"):
+            new_members[key] = n5_array_wrapper(member)
+        else:
+            new_members[key] = n5_spec_wrapper(member)
+    return GroupSpec(attrs=spec.attrs, members=new_members)
+
+
+def n5_array_wrapper(spec: ArraySpec) -> ArraySpec:
+    """
+    Transform an ArraySpec into one that is compatible with N5 stores. This function
+     ensures that the `dimension_separator` of the ArraySpec is "/".
+    If the input ArraySpec uses "." as its dimension separator, a `ValueError`
+    is raised.
+
+    Parameters
+    ----------
+    spec: ArraySpec
+        ArraySpec instance to be transformed.
+
+    Returns
+    -------
+    ArraySpec
+    """
+    if spec.dimension_separator == ".":
+        raise ValueError(
+            "N5 storage is not compatible with the '.' dimension separator"
+        )
+    return ArraySpec(**{**spec.dict(), **dict(dimension_separator="/")})
+
+
+def n5_array_unwrapper(spec: ArraySpec) -> ArraySpec:
+    """
+    Transform an ArraySpec from one parsed from an array stored in N5. This function
+    applies two changes: First, the `dimension_separator` of the ArraySpec is set to
+    "/", and second, the `compressor` field has some N5-specific wrapping removed.
+
+    Parameters
+    ----------
+    spec: ArraySpec
+        The ArraySpec to be transformed.
+
+    Returns
+    -------
+    ArraySpec
+    """
+    new_attributes = dict(
+        compressor=spec.compressor["compressor_config"], dimension_separator="/"
+    )
+    return ArraySpec(**{**spec.dict(), **new_attributes})
+
+
+def n5_group_unwrapper(spec: GroupSpec) -> GroupSpec:
+    """
+    Transform a GroupSpec to remove the N5-specific attributes. Used when generating
+    GroupSpec instances from Zarr groups that are stored using N5Store or N5FSStore.
+    This function will be applied recursively to subgroups; subarrays will be
+    transformed with `n5_array_unwrapper`.
+
+    Parameters
+    ----------
+    spec: GroupSpec
+        The spec to be transformed.
+
+    Returns
+    -------
+    GroupSpec
+    """
+    new_members = {}
+    for key, member in spec.members.items():
+        if hasattr(member, "shape"):
+            new_members[key] = n5_array_unwrapper(member)
+        else:
+            new_members[key] = n5_group_unwrapper(member)
+    return GroupSpec(attrs=spec.attrs, members=new_members)
+
+
+@overload
+def n5_spec_unwrapper(spec: ArraySpec) -> ArraySpec:
+    ...
+
+
+@overload
+def n5_spec_unwrapper(spec: GroupSpec) -> GroupSpec:
+    ...
+
+
+def n5_spec_unwrapper(spec: Union[GroupSpec, ArraySpec]) -> Union[GroupSpec, ArraySpec]:
+    """
+    Transform a GroupSpec or ArraySpec to remove the N5-specific attributes.
+    Used when generating GroupSpec or ArraySpec instances from Zarr groups that are
+    stored using N5Store or N5FSStore. If the input is an instance of GroupSpec, this
+    function will be applied recursively to subgroups; subarrays will be transformed
+    via `n5_array_unwrapper`. If the input is an ArraySpec, it will be transformed with
+    `n5_array_unwrapper`.
+
+    Parameters
+    ----------
+    spec: Union[GroupSpec, ArraySpec]
+        The spec to be transformed.
+
+    Returns
+    -------
+    Union[GroupSpec, ArraySpec]
+    """
+    if isinstance(spec, ArraySpec):
+        return n5_array_unwrapper(spec)
+    else:
+        return n5_group_unwrapper(spec)
