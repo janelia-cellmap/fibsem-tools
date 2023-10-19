@@ -177,7 +177,8 @@ def normalize_chunks(
             if arr.chunks is None:
                 result += (arr.shape,)
             else:
-                result += (arr.chunks,)
+                # use the chunksize property of the underlying dask array
+                result += (arr.data.chunksize,)
     elif all(isinstance(c, tuple) for c in chunks):
         result = chunks
     else:
