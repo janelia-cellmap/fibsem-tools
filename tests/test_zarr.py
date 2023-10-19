@@ -298,11 +298,12 @@ def test_chunk_keys(
 
 
 def test_n5_wrapping(temp_n5: str) -> None:
-    group = zarr.group(zarr.N5Store(temp_n5), path="group1")
+    n5_store = zarr.N5FSStore
+    group = zarr.group(n5_store(temp_n5), path="group1")
     group.attrs.put({"group": "true"})
     compressor = GZip(-1)
     arr = group.create_dataset(
-        name="array", shape=(10, 10, 10), compressor=compressor, dimension_separator="/"
+        name="array", shape=(10, 10, 10), compressor=compressor, dimension_separator="."
     )
     arr.attrs.put({"array": True})
 
