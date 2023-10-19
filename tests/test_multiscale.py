@@ -13,7 +13,7 @@ import zarr
     "metadata_types",
     [("ome-ngff@0.4",), ("neuroglancer",), ("ome-ngff",), ("ome-ngff", "neuroglancer")],
 )
-def test_multiscale_storage(temp_zarr, metadata_types: Tuple[str, ...]):
+def test_multiscale_storage(temp_zarr: str, metadata_types: Tuple[str, ...]) -> None:
     data = da.random.randint(0, 8, (16, 16, 16), chunks=(8, 8, 8), dtype="uint8")
     store = zarr.NestedDirectoryStore(temp_zarr)
     coords = [
