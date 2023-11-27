@@ -125,7 +125,6 @@ def prepare_multiscale(
     store_chunks: Tuple[int, ...],
     compressor: Codec,
 ) -> Tuple[zarr.Group, zarr.Group]:
-
     if scratch_url is not None:
         # prepare the temporary storage
         scratch_names = array_names[1:]

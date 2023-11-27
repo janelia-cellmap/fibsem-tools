@@ -46,7 +46,7 @@ class FIBSEMHeader:
 
     def to_native_types(self):
         """
-        Replace numpy numeric types with stdlib equivalents. This method modifies an 
+        Replace numpy numeric types with stdlib equivalents. This method modifies an
         object in place, which is terrible. Sorry about that.
         """
 
@@ -154,12 +154,10 @@ def parse_header(header_bytes: bytes) -> FIBSEMHeader:
         [">u4", ">u2", ">u2", ">S10", ">f8", ">u1", ">u1"],
         [0, 4, 6, 8, 24, 32, 33],
     )
-    
+
     base_header = np.frombuffer(header_bytes, dtype=header_dtype.dtype, count=1)
 
-    fibsem_header = FIBSEMHeader(
-        **dict(zip(base_header.dtype.names, base_header[0]))
-    )
+    fibsem_header = FIBSEMHeader(**dict(zip(base_header.dtype.names, base_header[0])))
     if fibsem_header.FileMagicNum != MAGIC_NUMBER:
         raise RuntimeError(
             f"""
@@ -619,9 +617,10 @@ def parse_header(header_bytes: bytes) -> FIBSEMHeader:
     fibsem_header.to_native_types()
     return fibsem_header
 
+
 def read_header(path: PathLike) -> FIBSEMHeader:
     """
-    Opens a .dat file, reads the first 1024 bytes, 
+    Opens a .dat file, reads the first 1024 bytes,
     and parses those bytes as a FIBSEMHeader.
 
     Parameters
@@ -637,6 +636,7 @@ def read_header(path: PathLike) -> FIBSEMHeader:
     """
     with open(path, mode="rb") as fobj:
         return parse_header(fobj.read(OFFSET))
+
 
 def access(path: PathLike, mode: AccessMode) -> FIBSEMData:
     """
@@ -935,7 +935,6 @@ def create_dataarray(
     attrs: Dict[str, Any] | None = None,
     name: str | None = None,
 ):
-
     if coords == "auto":
         coords = infer_coords(element)
     if use_dask:

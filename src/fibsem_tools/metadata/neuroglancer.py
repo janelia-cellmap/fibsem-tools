@@ -132,7 +132,6 @@ class NeuroglancerN5Group(GroupSpec):
         chunks: Union[tuple[int, ...], tuple[tuple[int, ...]], Literal["auto"]],
         **kwargs,
     ) -> "NeuroglancerN5Group":
-
         _chunks = normalize_chunks(arrays, chunks)
         if "dimension_separator" in kwargs and kwargs.get("dimension_separator") == ".":
             raise ValueError(

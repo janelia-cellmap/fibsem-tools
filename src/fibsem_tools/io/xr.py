@@ -35,7 +35,6 @@ def stt_from_array(
     units: Tuple[str, ...],
     **kwargs: Any,
 ) -> xarray.DataArray:
-
     """
     Create a DataArray with coordinates parametrized by a shape, a sequence of dims,
     a sequence of scales, a sequence of translations, and a sequence of units from an

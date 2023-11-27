@@ -18,6 +18,7 @@ from datatree import DataTree
 import pint
 
 import dask.array as da
+from dask.bag import Bag
 import numpy as np
 import xarray
 import zarr
@@ -33,6 +34,7 @@ from fibsem_tools.metadata.transform import STTransform
 from xarray_ome_ngff.registry import get_adapters
 from zarr.errors import ReadOnlyError
 from pydantic_zarr import GroupSpec, ArraySpec
+from numcodecs.abc import Codec
 
 ureg = pint.UnitRegistry()
 
@@ -90,7 +92,7 @@ class N5FSStorePatched(zarr.N5FSStore):
                 self.map.delitems(nkeys)
 
 
-def get_arrays(obj: Any) -> Tuple[zarr.Array, ...]:
+def get_arrays(obj: Union[zarr.Group, zarr.Array]) -> Tuple[zarr.Array, ...]:
     # Probably this can be removed, since zarr groups already
     # support recursively getting sub-arrays
     result = ()
@@ -103,7 +105,7 @@ def get_arrays(obj: Any) -> Tuple[zarr.Array, ...]:
     return result
 
 
-def delete_zbranch(branch: Union[zarr.Group, zarr.Array], compute: bool = True):
+def delete_zbranch(branch: Union[zarr.Group, zarr.Array], compute: bool = True) -> Bag:
     """
     Delete a branch (group or array) from a zarr container
     """
@@ -154,7 +156,7 @@ def delete_zarray(arr: zarr.Array, compute: bool = True) -> None:
 
     key_bag = bag.from_sequence(get_chunk_keys(arr))
 
-    def _remove_by_keys(store, keys: List[str]):
+    def _remove_by_keys(store: MutableMapping[str, Any], keys: List[str]) -> None:
         for key in keys:
             del store[key]
 
@@ -163,9 +165,8 @@ def delete_zarray(arr: zarr.Array, compute: bool = True) -> None:
     arr.chunk_store.rmdir(arr.path)
 
 
-def same_compressor(arr: zarr.Array, compressor) -> bool:
+def same_compressor(arr: zarr.Array, compressor: Codec) -> bool:
     """
-
     Determine if the compressor associated with an array is the same as a different
     compressor.
 
@@ -210,7 +211,7 @@ def zarr_array_from_dask(arr: Any) -> Any:
     return arr.dask[keys[-1]]
 
 
-def get_url(node: Union[zarr.Group, zarr.Array]):
+def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
     store = node.store
     if hasattr(store, "path"):
         if hasattr(store, "fs"):
@@ -272,12 +273,12 @@ def access_n5(store: PathLike, path: PathLike, **kwargs: Any) -> Any:
 
 def to_dask(
     arr: zarr.Array, chunks: Literal["auto"] | Sequence[int], name: str | None = None
-):
+) -> da.Array:
     darr = da.from_array(arr, chunks=chunks, inline_array=True, name=name)
     return darr
 
 
-def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs):
+def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs: Any) -> zarr.Group:
     """
     Get the parent (zarr.Group) of a zarr array or group.
     """
@@ -318,7 +319,7 @@ class ChunkLock:
             attrs_path = array_attrs_key
         self._locks[array_attrs_key] = Lock(attrs_path, client=client)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str):
         return self._locks[key]
 
 
@@ -345,7 +346,6 @@ def are_chunks_aligned(
 
 
 def infer_coords(array: zarr.Array) -> List[DataArray]:
-
     group = access_parent(array, mode="r")
 
     if (transform := array.attrs.get("transform", None)) is not None:
@@ -511,7 +511,6 @@ def create_datatree(
     attrs: Dict[str, Any] | None = None,
     name: str | None = None,
 ) -> DataTree:
-
     if coords != "auto":
         raise NotImplementedError(
             f"""

@@ -99,7 +99,6 @@ def test_cosem(version: Literal["v1", "v2"]) -> None:
     multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
     paths = ("s0", "s1")
     if version == "v1":
-
         g_meta = CosemGroupMetadataV1.from_xarrays(multi, paths=paths, name="data")
 
         assert g_meta == CosemGroupMetadataV1(
