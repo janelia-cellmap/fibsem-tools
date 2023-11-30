@@ -12,6 +12,8 @@ repo_url: https://github.com/janelia-cellmap/pydantic-zarr
 copyright: Copyright &copy; 2016 - 2023 HHMI / Janelia
 
 theme:
+  features:
+    - navigation.expand
   name: material
   palette: 
   # Palette toggle for light mode
@@ -28,7 +30,6 @@ theme:
 
 nav:
     - About: index.md
-    - Usage: usage.md
     - API:
       - io:
         - core: api/io/core.md
@@ -42,6 +43,7 @@ nav:
         - util: api/io/util.md
         - xarray: api/io/xr.md
         - zarr: api/io/zarr.md
+        - server: api/io/server.md
       - metadata:
         - groundtruth: api/metadata/groundtruth.md
         - transform: api/metadata/transform.md
