@@ -26,6 +26,7 @@ from fibsem_tools.io.zarr import (
     n5_array_unwrapper,
     n5_spec_wrapper,
     n5_spec_unwrapper,
+    zarr_array_from_dask,
 )
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5Group
 from fibsem_tools.metadata.transform import STTransform
@@ -211,6 +212,8 @@ def test_read_dataarray(
 
     if name is None:
         assert data_store.name == tmp_zarr.basename
+        if use_dask:
+            assert data_store.data.name.startswith(get_url(tmp_zarr))
     else:
         assert data_store.name == name
 
@@ -309,7 +312,9 @@ def test_n5_wrapping(temp_n5: str) -> None:
 
     spec_n5 = GroupSpec.from_zarr(group)
     assert spec_n5.members["array"].dimension_separator == "."
+
     arr_unwrapped = n5_array_unwrapper(spec_n5.members["array"])
+
     assert arr_unwrapped.dimension_separator == "/"
     assert arr_unwrapped.compressor == compressor.get_config()
 
@@ -326,3 +331,11 @@ def test_n5_wrapping(temp_n5: str) -> None:
     multi = multiscale(test_data, windowed_mean, (2, 2, 2))
     n5_neuroglancer_spec = NeuroglancerN5Group.from_xarrays(multi, chunks="auto")
     assert n5_spec_wrapper(n5_neuroglancer_spec)
+
+
+@pytest.mark.parametrize("inline_array", (True, False))
+def test_zarr_array_from_dask(inline_array: bool) -> None:
+    store = zarr.MemoryStore()
+    zarray = zarr.open(store, shape=(10, 10))
+    darray = da.from_array(zarray, inline_array=inline_array)
+    assert zarr_array_from_dask(darray) == zarray
