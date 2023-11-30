@@ -73,10 +73,9 @@ class FSStorePatched(FSStore):
 
 class N5FSStorePatched(zarr.N5FSStore):
     """
-    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
+    Patch delitems to delete "blindly", i.e. without checking if to-be-deleted keys exist.
     This is temporary and should be removed when
-    https://github.com/zarr-developers/zarr-python/issues/1336
-    is resolved.
+    https://github.com/zarr-developers/zarr-python/issues/1336 is resolved.
     """
 
     def delitems(self, keys: Sequence[str]) -> None:
@@ -203,7 +202,7 @@ def same_array_props(
     )
 
 
-def zarr_array_from_dask(arr: Any) -> Any:
+def zarr_array_from_dask(arr: da.Array) -> zarr.Array:
     """
     Return the zarr array that was used to create a dask array using
     `da.from_array(zarr_array)`
