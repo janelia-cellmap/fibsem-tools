@@ -21,7 +21,6 @@ import dask.array as da
 from dask.bag import Bag
 import numpy as np
 import xarray
-from dask.base import tokenize
 import zarr
 from zarr.storage import FSStore, BaseStore
 from dask import bag, delayed
@@ -73,9 +72,10 @@ class FSStorePatched(FSStore):
 
 class N5FSStorePatched(zarr.N5FSStore):
     """
-    Patch delitems to delete "blindly", i.e. without checking if to-be-deleted keys exist.
+    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
     This is temporary and should be removed when
-    https://github.com/zarr-developers/zarr-python/issues/1336 is resolved.
+    https://github.com/zarr-developers/zarr-python/issues/1336
+    is resolved.
     """
 
     def delitems(self, keys: Sequence[str]) -> None:
@@ -126,7 +126,7 @@ DEFAULT_ZARR_STORE = FSStorePatched
 DEFAULT_N5_STORE = N5FSStorePatched
 
 
-def delete_zgroup(zgroup: zarr.Group, compute: bool = True) -> None:
+def delete_zgroup(zgroup: zarr.Group, compute: bool = True):
     """
     Delete all arrays in a zarr group
     """
@@ -202,25 +202,20 @@ def same_array_props(
     )
 
 
-def zarr_array_from_dask(arr: da.Array) -> zarr.Array:
+def zarr_array_from_dask(arr: Any) -> Any:
     """
     Return the zarr array that was used to create a dask array using
     `da.from_array(zarr_array)`
     """
-    maybe_array: Union[zarr.Array, Tuple[Any, zarr.Array, Tuple[slice]]] = tuple(
-        arr.dask.values()
-    )[0]
-    if isinstance(maybe_array, zarr.Array):
-        return maybe_array
-    else:
-        return maybe_array[1]
+    keys = tuple(arr.dask.keys())
+    return arr.dask[keys[-1]]
 
 
 def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
     store = node.store
     if hasattr(store, "path"):
         if hasattr(store, "fs"):
-            if isinstance(store.fs.protocol, Sequence):
+            if isinstance(store.fs.protocol, list):
                 protocol = store.fs.protocol[0]
             else:
                 protocol = store.fs.protocol
@@ -235,8 +230,9 @@ def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
         return f"{protocol}://{os.path.join(store_path, node.path)}"
     else:
         raise ValueError(
-            f"The store associated with this object has type {type(store)}, which "
-            "cannot be resolved to a url"
+            f"""
+        The store associated with this object has type {type(store)}, which 
+        cannot be resolved to a url"""
         )
 
 
@@ -276,63 +272,27 @@ def access_n5(store: PathLike, path: PathLike, **kwargs: Any) -> Any:
 
 
 def to_dask(
-    arr: zarr.Array,
-    chunks: Literal["auto"] | Sequence[int] = "auto",
-    inline_array: bool = True,
-    **kwargs: Any,
+    arr: zarr.Array, chunks: Literal["auto"] | Sequence[int], name: str | None = None
 ) -> da.Array:
-    """
-    Create a Dask array from a Zarr array. This is a very thin wrapper around `dask.array.from_array`
-
-    Parameters
-    ----------
-
-    arr : zarr.Array
-
-    chunks : Literal['auto'] | Sequence[int]
-        The chunks to use for the output Dask array. It may be tempting to use the chunk size of the
-        input array for this parameter, but be advised that Dask performance suffers when arrays
-        have too many chunks, and Zarr arrays routinely have too many chunks by this definition.
-
-    inline_array : bool, default is `True`
-        Whether the Zarr array should be inlined in the Dask compute graph. See documentation for
-        `dask.array.from_array` for details.
-
-    **kwargs : Any
-        Additional keyword arguments for `dask.array.from_array`
-
-    Returns
-    -------
-
-    dask.array.Array
-    """
-    if kwargs.get("name") is None:
-        kwargs["name"] = f"{get_url(arr)}-{tokenize(arr)}"
-    darr = da.from_array(arr, chunks=chunks, inline_array=inline_array, **kwargs)
+    darr = da.from_array(arr, chunks=chunks, inline_array=True, name=name)
     return darr
 
 
 def access_parent(node: Union[zarr.Array, zarr.Group], **kwargs: Any) -> zarr.Group:
     """
-    Get the parent (zarr.Group) of a Zarr array or group.
+    Get the parent (zarr.Group) of a zarr array or group.
     """
     parent_path = "/".join(node.path.split("/")[:-1])
     return access_zarr(store=node.store, path=parent_path, **kwargs)
 
 
 def is_n5(array: zarr.core.Array) -> bool:
-    """
-    Check if a Zarr array is backed by N5 storage.
-    """
     return isinstance(array.store, (zarr.N5Store, zarr.N5FSStore))
 
 
 def get_chunk_keys(
     array: zarr.core.Array, region: slice = slice(None)
 ) -> Generator[str, None, None]:
-    """
-    Get the keys for all the chunks in a Zarr array.
-    """
     indexer = BasicIndexer(region, array)
     chunk_coords = (idx.chunk_coords for idx in indexer)
     keys = (array._chunk_key(cc) for cc in chunk_coords)
@@ -342,9 +302,6 @@ def get_chunk_keys(
 def chunk_grid_shape(
     array_shape: Tuple[int, ...], chunk_shape: Tuple[int, ...]
 ) -> Tuple[int, ...]:
-    """
-    Get the shape of the chunk grid of a Zarr array.
-    """
     return tuple(np.ceil(np.divide(array_shape, chunk_shape)).astype("int").tolist())
 
 
@@ -389,10 +346,6 @@ def are_chunks_aligned(
 
 
 def infer_coords(array: zarr.Array) -> List[DataArray]:
-    """
-    Attempt to infer coordinate data from a Zarr array. This function loops over potential
-    metadata schemes, trying each until one works.
-    """
     group = access_parent(array, mode="r")
 
     if (transform := array.attrs.get("transform", None)) is not None:
@@ -457,9 +410,7 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
             axes.extend(matched_multiscale.axes)
             coords = xarray_adapters.transforms_to_coords(axes, transforms, array.shape)
     else:
-        raise ValueError(
-            f"Could not infer coordinates for {array.path}, located at {array.store.path}."
-        )
+        raise ValueError("Could not infer coordinates from the supplied attributes.")
 
     return coords
 
@@ -531,35 +482,6 @@ def create_dataarray(
 ) -> DataArray:
     """
     Create an xarray.DataArray from a zarr array.
-
-    Parameters
-    ----------
-
-    element : zarr.Array
-
-    chunks : Literal['auto'] | tuple[int, ...] = "auto"
-        The chunks for the array, if `use_dask` is set to `True`
-
-    coords : Any, default is "auto"
-        Coordinates for the data. If `coords` is "auto", then `infer_coords` will be called on
-        `element` to read the coordinates based on metadata. Otherwise, `coords` should be
-        a valid argument to the `coords` keyword argument in the `DataArray` constructor.
-
-    use_dask : bool
-        Whether to wrap `element` in a Dask array before creating the DataArray.
-
-    attrs : dict[str, Any] | None
-        Attributes for the `DataArray`. if None, then attributes will be inferred from the `attrs`
-        property of `element`.
-
-    name : str | None
-        Name for the `DataArray` (and the underlying Dask array, if `to_dask` is `True`)
-
-    Returns
-    -------
-
-    xarray.DataArray
-
     """
 
     if name is None:
@@ -572,11 +494,10 @@ def create_dataarray(
     elif hasattr(coords, "to_coords"):
         coords = coords.to_coords(element.shape)
 
-    if attrs is None:
-        attrs = dict(element.attrs)
-
     if use_dask:
-        element = to_dask(element, chunks=chunks)
+        if attrs is None:
+            attrs = dict(element.attrs)
+        element = to_dask(element, chunks=chunks, name=name)
 
     result = xarray.DataArray(element, coords=coords, attrs=attrs, name=name)
     return result
@@ -584,7 +505,7 @@ def create_dataarray(
 
 def create_datatree(
     element: zarr.Group,
-    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
+    chunks: Union[str, Tuple[int, ...]] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
     attrs: Dict[str, Any] | None = None,
