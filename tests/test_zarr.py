@@ -83,15 +83,15 @@ def test_read_xarray(temp_zarr: str) -> None:
 @pytest.mark.parametrize("coords", ("auto",))
 @pytest.mark.parametrize("use_dask", (True, False))
 @pytest.mark.parametrize("name", (None, "foo"))
+@pytest.mark.parametrize("path", ("a", "a/b"))
 def test_read_datatree(
     temp_zarr: str,
     attrs: Optional[Dict[str, Any]],
     coords: str,
     use_dask: bool,
     name: Optional[str],
+    path: str,
 ) -> None:
-    path = "test"
-    os.path.join(temp_zarr, path)
     base_data = np.zeros((10, 10, 10))
     store = zarr.NestedDirectoryStore(temp_zarr)
     if attrs is None:
@@ -100,7 +100,7 @@ def test_read_datatree(
         _attrs = attrs
 
     if name is None:
-        name_expected = path
+        name_expected = path.split("/")[-1]
     else:
         name_expected = name
 
