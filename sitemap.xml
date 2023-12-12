@@ -2,97 +2,97 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/cli/tiff2zarr/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/cli/zarr2json/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/cli/zarr_scan/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/core/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/dask/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/dat/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/h5/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/mrc/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/multiscale/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/neuroglancer/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/server/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/tif/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/util/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/xr/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/zarr/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/metadata/groundtruth/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/metadata/neuroglancer/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/metadata/transform/</loc>
-         <lastmod>2023-10-16</lastmod>
+         <lastmod>2023-12-12</lastmod>
          <changefreq>daily</changefreq>
     </url>
 </urlset>
