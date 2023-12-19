@@ -1,9 +1,13 @@
 import os
-from typing import Dict, Literal, Optional, Tuple, Union
+from typing import Dict, Literal, Optional, Sequence, Tuple, Union
 from pydantic import BaseModel
-from pyairtable import Api
+import pyairtable as pyat
+from xarray import DataArray
 from fibsem_tools.metadata.transform import STTransform
 from dotenv import load_dotenv
+
+from fibsem_tools.types import ArrayLike
+from fibsem_tools import read
 
 load_dotenv()
 
@@ -57,8 +61,9 @@ class ImageRow(BaseModel):
     value_type: Literal["scalar", "label"]
     image_type: str
     title: str
+    location: str
 
-    def to_stt(self):
+    def to_stt(self) -> STTransform:
         """
         Convert this image to a STTransform.
 
@@ -75,7 +80,7 @@ class ImageRow(BaseModel):
         )
 
 
-def get_airbase():
+def get_airbase() -> pyat.Base:
     """
     Gets a pyairtable.Api.base object, given two environment variables: AIRTABLE_API_KEY and
     AIRTABLE_BASE_ID.
@@ -84,7 +89,7 @@ def get_airbase():
     -------
     pyairtable.Api.base
     """
-    return Api(os.environ["AIRTABLE_API_KEY"]).base(os.environ["AIRTABLE_BASE_ID"])
+    return pyat.Api(os.environ["AIRTABLE_API_KEY"]).base(os.environ["AIRTABLE_BASE_ID"])
 
 
 class AnnotationState(BaseModel):
@@ -107,7 +112,7 @@ class AnnotationState(BaseModel):
     sparse: Optional[bool]
 
 
-def class_encoding_from_airtable_by_image(image_name: str) -> Dict[str, int]:
+def class_encoding_by_image(image_name: str) -> Dict[str, int]:
     """
     Get a class encoding from airtable. A class encoding is a dict where the keys are
     strings (more specifically, class ids), and the values are integers
@@ -156,7 +161,7 @@ def class_encoding_from_airtable_by_image(image_name: str) -> Dict[str, int]:
     return out
 
 
-def image_from_airtable(image_name: str) -> ImageRow:
+def query_image_by_name(image_name: str) -> ImageRow:
     """
     Get metadata about an image from airtable.
 
@@ -170,20 +175,24 @@ def image_from_airtable(image_name: str) -> ImageRow:
     ImageRow
     """
     airbase = get_airbase()
-    result = airbase.table("image").first(formula='{name} = "' + image_name + '"')
+    result = airbase.table("image").all(formula='{name} = "' + image_name + '"')
+    if len(result) > 1:
+        raise ValueError(
+            f"Retrieved {len(result)} images with the name {image_name}. Ensure that the name is unique."
+        )
     if result is None:
         raise ValueError(f"Airtable does not contain a record named {image_name}")
     else:
-        fields = result["fields"]
+        fields = result[0]["fields"]
         try:
-            return ImageRow(**fields, id=result["id"])
+            return ImageRow(**fields, id=result[0]["id"])
         except KeyError as e:
             raise ValueError(f"Missing field in airtable: {e}")
 
 
 def coords_from_airtable(
     image_name: str, shape: Union[Literal["auto"], Tuple[int, ...]] = "auto"
-) -> STTransform:
+) -> Sequence[DataArray]:
     """
     Get xarray-ready coordinates for an array based on an entry in airtable.
 
@@ -199,9 +208,22 @@ def coords_from_airtable(
     -------
     List[DataArray]
     """
-    img = image_from_airtable(image_name)
+    img = query_image_by_name(image_name)
+    _shape: Tuple[int, ...]
+
     if shape == "auto":
         _shape = (img.size_z_pix, img.size_y_pix, img.size_x_pix)
     else:
         _shape = shape
+
     return img.to_stt().to_coords(shape=_shape)
+
+
+def to_xarray(image: ImageRow) -> DataArray:
+    item = read(image.location)
+    if not isinstance(item, ArrayLike):
+        raise ValueError(
+            f"Reading {image.location} produced an instance of {type(item)}, which is not an array."
+        )
+    coords = image.to_stt().to_coords(item.shape)
+    return DataArray(data=item, coords=coords)

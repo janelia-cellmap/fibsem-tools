@@ -5,7 +5,7 @@ from xarray import DataArray
 from fibsem_tools import read_xarray
 import numpy as np
 from fibsem_tools.io.airtable import (
-    class_encoding_from_airtable_by_image,
+    class_encoding_by_image,
     coords_from_airtable,
 )
 from fibsem_tools.io.zarr import get_store
@@ -166,7 +166,7 @@ def split_annotations(
 @click.argument("dest", type=click.STRING)
 @click.argument("name", type=click.STRING)
 def cli(source, dest, name):
-    class_encoding = class_encoding_from_airtable_by_image(name)
+    class_encoding = class_encoding_by_image(name)
     split_annotations(source, dest, name, class_encoding)
 
 
