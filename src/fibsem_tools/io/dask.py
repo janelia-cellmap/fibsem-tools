@@ -236,7 +236,6 @@ def autoscale_chunk_shape(
     size_limit: Union[str, int],
     dtype: DTypeLike,
 ):
-
     """
     Scale a chunk size by an integer factor along each axis as much as possible without
     producing a chunk greater than a given size limit. Scaling will be applied to axes

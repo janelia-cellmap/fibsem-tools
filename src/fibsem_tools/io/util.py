@@ -23,7 +23,7 @@ class ArrayLike(Protocol):
     shape: Tuple[int, ...]
     dtype: Any
 
-    def __getitem__(self, *args) -> "ArrayLike" | float:
+    def __getitem__(self, *args: Any) -> "ArrayLike" | float:
         ...
 
 
@@ -35,7 +35,7 @@ class GroupLike(Protocol):
         """
         ...
 
-    def create_group(self, name: str, **kwargs) -> "GroupLike":
+    def create_group(self, name: str, **kwargs: Any) -> "GroupLike":
         ...
 
     def create_array(
@@ -43,7 +43,7 @@ class GroupLike(Protocol):
     ) -> ArrayLike:
         ...
 
-    def __getitem__(self, *args) -> ArrayLike | "GroupLike":
+    def __getitem__(self, *args: Any) -> ArrayLike | "GroupLike":
         ...
 
 
@@ -177,7 +177,8 @@ def normalize_chunks(
             if arr.chunks is None:
                 result += (arr.shape,)
             else:
-                result += (arr.chunks,)
+                # use the chunksize property of the underlying dask array
+                result += (arr.data.chunksize,)
     elif all(isinstance(c, tuple) for c in chunks):
         result = chunks
     else:

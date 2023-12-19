@@ -1,10 +1,13 @@
 import os
-from typing import Dict, Literal, Tuple, TypeVar, Union
+from typing import Dict, Literal, Tuple, Union
 import click
 from xarray import DataArray
 from fibsem_tools import read_xarray
 import numpy as np
-from fibsem_tools.io.airtable import class_encoding_from_airtable_by_image, coords_from_airtable
+from fibsem_tools.io.airtable import (
+    class_encoding_from_airtable_by_image,
+    coords_from_airtable,
+)
 from fibsem_tools.io.zarr import get_store
 from pydantic_zarr import GroupSpec, ArraySpec
 import zarr
@@ -18,7 +21,7 @@ from cellmap_schemas.annotation import (
     AnnotationArrayAttrs,
     AnnotationGroupAttrs,
     CropGroupAttrs,
-    wrap_attributes
+    wrap_attributes,
 )
 from xarray_multiscale import multiscale, windowed_mode
 
@@ -27,13 +30,13 @@ out_chunks = (64,) * 3
 
 annotation_type = SemanticSegmentation(encoding={"absent": 0, "present": 1})
 
-def create_spec(
-    data: dict[str, DataArray],
-    crop_name: str, 
-    class_encoding: Dict[str, int]
-):
 
-    ome_meta = ome_adapters.multiscale_metadata(tuple(data.values()), tuple(data.keys()))
+def create_spec(
+    data: dict[str, DataArray], crop_name: str, class_encoding: Dict[str, int]
+):
+    ome_meta = ome_adapters.multiscale_metadata(
+        tuple(data.values()), tuple(data.keys())
+    )
 
     annotation_group_specs: dict[str, GroupSpec] = {}
 
@@ -96,20 +99,19 @@ def guess_format(path: str):
     else:
         raise ValueError(
             f"Could not figure out what format the file at {path} is using. ",
-            "Failed to find tif, tiff, n5, and zarr extensions."
+            "Failed to find tif, tiff, n5, and zarr extensions.",
         )
 
 
 def split_annotations(
-    source: str, 
-    dest: str, 
-    crop_name: str, 
+    source: str,
+    dest: str,
+    crop_name: str,
     class_encoding: Dict[str, int],
-    chunks: Union[Literal['auto'], Tuple[Tuple[int, ...],...]] = 'auto'
+    chunks: Union[Literal["auto"], Tuple[Tuple[int, ...], ...]] = "auto",
 ) -> zarr.Group:
-
-    if chunks == 'auto':
-        out_chunks = (64,64,64)
+    if chunks == "auto":
+        out_chunks = (64, 64, 64)
     else:
         out_chunks = chunks
 
@@ -132,8 +134,9 @@ def split_annotations(
     else:
         data = read_xarray(source)
 
-
-    multi = {m.name: m for m in multiscale(data, windowed_mode, (2,2,2), chunks=out_chunks)}
+    multi = {
+        m.name: m for m in multiscale(data, windowed_mode, (2, 2, 2), chunks=out_chunks)
+    }
 
     spec = create_spec(
         data=multi,
@@ -164,7 +167,8 @@ def split_annotations(
 @click.argument("name", type=click.STRING)
 def cli(source, dest, name):
     class_encoding = class_encoding_from_airtable_by_image(name)
-    split_annotations(source, dest, name, class_encoding, chunks)
+    split_annotations(source, dest, name, class_encoding)
+
 
 if __name__ == "__main__":
     cli()

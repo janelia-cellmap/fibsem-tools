@@ -17,9 +17,10 @@ from fibsem_tools.metadata.neuroglancer import (
 )
 from fibsem_tools.metadata.transform import STTransform
 import pytest
+from xarray_multiscale import multiscale, windowed_mean
 
 
-def test_sttransform():
+def test_sttransform() -> None:
     coords = [
         DataArray(np.arange(10), dims=("z")),
         DataArray(np.arange(10) + 5, dims=("y",), attrs={"units": "m"}),
@@ -47,7 +48,7 @@ def test_sttransform():
     )
 
 
-def test_neuroglancer_metadata():
+def test_neuroglancer_metadata() -> None:
     coords = [
         DataArray(np.arange(16) + 0.5, dims=("z"), attrs={"units": "nm"}),
         DataArray(np.arange(16) + 1 / 3, dims=("y",), attrs={"units": "m"}),
@@ -55,11 +56,8 @@ def test_neuroglancer_metadata():
     ]
 
     data = DataArray(np.zeros((16, 16, 16)), coords=coords)
-    coarsen_kwargs = {"z": 2, "y": 2, "x": 2, "boundary": "trim"}
-    multi = [data]
 
-    for idx in range(3):
-        multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
+    multi = multiscale(data, windowed_mean, (2, 2, 2))
 
     neuroglancer_metadata = NeuroglancerN5GroupMetadata.from_xarrays(multi)
 
@@ -73,11 +71,14 @@ def test_neuroglancer_metadata():
     spec = NeuroglancerN5Group.from_xarrays(multi, chunks=(16, 16, 16))
     assert spec.attrs == neuroglancer_metadata
     assert tuple(spec.members.keys()) == ("s0", "s1", "s2", "s3")
+    assert spec.members["s0"].dimension_separator == "/"
+
+    with pytest.raises(ValueError):
+        NeuroglancerN5Group.from_xarrays(multi, chunks="auto", dimension_separator=".")
 
 
 @pytest.mark.parametrize("version", ("v1", "v2"))
-def test_cosem(version: Literal["v1", "v2"]):
-
+def test_cosem(version: Literal["v1", "v2"]) -> None:
     transform_base = {
         "axes": ["z", "y", "x"],
         "units": ["nm", "m", "km"],
@@ -98,7 +99,6 @@ def test_cosem(version: Literal["v1", "v2"]):
     multi.append(multi[-1].coarsen(**coarsen_kwargs).mean())
     paths = ("s0", "s1")
     if version == "v1":
-
         g_meta = CosemGroupMetadataV1.from_xarrays(multi, paths=paths, name="data")
 
         assert g_meta == CosemGroupMetadataV1(

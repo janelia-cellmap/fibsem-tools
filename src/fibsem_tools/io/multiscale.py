@@ -24,7 +24,7 @@ multiscale_metadata_types = ["neuroglancer", "cellmap", "cosem", "ome-ngff"]
 def multiscale_group(
     arrays: Sequence[DataArray],
     metadata_types: List[str],
-    array_paths: Union[List[str], Literal["auto"]] = "auto",
+    array_paths: Union[Sequence[str], Literal["auto"]] = "auto",
     chunks: Union[Tuple[Tuple[int, ...], ...], Literal["auto"]] = "auto",
     name: Optional[str] = None,
     **kwargs,
@@ -125,7 +125,6 @@ def prepare_multiscale(
     store_chunks: Tuple[int, ...],
     compressor: Codec,
 ) -> Tuple[zarr.Group, zarr.Group]:
-
     if scratch_url is not None:
         # prepare the temporary storage
         scratch_names = array_names[1:]

@@ -215,7 +215,6 @@ def create_group(
     array_mode: AccessMode = "w-",
     **array_kwargs: Any,
 ) -> GroupLike:
-
     _arrays = tuple(a for a in arrays)
     _array_paths = tuple(p for p in array_paths)
 

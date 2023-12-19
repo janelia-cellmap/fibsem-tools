@@ -129,12 +129,15 @@ class NeuroglancerN5Group(GroupSpec):
     def from_xarrays(
         cls,
         arrays: Iterable[DataArray],
-        chunks: Union[tuple[tuple[int, ...]], Literal["auto"]],
+        chunks: Union[tuple[int, ...], tuple[tuple[int, ...]], Literal["auto"]],
         **kwargs,
     ) -> "NeuroglancerN5Group":
-
         _chunks = normalize_chunks(arrays, chunks)
-
+        if "dimension_separator" in kwargs and kwargs.get("dimension_separator") == ".":
+            raise ValueError(
+                'Arrays stored in N5 must have dimension_separator set to "/"'
+            )
+        kwargs["dimension_separator"] = "/"
         array_specs = {
             f"s{idx}": ArraySpec.from_array(arr, chunks=cnks, **kwargs)
             for idx, arr, cnks in zip(range(len(arrays)), arrays, _chunks)

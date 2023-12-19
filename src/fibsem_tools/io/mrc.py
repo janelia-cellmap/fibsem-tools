@@ -92,7 +92,6 @@ def to_xarray(
     attrs: Dict[str, Any] | None = None,
     name: str | None = None,
 ):
-
     return create_dataarray(
         element, chunks=chunks, use_dask=use_dask, coords=coords, attrs=attrs, name=name
     )
@@ -106,7 +105,6 @@ def create_dataarray(
     attrs: Dict[str, Any] | None = None,
     name: str | None = None,
 ) -> xarray.DataArray:
-
     if coords == "auto":
         inferred_coords = infer_coords(element)
     else:

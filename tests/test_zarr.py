@@ -1,4 +1,5 @@
 import os
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 from datatree import DataTree
 import pytest
 from xarray import DataArray
@@ -7,6 +8,7 @@ from pathlib import Path
 import zarr
 import numpy as np
 import itertools
+from xarray_multiscale import multiscale, windowed_mean
 from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import multiscale_group
 from fibsem_tools.io.xr import stt_from_array
@@ -21,20 +23,27 @@ from fibsem_tools.io.zarr import (
     get_url,
     to_dask,
     to_xarray,
+    n5_array_unwrapper,
+    n5_spec_wrapper,
+    n5_spec_unwrapper,
+    zarr_array_from_dask,
 )
+from fibsem_tools.metadata.neuroglancer import NeuroglancerN5Group
 from fibsem_tools.metadata.transform import STTransform
 import dask.array as da
 from xarray.testing import assert_equal
+from pydantic_zarr import GroupSpec
+from numcodecs import GZip
 
 
-def test_url(temp_zarr):
+def test_url(temp_zarr: str) -> None:
     store = FSStore(temp_zarr)
     group = zarr.group(store)
     arr = group.create_dataset(name="foo", data=np.arange(10))
     assert get_url(arr) == f"file://{store.path}/foo"
 
 
-def test_read_xarray(temp_zarr):
+def test_read_xarray(temp_zarr: str) -> None:
     path = "test"
     url = os.path.join(temp_zarr, path)
 
@@ -74,9 +83,15 @@ def test_read_xarray(temp_zarr):
 @pytest.mark.parametrize("coords", ("auto",))
 @pytest.mark.parametrize("use_dask", (True, False))
 @pytest.mark.parametrize("name", (None, "foo"))
-def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
-    path = "test"
-    os.path.join(temp_zarr, path)
+@pytest.mark.parametrize("path", ("a", "a/b"))
+def test_read_datatree(
+    temp_zarr: str,
+    attrs: Optional[Dict[str, Any]],
+    coords: str,
+    use_dask: bool,
+    name: Optional[str],
+    path: str,
+) -> None:
     base_data = np.zeros((10, 10, 10))
     store = zarr.NestedDirectoryStore(temp_zarr)
     if attrs is None:
@@ -85,7 +100,7 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
         _attrs = attrs
 
     if name is None:
-        name_expected = path
+        name_expected = path.split("/")[-1]
     else:
         name_expected = name
 
@@ -156,7 +171,13 @@ def test_read_datatree(temp_zarr, attrs, coords, use_dask, name):
 @pytest.mark.parametrize("coords", ("auto",))
 @pytest.mark.parametrize("use_dask", (True, False))
 @pytest.mark.parametrize("name", (None, "foo"))
-def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
+def test_read_dataarray(
+    temp_zarr: str,
+    attrs: Optional[Dict[str, Any]],
+    coords: str,
+    use_dask: bool,
+    name: Optional[str],
+) -> None:
     path = "test"
     data = stt_from_array(
         np.zeros((10, 10, 10)),
@@ -191,6 +212,8 @@ def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
 
     if name is None:
         assert data_store.name == tmp_zarr.basename
+        if use_dask:
+            assert data_store.data.name.startswith(get_url(tmp_zarr))
     else:
         assert data_store.name == name
 
@@ -203,14 +226,14 @@ def test_read_dataarray(temp_zarr, attrs, coords, use_dask, name):
         assert dict(data_store.attrs) == attrs
 
 
-def test_access_array_zarr(temp_zarr):
+def test_access_array_zarr(temp_zarr: str) -> None:
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
     z = zarr.open(temp_zarr, mode="w", shape=data.shape, chunks=10)
     z[:] = data
     assert np.array_equal(access_zarr(temp_zarr, "", mode="r")[:], data)
 
 
-def test_access_array_n5(temp_n5):
+def test_access_array_n5(temp_n5: str) -> None:
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
     z = zarr.open(temp_n5, mode="w", shape=data.shape, chunks=10)
     z[:] = data
@@ -218,7 +241,7 @@ def test_access_array_n5(temp_n5):
 
 
 @pytest.mark.parametrize("accessor", (access_zarr, access_n5))
-def test_access_group(temp_zarr, accessor):
+def test_access_group(temp_zarr: str, accessor: Callable[[Any], None]) -> None:
     if accessor == access_zarr:
         default_store = DEFAULT_ZARR_STORE
     elif accessor == access_n5:
@@ -236,7 +259,7 @@ def test_access_group(temp_zarr, accessor):
 
 
 @pytest.mark.parametrize("chunks", ("auto", (10,)))
-def test_dask(temp_zarr, chunks):
+def test_dask(temp_zarr: str, chunks: Union[Literal["auto"], Tuple[int, ...]]) -> None:
     path = "foo"
     data = np.arange(100)
     zarray = access_zarr(temp_zarr, path, mode="w", shape=data.shape, dtype=data.dtype)
@@ -257,7 +280,11 @@ def test_dask(temp_zarr, chunks):
     "store_class", (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
 )
 @pytest.mark.parametrize("shape", ((10,), (10, 11, 12)))
-def test_chunk_keys(tmp_path: Path, store_class, shape):
+def test_chunk_keys(
+    tmp_path: Path,
+    store_class: Union[zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore],
+    shape: Tuple[int, ...],
+) -> None:
     store: zarr.storage.BaseStore = store_class(tmp_path)
     arr_path = "test"
     arr = zarr.create(
@@ -271,3 +298,44 @@ def test_chunk_keys(tmp_path: Path, store_class, shape):
     )
     observed = tuple(get_chunk_keys(arr))
     assert observed == expected
+
+
+def test_n5_wrapping(temp_n5: str) -> None:
+    n5_store = zarr.N5FSStore
+    group = zarr.group(n5_store(temp_n5), path="group1")
+    group.attrs.put({"group": "true"})
+    compressor = GZip(-1)
+    arr = group.create_dataset(
+        name="array", shape=(10, 10, 10), compressor=compressor, dimension_separator="."
+    )
+    arr.attrs.put({"array": True})
+
+    spec_n5 = GroupSpec.from_zarr(group)
+    assert spec_n5.members["array"].dimension_separator == "."
+
+    arr_unwrapped = n5_array_unwrapper(spec_n5.members["array"])
+
+    assert arr_unwrapped.dimension_separator == "/"
+    assert arr_unwrapped.compressor == compressor.get_config()
+
+    spec_unwrapped = n5_spec_unwrapper(spec_n5)
+    assert spec_unwrapped.attrs == spec_n5.attrs
+    assert spec_unwrapped.members["array"] == arr_unwrapped
+
+    spec_wrapped = n5_spec_wrapper(spec_unwrapped)
+    group2 = spec_wrapped.to_zarr(group.store, path="group2")
+    assert GroupSpec.from_zarr(group2) == spec_n5
+
+    # test with N5 metadata
+    test_data = np.zeros((10, 10, 10))
+    multi = multiscale(test_data, windowed_mean, (2, 2, 2))
+    n5_neuroglancer_spec = NeuroglancerN5Group.from_xarrays(multi, chunks="auto")
+    assert n5_spec_wrapper(n5_neuroglancer_spec)
+
+
+@pytest.mark.parametrize("inline_array", (True, False))
+def test_zarr_array_from_dask(inline_array: bool) -> None:
+    store = zarr.MemoryStore()
+    zarray = zarr.open(store, shape=(10, 10))
+    darray = da.from_array(zarray, inline_array=inline_array)
+    assert zarr_array_from_dask(darray) == zarray
