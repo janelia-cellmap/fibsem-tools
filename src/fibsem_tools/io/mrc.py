@@ -27,7 +27,7 @@ def recarray_to_dict(recarray) -> Dict[str, Any]:
 
 def access(path: PathLike, mode: str, **kwargs):
     # todo: make memory mapping optional via kwarg
-    return MrcMemmap(path, mode=mode, **kwargs)
+    return MrcArrayWrapper(MrcMemmap(path, mode=mode, **kwargs))
 
 
 def infer_dtype(mem: MrcFile) -> npt.DTypeLike:
@@ -46,14 +46,14 @@ def infer_dtype(mem: MrcFile) -> npt.DTypeLike:
 
 
 # todo: use the more convenient API already provided by mrcfile for this
-def infer_coords(mem: MrcFile) -> List[xarray.DataArray]:
-    header = mem.header
+def infer_coords(mem: MrcArrayWrapper) -> List[xarray.DataArray]:
+    header = mem.mrc.header
     grid_size_angstroms = header.cella
     coords = []
     # round to this many decimal places when calculting the grid spacing, in nm
     grid_spacing_decimals = 2
 
-    if mem.data.flags["C_CONTIGUOUS"]:
+    if mem.flags["C_CONTIGUOUS"]:
         # we reverse the keys from (x,y,z) to (z,y,x) so the order matches
         # numpy indexing order
         keys = reversed(header.cella.dtype.fields.keys())
@@ -85,7 +85,7 @@ def chunk_loader(fname, block_info=None):
 
 
 def to_xarray(
-    element: MrcFile,
+    element: MrcArrayWrapper,
     chunks: Literal["auto"] | Tuple[int, ...] = "auto",
     use_dask: bool = True,
     coords: Any = "auto",
@@ -98,7 +98,7 @@ def to_xarray(
 
 
 def create_dataarray(
-    element: MrcFile,
+    element: MrcArrayWrapper,
     chunks: Literal["auto"] | Tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
@@ -111,10 +111,10 @@ def create_dataarray(
         inferred_coords = coords
 
     if name is None:
-        name = Path(element._iostream.name).parts[-1]
+        name = Path(element.mrc._iostream.name).parts[-1]
 
     if attrs is None:
-        attrs = recarray_to_dict(element.header)
+        attrs = recarray_to_dict(element.mrc.header)
 
     if use_dask:
         element = to_dask(element, chunks)
@@ -122,13 +122,14 @@ def create_dataarray(
     return xarray.DataArray(element, coords=inferred_coords, attrs=attrs, name=name)
 
 
-def to_dask(array: MrcFile, chunks: Union[Literal["auto"], Sequence[int]] = "auto"):
+def to_dask(array: MrcArrayWrapper, chunks: Union[Literal["auto"], Sequence[int]] = "auto"):
     """
     Generate a dask array backed by a memory-mapped .mrc file.
     """
-    shape = array.data.shape
-    dtype = array.data.dtype
-    path = array._iostream.name
+    shape = array.shape
+    dtype = array.dtype
+    path = array.mrc._iostream.name
+    
     if chunks == "auto":
         _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)
     else:
@@ -137,12 +138,36 @@ def to_dask(array: MrcFile, chunks: Union[Literal["auto"], Sequence[int]] = "aut
             if idx > 0:
                 if (chunks[idx] != shpe) and (chunks[idx] != -1):
                     raise ValueError(
-                        f"""
-                        Chunk sizes of non-leading axes must match the shape of the 
-                        array. Got chunk_size={chunks[idx]}, expected {shpe}
-                        """
+                        f"Chunk sizes of non-leading axes must match the shape of the "
+                        f"array. Got chunk_size={chunks[idx]}, expected {shpe}"
                     )
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
     arr = da.map_blocks(chunk_loader, path, chunks=_chunks, dtype=dtype)
     return arr
+
+
+class MrcArrayWrapper:
+    """
+    Wrap an mrcmemmap so that it satisfies the ArrayLike interface, and a few numpy-isms.
+    """
+    mrc: MrcMemmap
+    dtype: np.dtype[Any]
+    shape: Tuple[int, ...]
+    size: int
+    flags: np.core.multiarray.flagsobj
+
+
+    def __init__(self, memmap: MrcMemmap):
+        self.dtype = memmap.data.dtype
+        self.shape = memmap.data.shape
+        self.size = memmap.data.size
+        self.flags = memmap.data.flags
+        self.mrc = memmap
+    
+    def __getitem__(self, *args):
+        return self.data.__getitem__(*args)
+    
+
+    def __repr__(self):
+        return f'MrcArrayWrapper(shape={self.shape}, dtype={self.dtype})'

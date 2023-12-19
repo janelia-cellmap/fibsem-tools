@@ -93,6 +93,47 @@ class STTransform(BaseModel):
         ]
 
     @classmethod
+    def from_coords(cls, coords: Sequence[DataArray], order: Literal["C","F"] = "C") -> "STTransform":
+        """
+        Generate a spatial transform from coordinates.
+
+        Parameters
+        ----------
+
+        coords: Sequence[xarray.DataArray]
+            A sequence of 1D DataArrays, one per dimension.
+        order: Literal["C", "F"]
+            The array indexing order to use. "C" denotes numpy-style lexicographic indexing
+        Returns
+        -------
+
+        STTransform
+            An instance of STTransform that is consistent with `coords`.
+        """
+
+        axes = []
+        units = []
+        scale = []
+        translate = []
+
+        for c in coords:
+            if len(c) < 2:
+                raise ValueError(
+                    f'The coordinate with dims = {c.dims} does not have enough elements to calculate '
+                    'a scaling transformation. A minimum of 2 elements are needed.')
+            axes.append(str(c.dims[0]))
+            # default unit is m
+            units.append(c.attrs.get("units", "m"))
+            translate.append(float(c[0]))
+            scale.append(abs(float(c[1]) - float(c[0])))
+            assert scale[-1] > 0
+
+        return cls(
+            axes=axes, units=units, translate=translate, scale=scale, order=order
+        )        
+
+
+    @classmethod
     def from_xarray(cls, array: DataArray, reverse_axes: bool = False) -> "STTransform":
         """
         Generate a spatial transform from a DataArray.
@@ -123,25 +164,4 @@ class STTransform(BaseModel):
             orderer = slice(-1, None, -1)
             output_order = "F"
 
-        axes = [str(d) for d in array.dims[orderer]]
-        # default unit is m
-        units = [array.coords[ax].attrs.get("units", "m") for ax in axes]
-        translate = [float(array.coords[ax][0]) for ax in axes]
-        scale = []
-        for ax in axes:
-            if len(array.coords[ax]) > 1:
-                scale_estimate = abs(
-                    float(array.coords[ax][1]) - float(array.coords[ax][0])
-                )
-            else:
-                raise ValueError(
-                    f"""
-                    Cannot infer scale parameter along dimension {ax} 
-                    with length {len(array.coords[ax])}
-                    """
-                )
-            scale.append(scale_estimate)
-
-        return cls(
-            axes=axes, units=units, translate=translate, scale=scale, order=output_order
-        )
+        return cls.from_coords(tuple(array.coords.values())[orderer], output_order)

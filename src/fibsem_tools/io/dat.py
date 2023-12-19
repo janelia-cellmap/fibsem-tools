@@ -678,10 +678,8 @@ def access(path: PathLike, mode: AccessMode) -> FIBSEMData:
 
     if file_size < expected_nbytes:
         warnings.warn(
-            f"""
-            The file {path} is {file_size} bytes, but a file with size of least 
-            {expected_nbytes} bytes was expected. It will be read as an array of zeros
-            """
+            f"The file {path} is {file_size} bytes, but a file with size of least "
+            f"{expected_nbytes} bytes was expected. It will be read as an array of zeros"
         )
         raw_data = np.zeros(dtype=dtype, shape=shape)
     else:
