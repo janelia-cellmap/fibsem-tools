@@ -93,7 +93,9 @@ class STTransform(BaseModel):
         ]
 
     @classmethod
-    def from_coords(cls, coords: Sequence[DataArray], order: Literal["C","F"] = "C") -> "STTransform":
+    def from_coords(
+        cls, coords: Sequence[DataArray], order: Literal["C", "F"] = "C"
+    ) -> "STTransform":
         """
         Generate a spatial transform from coordinates.
 
@@ -119,8 +121,9 @@ class STTransform(BaseModel):
         for c in coords:
             if len(c) < 2:
                 raise ValueError(
-                    f'The coordinate with dims = {c.dims} does not have enough elements to calculate '
-                    'a scaling transformation. A minimum of 2 elements are needed.')
+                    f"The coordinate with dims = {c.dims} does not have enough elements to calculate "
+                    "a scaling transformation. A minimum of 2 elements are needed."
+                )
             axes.append(str(c.dims[0]))
             # default unit is m
             units.append(c.attrs.get("units", "m"))
@@ -130,8 +133,7 @@ class STTransform(BaseModel):
 
         return cls(
             axes=axes, units=units, translate=translate, scale=scale, order=order
-        )        
-
+        )
 
     @classmethod
     def from_xarray(cls, array: DataArray, reverse_axes: bool = False) -> "STTransform":

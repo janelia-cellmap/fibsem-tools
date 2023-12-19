@@ -3,7 +3,6 @@ from typing import Dict, Literal, Optional, Sequence, Tuple, Union
 from pydantic import BaseModel
 import pyairtable as pyat
 from xarray import DataArray
-from fibsem_tools.io.mrc import to_dask
 from fibsem_tools.metadata.transform import STTransform
 from dotenv import load_dotenv
 import warnings
@@ -67,7 +66,7 @@ class ImageRow(BaseModel):
     image_type: str
     title: Optional[str]
     location: str
-    format: Literal['zarr', 'n5', 'mrc', 'hdf5', 'tiff']
+    format: Literal["zarr", "n5", "mrc", "hdf5", "tiff"]
 
     def to_stt(self) -> STTransform:
         """
@@ -226,13 +225,17 @@ def coords_from_airtable(
 
 
 def to_xarray(
-        image: ImageRow, 
-        coords: Union[Literal['from_airtable', 'from_file'], Sequence[DataArray]] = 'from_airtable') -> DataArray:
+    image: ImageRow,
+    coords: Union[
+        Literal["from_airtable", "from_file"], Sequence[DataArray]
+    ] = "from_airtable",
+) -> DataArray:
     from urllib.parse import urlparse, unquote
+
     # only local for now
     loc_parsed = urlparse(image.location)
-    if loc_parsed.scheme != 'file':
-        raise ValueError(f'Cannot deal with non-file urls. Got {loc_parsed.scheme}')
+    if loc_parsed.scheme != "file":
+        raise ValueError(f"Cannot deal with non-file urls. Got {loc_parsed.scheme}")
     path = unquote(loc_parsed.path)
 
     item = read(path)
@@ -240,10 +243,11 @@ def to_xarray(
         raise ValueError(
             f"Reading {image.location} produced an instance of {type(item)}, which is not an array."
         )
-    
+
     airtable_coords = image.to_stt().to_coords(item.shape)
-    if image.format == 'mrc':
+    if image.format == "mrc":
         from fibsem_tools.io.mrc import to_xarray, infer_coords
+
         file_coords = infer_coords(item)
         stt_file = STTransform.from_coords(file_coords)
         stt_airtable = STTransform.from_coords(airtable_coords)
@@ -251,12 +255,12 @@ def to_xarray(
             warnings.warn(
                 f"The scale + translation representation of the coordinates from airtable ({stt_file}) "
                 f"does not match the scale + translation representation inferred from the image data ({stt_airtable})"
-                )
-        if coords == 'from_airtable':
+            )
+        if coords == "from_airtable":
             return to_xarray(item, coords=airtable_coords)
-        elif coords == 'from_file':
+        elif coords == "from_file":
             return to_xarray(item, coords=file_coords)
         else:
             return to_xarray(item, coords=coords)
     else:
-        raise NotImplementedError    
+        raise NotImplementedError

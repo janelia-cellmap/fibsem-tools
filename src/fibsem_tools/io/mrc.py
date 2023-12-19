@@ -122,14 +122,16 @@ def create_dataarray(
     return xarray.DataArray(element, coords=inferred_coords, attrs=attrs, name=name)
 
 
-def to_dask(array: MrcArrayWrapper, chunks: Union[Literal["auto"], Sequence[int]] = "auto"):
+def to_dask(
+    array: MrcArrayWrapper, chunks: Union[Literal["auto"], Sequence[int]] = "auto"
+):
     """
     Generate a dask array backed by a memory-mapped .mrc file.
     """
     shape = array.shape
     dtype = array.dtype
     path = array.mrc._iostream.name
-    
+
     if chunks == "auto":
         _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)
     else:
@@ -151,12 +153,12 @@ class MrcArrayWrapper:
     """
     Wrap an mrcmemmap so that it satisfies the ArrayLike interface, and a few numpy-isms.
     """
+
     mrc: MrcMemmap
     dtype: np.dtype[Any]
     shape: Tuple[int, ...]
     size: int
     flags: np.core.multiarray.flagsobj
-
 
     def __init__(self, memmap: MrcMemmap):
         self.dtype = memmap.data.dtype
@@ -164,10 +166,9 @@ class MrcArrayWrapper:
         self.size = memmap.data.size
         self.flags = memmap.data.flags
         self.mrc = memmap
-    
+
     def __getitem__(self, *args):
         return self.data.__getitem__(*args)
-    
 
     def __repr__(self):
-        return f'MrcArrayWrapper(shape={self.shape}, dtype={self.dtype})'
+        return f"MrcArrayWrapper(shape={self.shape}, dtype={self.dtype})"

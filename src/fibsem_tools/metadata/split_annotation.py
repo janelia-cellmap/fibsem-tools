@@ -53,7 +53,9 @@ def create_spec(
             )
 
             annotation_array_attrs = AnnotationArrayAttrs(
-                class_name=class_name, complement_counts=hist, annotation_type=annotation_type
+                class_name=class_name,
+                complement_counts=hist,
+                annotation_type=annotation_type,
             )
             label_array_specs[array_name] = ArraySpec.from_array(
                 data_unique,

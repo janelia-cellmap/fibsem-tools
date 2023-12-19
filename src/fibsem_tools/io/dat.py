@@ -961,8 +961,8 @@ def to_xarray(
     name: Optional[str] = None,
 ):
     """
-    Convert an instance of FIBSEMData or a FibsemDataset to an xarray data structure. 
-    `FIBSEMData` is converted to an `xarray.DataArray`; FibsemDataset will eventually 
+    Convert an instance of FIBSEMData or a FibsemDataset to an xarray data structure.
+    `FIBSEMData` is converted to an `xarray.DataArray`; FibsemDataset will eventually
     be converted to a `DataTree` object, but this functionality has not been implemented
     yet, so supplying a FibsemDataset to this function will raise `NotImplementedError`.
 
