@@ -613,7 +613,7 @@ def create_datatree(
         for name, array in element.arrays()
     }
     if attrs is None:
-        root_attrs = dict(element.attrs)
+        root_attrs = element.attrs.asdict()
     else:
         root_attrs = attrs
     # insert root element
