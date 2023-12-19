@@ -53,7 +53,7 @@ class ImageRow(BaseModel):
     offset_z_nm: float
     value_type: Literal['scalar', 'label']
     image_type: str
-    title: str
+    title: Optional[str]
 
     def to_stt(self):
         """
