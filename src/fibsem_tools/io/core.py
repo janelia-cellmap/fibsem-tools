@@ -93,10 +93,7 @@ def access(
         accessor = fibsem_tools.io.dat.access
     else:
         raise ValueError(
-            f"""
-                Cannot access file with extension {suffix}. Try one of 
-                {_suffixes}
-                """
+            f"Cannot access file with extension {suffix}. Try one of {_suffixes}"
         )
 
     if is_container:
@@ -156,10 +153,8 @@ def read_dask(
         dasker = fibsem_tools.io.dat.to_dask
     else:
         raise ValueError(
-            f"""
-                Cannot access file with extension {suffix} as a dask array. Extensions 
-                with dask support are (".zarr", ".n5", ".mrc", and ".dat")
-                """
+            f"Cannot access file with extension {suffix} as a dask array. Extensions "
+            "with dask support: .zarr, .n5, .mrc, .dat"
         )
     return dasker(read(path, **kwargs), chunks)
 
@@ -197,10 +192,8 @@ def read_xarray(
         )
     else:
         raise ValueError(
-            f"""
-        Xarray data structures are only supported for data saved as zarr, n5, and mrc. 
-        Got {type(element)}, which is not supported.
-        """
+            f"Xarray data structures are only supported for data saved as zarr, n5, and mrc. "
+            f"Got {type(element)}, which is not supported."
         )
 
 
@@ -225,10 +218,8 @@ def create_group(
 
     if len(bad_paths):
         raise ValueError(
-            f"""
-            Array paths cannot be nested. The following paths violate this rule: 
-            {bad_paths}
-            """
+            "Array paths cannot be nested. The following paths violate this rule: "
+            f"{bad_paths}"
         )
 
     group = access(group_url, mode=group_mode, attrs=group_attrs)

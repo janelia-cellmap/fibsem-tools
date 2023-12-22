@@ -34,6 +34,7 @@ import dask.array as da
 from xarray.testing import assert_equal
 from pydantic_zarr import GroupSpec
 from numcodecs import GZip
+from fibsem_tools.io.zarr import parse_url
 
 
 def test_url(temp_zarr: str) -> None:
@@ -339,3 +340,28 @@ def test_zarr_array_from_dask(inline_array: bool) -> None:
     zarray = zarr.open(store, shape=(10, 10))
     darray = da.from_array(zarray, inline_array=inline_array)
     assert zarr_array_from_dask(darray) == zarray
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("foo.zarr", ("foo.zarr", "")),
+        ("/foo/foo.zarr", ("/foo/foo.zarr", "")),
+        ("/foo/foo.zarr/bar", ("/foo/foo.zarr", "bar")),
+        ("/foo/foo.zarr/bar/baz", ("/foo/foo.zarr", "bar/baz")),
+    ],
+)
+def test_parse_url(url: str, expected: str):
+    assert parse_url(url) == expected
+
+
+@pytest.mark.parametrize("url", ["foo", "foo/bar/baz", "foo/bar/b.zarraz"])
+def test_parse_url_no_zarr(url: str):
+    with pytest.raises(ValueError, match="None of the parts of the url"):
+        parse_url(url)
+
+
+@pytest.mark.parametrize("url", ["foo.zarr/baz.zarr", "foo.zarr/bar/baz.zarr"])
+def test_parse_url_too_much_zarr(url: str):
+    with pytest.raises(ValueError, match="Too many parts of the url"):
+        parse_url(url)

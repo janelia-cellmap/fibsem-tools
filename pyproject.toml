@@ -51,6 +51,7 @@ pytest-examples = "^0.0.9"
 tiff2zarr = 'fibsem_tools.cli.tiff2zarr:run'
 zarr-scan = 'fibsem_tools.cli.zarr_scan:cli'
 zarr2json = 'fibsem_tools.cli.zarr2json:cli'
+fst = 'fibsem_tools.cli.copy:fst'
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

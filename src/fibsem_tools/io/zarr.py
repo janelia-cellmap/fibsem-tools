@@ -49,6 +49,29 @@ N5_AXES_3D = ZARR_AXES_3D[::-1]
 logger = logging.getLogger(__name__)
 
 
+def parse_url(url: str) -> Tuple[str, str]:
+    """
+    Parse a url with the format <prefix>.zarr/<postfix> into a (<prefix>.zarr, <postfix>) tuple.
+    """
+    suffix = ".zarr"
+    sep = "/"
+    parts = url.split(sep)
+    suffixed = []
+    for idx, p in enumerate(parts):
+        if p.endswith(suffix):
+            suffixed.append(idx)
+
+    if len(suffixed) == 0:
+        msg = f"None of the parts of the url {url} end with {suffix}."
+        raise ValueError(msg)
+
+    if len(suffixed) > 1:
+        msg = f"Too many parts of the url {url} end with {suffix}. Expected just 1, but found {len(suffix)}."
+        raise ValueError(msg)
+
+    return sep.join(parts[: suffixed[0] + 1]), sep.join(parts[(suffixed[0] + 1) :])
+
+
 class FSStorePatched(FSStore):
     """
     Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
