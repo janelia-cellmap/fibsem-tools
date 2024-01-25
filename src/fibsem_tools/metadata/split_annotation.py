@@ -1,21 +1,9 @@
-import os
-from typing import Dict, Literal, Tuple, Union
-import click
+from typing import Dict
 from xarray import DataArray
-from fibsem_tools import read_xarray
-import numpy as np
-from fibsem_tools.io.airtable import (
-    class_encoding_by_image,
-    coords_from_airtable,
-)
-from fibsem_tools.io.zarr import get_store
+from fibsem_tools.io.airtable import LabelledAnnotationState
 from pydantic_zarr import GroupSpec, ArraySpec
-import zarr
-from zarr.storage import contains_array, contains_group
-from fibsem_tools.io.util import split_by_suffix
-from numcodecs import Blosc
+from numcodecs import Zstd
 from xarray_ome_ngff import get_adapters
-from zarr.errors import ContainsArrayError, ContainsGroupError
 from cellmap_schemas.annotation import (
     SemanticSegmentation,
     AnnotationArrayAttrs,
@@ -23,27 +11,33 @@ from cellmap_schemas.annotation import (
     CropGroupAttrs,
     wrap_attributes,
 )
-from xarray_multiscale import multiscale, windowed_mode
+from numcodecs.abc import Codec
 
 ome_adapters = get_adapters("0.4")
 out_chunks = (64,) * 3
-
+default_compressor = Zstd(level=3)
 annotation_type = SemanticSegmentation(encoding={"absent": 0, "present": 1})
 
 
 def create_spec(
-    data: dict[str, DataArray], crop_name: str, class_encoding: Dict[str, int]
-):
+    data: dict[str, DataArray],
+    crop_name: str,
+    class_encoding: Dict[str, LabelledAnnotationState],
+    *,
+    compressor: Codec = "auto",
+) -> GroupSpec:
     ome_meta = ome_adapters.multiscale_metadata(
         tuple(data.values()), tuple(data.keys())
     )
+    if compressor == "auto":
+        compressor = default_compressor
 
     annotation_group_specs: dict[str, GroupSpec] = {}
 
     for class_name, value in class_encoding.items():
         label_array_specs = {}
         for array_name, array_data in data.items():
-            data_unique = (array_data == value).astype("uint8")
+            data_unique = (array_data == value.numeric_label).astype("uint8")
             num_present = int(data_unique.sum())
             num_absent = data_unique.size - num_present
             hist = {"absent": num_absent}
@@ -60,7 +54,7 @@ def create_spec(
             label_array_specs[array_name] = ArraySpec.from_array(
                 data_unique,
                 chunks=out_chunks,
-                compressor=Blosc(cname="zstd"),
+                compressor=compressor,
                 attrs=wrap_attributes(annotation_array_attrs).dict(),
             )
 
@@ -71,6 +65,15 @@ def create_spec(
             },
             members=label_array_specs,
         )
+
+    # insert all the labels as a vanilla ome-ngff group
+    annotation_group_specs["all"] = GroupSpec(
+        attrs={"multiscales": [ome_meta.dict()]},
+        members={
+            key: ArraySpec.from_array(value, compressor=compressor, chunks=out_chunks)
+            for key, value in data.items()
+        },
+    )
 
     crop_attrs = CropGroupAttrs(
         name=crop_name,
@@ -99,16 +102,18 @@ def guess_format(path: str):
     elif ".n5" in path:
         return "n5"
     else:
-        raise ValueError(
+        msg = (
             f"Could not figure out what format the file at {path} is using. ",
             "Failed to find tif, tiff, n5, and zarr extensions.",
         )
+        raise ValueError(msg)
 
 
+""" 
 def split_annotations(
     source: str,
     dest: str,
-    crop_name: str,
+    image_identifier: str,
     class_encoding: Dict[str, int],
     chunks: Union[Literal["auto"], Tuple[Tuple[int, ...], ...]] = "auto",
 ) -> zarr.Group:
@@ -117,6 +122,8 @@ def split_annotations(
     else:
         out_chunks = chunks
 
+    crop_name = image_identifier.split('/')[-1]
+    assert crop_name  != ''
     pre, post, _ = split_by_suffix(dest, (".zarr",))
     # fail fast if there's already a group there
 
@@ -128,10 +135,9 @@ def split_annotations(
         raise ContainsArrayError(f"{store.path}/{post}")
     source_fmt = guess_format(source)
     if source_fmt == "tif":
-        from fibsem_tools.io.tif import access as access_tif
-
         _data = access_tif(source, memmap=False)
-        coords = coords_from_airtable(crop_name, shape=_data.shape)
+        img_db = get_image_by_identifier(image_identifier)
+        coords = img_db.to_stt().to_coords(shape=_data.shape)
         data = DataArray(_data, coords=coords)
     else:
         data = read_xarray(source)
@@ -146,9 +152,9 @@ def split_annotations(
         class_encoding=class_encoding,
     )
 
-    crop_group = spec.to_zarr(
-        zarr.NestedDirectoryStore(pre), path=post, overwrite=False
-    )
+    crop_group = spec.to_zarr(zarr.storage.FSStore(pre), path=post, overwrite=False)
+
+    # write all labels to a zarr group
 
     for class_name, value in class_encoding.items():
         for array_name, data in multi.items():
@@ -160,17 +166,25 @@ def split_annotations(
             )
             arr[:] = data_unique
 
-    return crop_group
+    return crop_group """
 
-
+""" 
 @click.command
 @click.argument("source", type=click.STRING)
 @click.argument("dest", type=click.STRING)
-@click.argument("name", type=click.STRING)
-def cli(source, dest, name):
-    class_encoding = class_encoding_by_image(name)
-    split_annotations(source, dest, name, class_encoding)
+@click.argument("collection_name", type=click.STRING)
+@click.argument("image_name", type=click.STRING)
+def cli(source, dest, collection_name: str, image_name: str):
+    class_encoding = class_encoding_by_image(image_name)
+    split_annotations(
+        source=source,
+        dest=dest,
+        crop_name=image_name,
+        collection_name=collection_name,
+        class_encoding=class_encoding,
+    )
 
 
 if __name__ == "__main__":
     cli()
+ """

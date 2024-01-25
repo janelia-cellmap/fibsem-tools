@@ -3,6 +3,16 @@ import numpy as np
 
 
 @runtime_checkable
-class ArrayLike(Protocol):
+class Arrayish(Protocol):
     shape: Tuple[int, ...]
     dtype: np.dtype[Any]
+
+
+@runtime_checkable
+class ImplicitlyChunkedArrayish(Arrayish, Protocol):
+    chunks: Tuple[int, ...]
+
+
+@runtime_checkable
+class ExplicitlyChunkedArrayish(Arrayish, Protocol):
+    chunks: Tuple[Tuple[int, ...], ...]

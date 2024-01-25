@@ -26,7 +26,6 @@ import zarr
 from zarr.storage import FSStore, BaseStore
 from dask import bag, delayed
 from distributed import Client, Lock
-from toolz import concat
 from xarray import DataArray, Dataset
 from zarr.indexing import BasicIndexer
 from fibsem_tools.io.util import PathLike
@@ -36,6 +35,7 @@ from xarray_ome_ngff.registry import get_adapters
 from zarr.errors import ReadOnlyError
 from pydantic_zarr import GroupSpec, ArraySpec
 from numcodecs.abc import Codec
+from operator import delitem
 
 ureg = pint.UnitRegistry()
 
@@ -115,77 +115,62 @@ class N5FSStorePatched(zarr.N5FSStore):
                 self.map.delitems(nkeys)
 
 
-def get_arrays(obj: Union[zarr.Group, zarr.Array]) -> Tuple[zarr.Array, ...]:
-    # Probably this can be removed, since zarr groups already
-    # support recursively getting sub-arrays
-    result = ()
-    if isinstance(obj, zarr.core.Array):
-        result = (obj,)
-    elif isinstance(obj, zarr.hierarchy.Group):
-        if len(tuple(obj.arrays())) > 1:
-            names, arrays = zip(*obj.arrays())
-            result = tuple(concat(map(get_arrays, arrays)))
-    return result
-
-
-def delete_zbranch(branch: Union[zarr.Group, zarr.Array], compute: bool = True) -> Bag:
+def delete_node(branch: Union[zarr.Group, zarr.Array], compute: bool = True) -> Bag:
     """
     Delete a branch (group or array) from a zarr container
     """
     if isinstance(branch, zarr.Group):
-        return delete_zgroup(branch, compute=compute)
+        return delete_group(branch, compute=compute)
     elif isinstance(branch, zarr.Array):
-        return delete_zarray(branch, compute=compute)
+        return delete_array(branch, compute=compute)
     else:
-        raise TypeError(
-            f"""
-            The first argument to this function my be a zarr group or array, not 
-            {type(branch)}
-            """
-        )
+        msg = f"The first argument to this function my be a zarr group or array, not {type(branch)}"
+        raise TypeError(msg)
 
 
 DEFAULT_ZARR_STORE = FSStorePatched
 DEFAULT_N5_STORE = N5FSStorePatched
 
 
-def delete_zgroup(zgroup: zarr.Group, compute: bool = True) -> None:
+def delete_group(group: zarr.Group, compute: bool = True) -> None:
     """
-    Delete all arrays in a zarr group
+    Delete a zarr group, and everything it contains
     """
-    if not isinstance(zgroup, zarr.hierarchy.Group):
+    if not isinstance(group, zarr.hierarchy.Group):
         raise TypeError(
-            f"Cannot use the delete_zgroup function on object of type {type(zgroup)}"
+            f"Cannot use the delete_zgroup function on object of type {type(group)}"
         )
 
-    arrays = get_arrays(zgroup)
-    to_delete = delayed([delete_zarray(arr, compute=False) for arr in arrays])
+    _, arrays = zip(*group.arrays(recurse=True))
+    to_delete = delayed([delete_array(arr, compute=False) for arr in arrays])
 
     if compute:
-        return to_delete.compute()
+        result = to_delete.compute()
+        to_delete.store.rmdir(group.path)
     else:
-        return to_delete
+        result = to_delete
+    return result
 
 
-def delete_zarray(arr: zarr.Array, compute: bool = True) -> None:
+def delete_array(array: zarr.Array, compute: bool = True) -> None:
     """
     Delete all the chunks in a zarr array.
     """
 
-    if not isinstance(arr, zarr.Array):
+    if not isinstance(array, zarr.Array):
         raise TypeError(
-            f"Cannot use the delete_zarray function on object of type {type(arr)}"
+            f"Cannot use the delete_zarray function on object of type {type(array)}"
         )
 
-    key_bag = bag.from_sequence(get_chunk_keys(arr))
+    key_bag = bag.from_sequence(chunk_keys(array))
+    delete_op = key_bag.map(lambda v: delitem(array.chunk_store, v))
+    if compute:
+        result = delete_op.compute()
+        array.chunk_store.rmdir(array.path)
+    else:
+        result = delete_op
 
-    def _remove_by_keys(store: MutableMapping[str, Any], keys: List[str]) -> None:
-        for key in keys:
-            del store[key]
-
-    delete_op = key_bag.map_partitions(lambda v: _remove_by_keys(arr.chunk_store, v))
-    delete_op.compute()
-    arr.chunk_store.rmdir(arr.path)
+    return result
 
 
 def same_compressor(arr: zarr.Array, compressor: Codec) -> bool:
@@ -225,7 +210,7 @@ def same_array_props(
     )
 
 
-def zarr_array_from_dask(arr: da.Array) -> zarr.Array:
+def array_from_dask(arr: da.Array) -> zarr.Array:
     """
     Return the zarr array that was used to create a dask array using
     `da.from_array(zarr_array)`
@@ -257,10 +242,11 @@ def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
             store_path = store.path
         return f"{protocol}://{os.path.join(store_path, node.path)}"
     else:
-        raise ValueError(
+        msg = (
             f"The store associated with this object has type {type(store)}, which "
             "cannot be resolved to a url"
         )
+        raise ValueError(msg)
 
 
 def get_store(path: PathLike) -> zarr.storage.BaseStore:
@@ -350,11 +336,23 @@ def is_n5(array: zarr.core.Array) -> bool:
     return isinstance(array.store, (zarr.N5Store, zarr.N5FSStore))
 
 
-def get_chunk_keys(
-    array: zarr.core.Array, region: slice = slice(None)
+def chunk_keys(
+    array: zarr.core.Array, region: Union[slice, Tuple[slice, ...]] = slice(None)
 ) -> Generator[str, None, None]:
     """
-    Get the keys for all the chunks in a Zarr array.
+    Get the keys for all the chunks in a Zarr array as a generator of strings.
+
+    Parameters
+    ----------
+    array: zarr.core.Array
+        The zarr array to get the chunk keys from
+    region: Union[slice, Tuple[slice, ...]]
+        The region in the zarr array get chunks keys from. Defaults to `slice(None)`, which
+        will result in all the chunk keys being returned.
+    Returns
+    -------
+    Generator[str, None, None]
+
     """
     indexer = BasicIndexer(region, array)
     chunk_coords = (idx.chunk_coords for idx in indexer)
@@ -390,7 +388,7 @@ class ChunkLock:
 
 
 def get_chunklock(array: zarr.core.Array, client: Client) -> Dict[str, Lock]:
-    result = {key: Lock(key, client=client) for key in get_chunk_keys(array)}
+    result = {key: Lock(key, client=client) for key in chunk_keys(array)}
     return result
 
 
@@ -479,6 +477,10 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
             transforms.extend(matched_dataset.coordinateTransformations)
             axes.extend(matched_multiscale.axes)
             coords = xarray_adapters.transforms_to_coords(axes, transforms, array.shape)
+            for coord in coords:
+                if "unit" in coord.attrs:
+                    units = coord.attrs.pop("unit")
+                    coord.attrs["units"] = units
     else:
         raise ValueError(
             f"Could not infer coordinates for {array.path}, located at {array.store.path}."

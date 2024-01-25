@@ -19,14 +19,14 @@ from fibsem_tools.io.zarr import (
     access_zarr,
     create_dataarray,
     create_datatree,
-    get_chunk_keys,
+    chunk_keys,
     get_url,
     to_dask,
     to_xarray,
     n5_array_unwrapper,
     n5_spec_wrapper,
     n5_spec_unwrapper,
-    zarr_array_from_dask,
+    array_from_dask,
 )
 from fibsem_tools.metadata.neuroglancer import NeuroglancerN5Group
 from fibsem_tools.metadata.transform import STTransform
@@ -297,7 +297,7 @@ def test_chunk_keys(
     expected = tuple(
         os.path.join(arr.path, dim_sep.join(map(str, idx))) for idx in chunk_idcs
     )
-    observed = tuple(get_chunk_keys(arr))
+    observed = tuple(chunk_keys(arr))
     assert observed == expected
 
 
@@ -339,7 +339,7 @@ def test_zarr_array_from_dask(inline_array: bool) -> None:
     store = zarr.MemoryStore()
     zarray = zarr.open(store, shape=(10, 10))
     darray = da.from_array(zarray, inline_array=inline_array)
-    assert zarr_array_from_dask(darray) == zarray
+    assert array_from_dask(darray) == zarray
 
 
 @pytest.mark.parametrize(

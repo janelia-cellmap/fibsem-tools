@@ -10,6 +10,7 @@ from mrcfile.mrcmemmap import MrcMemmap
 import xarray
 from fibsem_tools.io.util import PathLike
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def recarray_to_dict(recarray) -> Dict[str, Any]:
@@ -27,7 +28,12 @@ def recarray_to_dict(recarray) -> Dict[str, Any]:
 
 def access(path: PathLike, mode: str, **kwargs):
     # todo: make memory mapping optional via kwarg
-    return MrcArrayWrapper(MrcMemmap(path, mode=mode, **kwargs))
+    parsed = urlparse(path)
+    if parsed.scheme in ("", "file"):
+        return MrcArrayWrapper(MrcMemmap(parsed.path, mode=mode, **kwargs))
+    else:
+        msg = f"For reading .mrc files, a URL with scheme {parsed.scheme} is not valid. Scheme must be '' or 'file'."
+        raise ValueError(msg)
 
 
 def infer_dtype(mem: MrcFile) -> npt.DTypeLike:

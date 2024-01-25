@@ -12,7 +12,7 @@ import zarr
 from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.core import create_group, access, read
 from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
-from fibsem_tools.io.zarr import delete_zbranch
+from fibsem_tools.io.zarr import delete_node
 
 
 def _make_local_files(files):
@@ -104,7 +104,7 @@ def test_deletion(temp_zarr):
         assert key in existing.chunk_store
 
     # delete
-    delete_zbranch(existing)
+    delete_node(existing)
 
     for key in keys:
         if existing.name in key:

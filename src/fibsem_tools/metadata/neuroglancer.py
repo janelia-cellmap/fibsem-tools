@@ -1,4 +1,5 @@
 from typing import Iterable, List, Literal, Sequence, Union
+from typing_extensions import deprecated
 
 import numpy as np
 from pydantic import BaseModel, PositiveInt, ValidationError, validator
@@ -8,6 +9,9 @@ from fibsem_tools.io.util import normalize_chunks
 from fibsem_tools.metadata.transform import STTransform
 
 
+@deprecated(
+    "PixelResolution is deprecated, use multiscale.neuroglancer.pixelResolution from the cellmap-schemas library instead"
+)
 class PixelResolution(BaseModel):
     """
     PixelResolution attribute used by the Saalfeld lab. The `dimensions` attribute
@@ -27,7 +31,9 @@ class PixelResolution(BaseModel):
     unit: str
 
 
-# todo: validate argument lengths
+@deprecated(
+    "NeuroglancerN5GroupMetadata is deprecated, use multiscale.neuroglancer.GroupMetadata from the cellmap-schemas library instead"
+)
 class NeuroglancerN5GroupMetadata(BaseModel):
     """
     Metadata to enable displaying an N5 group containing several datasets
@@ -93,6 +99,9 @@ class NeuroglancerN5GroupMetadata(BaseModel):
         )
 
 
+@deprecated(
+    "NeuroglancerN5Group is deprecated, use multiscale.neuroglancer.Group from the cellmap-schemas library instead"
+)
 class NeuroglancerN5Group(GroupSpec):
     """
     A `GroupSpec` representing the structure of a N5 group with

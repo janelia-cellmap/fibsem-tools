@@ -1,3 +1,4 @@
+from __future__ import annotations
 from os import PathLike
 from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -26,6 +27,8 @@ import random
 from fibsem_tools.io.core import access, read
 from fibsem_tools.io.zarr import are_chunks_aligned
 from dask import delayed
+
+from fibsem_tools.types import Arrayish, ImplicitlyChunkedArrayish
 
 random.seed(0)
 
@@ -317,9 +320,76 @@ def autoscale_chunk_shape(
     return result
 
 
+def resolve_slice(slce: slice, interval: Tuple[int, int]) -> slice:
+    """
+    Given a slice and an interval indexed by the slice, return a slice with integer start, stop and step/
+    """
+    step = 1 if slce.step is None else slce.step
+    sliced_interval = tuple(range(*interval))[slce]
+    return slice(sliced_interval[0], sliced_interval[-1] + 1, step)
+
+
+def resolve_slices(
+    slces: Sequence[slice], intervals: Tuple[Tuple[int, int]]
+) -> Tuple[slice, ...]:
+    return tuple(map(lambda v: resolve_slice(*v), zip(slces, intervals)))
+
+
+def interval_remainder(
+    interval_a: Tuple[int, int], interval_b: Tuple[int, int]
+) -> Tuple[int, int]:
+    """
+    Repeat interval_b until it forms an interval that is larger than or equal to interval_a.
+    Return the number of elements that must be added to the start and end of interval_a to match this length.
+
+    If interval_b is an integer multiple of interval_a, return (0,0)
+    """
+    start_a, stop_a = interval_a
+
+    start_b, stop_b = interval_b
+    len_b = stop_b - start_b
+
+    start_diff = start_b - start_a
+    stop_diff = stop_a - stop_b
+
+    if start_diff <= 0:
+        start_scaled = start_b
+    else:
+        scale_bottom = np.ceil(start_diff / len_b).astype(int)
+        start_scaled = start_b - len_b * scale_bottom
+
+    if stop_diff <= 0:
+        stop_scaled = stop_b
+    else:
+        scale_top = np.ceil(stop_diff / len_b).astype("int")
+        stop_scaled = stop_b + len_b * scale_top
+
+    return start_a - start_scaled, stop_scaled - stop_a
+
+
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def setitem(source, dest, sl):
-    dest[sl] = source[sl]
+def setitem(
+    source,
+    dest: Union[Arrayish, ImplicitlyChunkedArrayish],
+    selection: Tuple[slice, ...],
+    *,
+    chunk_safe: bool = True,
+):
+    if chunk_safe and hasattr(dest, "chunks"):
+        selection_resolved = resolve_slices(
+            selection, tuple((0, s) for s in dest.shape)
+        )
+
+        for sel, cnk, shape in zip(selection_resolved, dest.chunks, dest.shape):
+            if sel.start % cnk != 0 or ((sel.stop != shape) and sel.stop % cnk != 0):
+                msg = (
+                    f"Planned writes are not chunk-aligned. Destination array has chunks sized {dest.chunks} "
+                    f"but the requested selection {selection} partially crosses chunk boundaries. "
+                    "Either call this function with `chunk_safe=False`, or align your writes to the "
+                    "chunk boundaries of the destination."
+                )
+                raise ValueError(msg)
+    dest[selection] = source[selection]
 
 
 def copy_from_slices(slices, source_array, dest_array):

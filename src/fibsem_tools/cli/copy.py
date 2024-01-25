@@ -2,18 +2,14 @@ from typing import Any, Literal, Optional
 import click
 from xarray_multiscale import multiscale, windowed_mean
 from numcodecs import Zstd
+from fibsem_tools.cli.fst import fst
 
-from fibsem_tools.io.core import access, read_xarray
+from fibsem_tools.io.core import access, read_xarray, read
 from fibsem_tools.io.multiscale import multiscale_group
-from fibsem_tools.io.zarr import get_url, parse_url, get_store
+from fibsem_tools.io.zarr import chunk_keys, get_url, parse_url, get_store
 import dask
 import os
 from rich import print
-
-
-@click.group
-def fst():
-    pass
 
 
 @fst.command("convert")
@@ -73,7 +69,7 @@ def mrc_multiscale(
     multi_group = multi_group_spec.to_zarr(
         get_store(store_path), path=node_path, overwrite=overwrite
     )
-    
+
     # create writable handles for all the arrays
     dest_arrays = [
         access(
@@ -98,6 +94,24 @@ def mrc_multiscale(
         raise NotImplementedError(f"cannot handle compute mode {compute} at this time.")
 
 
+def array_to_array(source, dest):
+    """
+    copy the contents of an array to another array
+    """
+
+    # iterate over the output chunks of the target array
+
+    # output_chunks = chunk_keys(read(dest))
+    raise NotImplementedError
+
+
+def group_to_group():
+    """
+    Copy the contents of a group to another group
+    """
+    ...
+
+    raise NotImplementedError
 """     if dest_format == 'auto':
         dest = access(dest)
 

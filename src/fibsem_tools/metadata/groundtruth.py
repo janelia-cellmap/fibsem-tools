@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import date
 from enum import Enum
 from typing import Dict, Generic, List, Literal, Optional, TypeVar, Union
+from typing_extensions import deprecated
 from pydantic_zarr import GroupSpec, ArraySpec
 from pydantic import BaseModel, root_validator
 from pydantic.generics import GenericModel
@@ -109,6 +110,9 @@ classNameDict = {
 Possibility = Literal["unknown", "absent"]
 
 
+@deprecated(
+    "SemanticSegmentation is deprecated, use annotation.SemanticSegmentation from the cellmap-schemas library instead"
+)
 class SemanticSegmentation(StrictBase):
     """
     Metadata for a semantic segmentation, i.e. a segmentation where numerical values
@@ -144,6 +148,9 @@ AnnotationType = Union[SemanticSegmentation, InstanceSegmentation]
 TName = TypeVar("TName", bound=str)
 
 
+@deprecated(
+    "AnnotationArrayAttrs is deprecated, use annotation.ArrayAttrs from the cellmap-schemas library instead"
+)
 class AnnotationArrayAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an array of annotated values.
@@ -181,6 +188,9 @@ class AnnotationArrayAttrs(GenericModel, Generic[TName]):
         return values
 
 
+@deprecated(
+    "AnnotationGroupAttrs is deprecated, use annotation.GroupAttrs from the cellmap-schemas library instead"
+)
 class AnnotationGroupAttrs(GenericModel, Generic[TName]):
     """
     The metadata for an individual annotated semantic class.
@@ -201,6 +211,9 @@ class AnnotationGroupAttrs(GenericModel, Generic[TName]):
     annotation_type: AnnotationType
 
 
+@deprecated(
+    "CropGroupAttrs is deprecated, use annotation.CropGroupAttrs from the cellmap-schemas library instead"
+)
 class CropGroupAttrs(GenericModel, Generic[TName]):
     """
     The metadata for all annotations in zarr group representing a single crop.
@@ -250,6 +263,7 @@ AnnotationArray = ArraySpec[AnnotationArrayAttrs]
 AnnotationGroup = GroupSpec[
     CellmapWrapper[AnnotationWrapper[AnnotationGroupAttrs]], AnnotationArray
 ]
+
 CropGroup = GroupSpec[
     CellmapWrapper[AnnotationWrapper[CropGroupAttrs]], AnnotationGroup
 ]

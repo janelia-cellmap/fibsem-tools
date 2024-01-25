@@ -1,4 +1,5 @@
 from typing import Iterable, Literal, Optional, Sequence, Tuple, Union
+from typing_extensions import deprecated
 
 from pydantic import BaseModel
 from xarray import DataArray
@@ -32,6 +33,9 @@ class MultiscaleMetaV2(BaseModel):
     datasets: list[str]
 
 
+@deprecated(
+    "CosemGroupMetadataV1 is deprecated, use multiscale.cosem.GroupAttrs from the cellmap-schemas library instead"
+)
 class CosemGroupMetadataV1(BaseModel):
     """
     Multiscale metadata used by COSEM for multiscale datasets saved in N5/Zarr groups.
@@ -82,6 +86,7 @@ class CosemGroupMetadataV1(BaseModel):
         return cls(name=name, multiscales=multiscales, paths=paths)
 
 
+@deprecated("CosemGroupMetadataV2 is deprecated. Do not use it.")
 class CosemGroupMetadataV2(BaseModel):
     """
     Multiscale metadata used by COSEM for multiscale datasets saved in N5/Zarr groups.
@@ -130,10 +135,16 @@ class CosemGroupMetadataV2(BaseModel):
         return cls(name=name, multiscales=multiscales, paths=_paths)
 
 
+@deprecated(
+    "CosemArrayAttrs is deprecated, use multiscale.cosem.ArrayAttrs from the cellmap-schemas library instead"
+)
 class CosemArrayAttrs(BaseModel):
     transform: STTransform
 
 
+@deprecated(
+    "CosemMultiscaleArray is deprecated, use multiscale.cosem.Array from the cellmap-schemas library instead"
+)
 class CosemMultiscaleArray(ArraySpec):
     attrs: CosemArrayAttrs
 
@@ -143,6 +154,9 @@ class CosemMultiscaleArray(ArraySpec):
         return cls.from_array(array, attrs=attrs, **kwargs)
 
 
+@deprecated(
+    "CosemMultiscaleGroupV1 is deprecated, use multiscale.cosem.Group from the cellmap-schemas library instead"
+)
 class CosemMultiscaleGroupV1(GroupSpec):
     attrs: CosemGroupMetadataV1
     members: dict[str, CosemMultiscaleArray]
@@ -194,6 +208,7 @@ class CosemMultiscaleGroupV1(GroupSpec):
         return cls(attrs=attrs, members=array_specs)
 
 
+@deprecated("CosemGroupV2 is deprecated. Do not use it.")
 class CosemMultiscaleGroupV2(GroupSpec):
     attrs: CosemGroupMetadataV2
     members: dict[str, ArraySpec[CosemArrayAttrs]]

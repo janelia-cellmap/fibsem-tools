@@ -3,7 +3,7 @@ import click
 import zarr
 from fibsem_tools import access
 from rich import print
-from fibsem_tools.io.zarr import get_chunk_keys
+from fibsem_tools.io.zarr import chunk_keys
 from rich.progress import track
 import time
 from dataclasses import dataclass
@@ -64,7 +64,7 @@ def check_zarray(array: zarr.Array) -> dict[str, Union[Missing, Invalid, Valid]]
     space of the store object associated with the array, and each value is either a
     Valid, Missing, or Invalid object.
     """
-    ckeys = tuple(get_chunk_keys(array))
+    ckeys = tuple(chunk_keys(array))
     results = {}
     for ckey in track(ckeys, description="Checking chunks..."):
         try:

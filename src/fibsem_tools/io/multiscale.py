@@ -2,8 +2,11 @@ from __future__ import annotations
 from typing import Any, Literal, Optional, Sequence, Tuple, Union, List
 
 from xarray import DataArray
-
+import numpy.typing as npt
+from xarray_multiscale.reducers import WindowedReducer
+from xarray_multiscale import multiscale
 import zarr
+from fibsem_tools.io.dask import setitem
 from fibsem_tools.io.util import normalize_chunks
 from fibsem_tools.metadata.cosem import (
     CosemMultiscaleGroupV1,
@@ -15,6 +18,8 @@ from fibsem_tools.metadata.neuroglancer import (
 from numcodecs.abc import Codec
 from xarray_ome_ngff.registry import get_adapters
 from pydantic_zarr import GroupSpec, ArraySpec
+
+from fibsem_tools.types import ImplicitlyChunkedArrayish
 
 
 NGFF_DEFAULT_VERSION = "0.4"
@@ -169,3 +174,37 @@ def is_multiscale_group(node: Any) -> bool:
             return True
 
     return False
+
+
+def save_multiscale_chunk(
+    data: npt.NDArray[Any],
+    reduction: WindowedReducer,
+    scale_factors: Union[Sequence[int], int],
+    origin: tuple[int, ...],
+    targets: Sequence[zarr.Array],
+    chunk_safe: bool = True,
+) -> List[
+    Union[
+        Literal["success"],
+        Tuple[npt.NDArray[Any], ImplicitlyChunkedArrayish, Tuple[slice, ...]],
+    ]
+]:
+    """
+    Create a multiscale pyramid from an array, and save each resulting array
+    to one of the targets, unless that operation raises a ValueError, in which case that array is returned to the caller.
+    The expectation is that the caller will
+    manage saving saving that array in a chunk-safe manner.
+    """
+
+    multi = multiscale(data, reduction=reduction, scale_factors=scale_factors)
+    origins = [tuple(o // s for o in origin) for s in scale_factors]
+    out = []
+    for array, ogn, target in zip(multi, origins, targets):
+        selection = tuple(slice(o, s) for o, s in zip(ogn, array.shape))
+        try:
+            setitem(array, target, selection, chunk_safe=chunk_safe)
+            out.append("success")
+        except ValueError:
+            out.append((array, target, selection))
+
+    return out
