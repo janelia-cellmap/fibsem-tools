@@ -36,6 +36,7 @@ from zarr.errors import ReadOnlyError
 from pydantic_zarr import GroupSpec, ArraySpec
 from numcodecs.abc import Codec
 from operator import delitem
+from zarr.errors import PathNotFoundError
 
 ureg = pint.UnitRegistry()
 
@@ -799,3 +800,69 @@ def n5_spec_unwrapper(spec: Union[GroupSpec, ArraySpec]) -> Union[GroupSpec, Arr
         return n5_array_unwrapper(spec)
     else:
         return n5_group_unwrapper(spec)
+
+
+def ensure_spec(
+    spec: Union[GroupSpec, ArraySpec], store, path: str
+) -> Union[GroupSpec, ArraySpec]:
+    """
+    Ensure that a zarr storage backend has the structure specified by a spec
+    """
+    try:
+        existing_node = zarr.open(store=store, path=path, mode="r")
+        existing_spec = GroupSpec.from_zarr(existing_node)
+        if isinstance(store, zarr.N5FSStore):
+            existing_spec = n5_spec_unwrapper(existing_spec)
+        if existing_spec == spec:
+            node = zarr.open(store=store, path=path)
+        else:
+            # todo: make a specific exception for this
+            raise PathNotFoundError(path)
+
+    # Neither a zarr Array or Group was found at that path
+    # so we can safely instantiate the spec
+    except PathNotFoundError:
+        if isinstance(store, zarr.N5FSStore):
+            spec = n5_spec_wrapper(spec)
+        node = spec.to_zarr(store, path=path)
+    return node
+
+
+def copyable(source_group: GroupSpec, dest_group: GroupSpec, strict: bool = False):
+    """
+    Check whether a Zarr group modeled by a GroupSpec `source_group` can be copied into the Zarr group modeled by GroupSpec `dest_group`.
+    This entails checking that every (key, value) pair in `source_group.members` has a copyable counterpart in `dest_group.members`.
+    Arrays are copyable if their shape and dtype match. Groups are copyable if their members are copyable.
+    In general copyability as defined here is not symmetric for groups, because a `source_group`
+    may have fewer members than `dest_group`, but if each of the shared members are copyable,
+    then the source is copyable to the dest, but not vice versa.
+    """
+
+    if strict:
+        if set(source_group.members.keys) != set(dest_group.members.keys):
+            return False
+    else:
+        # extra members are allowed in the destination group
+        if not set(source_group.members.keys()).issubset(
+            set(dest_group.members.keys())
+        ):
+            return False
+
+    for key_source, key_dest in zip(
+        source_group.members.keys(), dest_group.members.keys()
+    ):
+        value_source = source_group.members[key_source]
+        value_dest = dest_group.members[key_dest]
+
+        if type(value_source) != type(value_dest):
+            return False
+        if isinstance(value_source, ArraySpec):
+            # shape and dtype are the two properties that must match for bulk copying to work.
+            if value_source.shape != value_dest.shape:
+                return False
+            if value_source.dtype != value_dest.dtype:
+                return False
+        else:
+            # recurse into subgroups
+            return copyable(value_source, value_dest, strict=strict)
+    return True

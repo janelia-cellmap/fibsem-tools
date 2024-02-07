@@ -54,6 +54,7 @@ def split_annotations(
     class_encoding: Dict[str, LabelledAnnotationState],
     chunks: Union[Literal["auto"], Tuple[Tuple[int, ...], ...]] = "auto",
     compressor="auto",
+    overwrite: bool = False,
 ) -> zarr.Group:
     assert image_name != ""
     if chunks == "auto":
@@ -66,10 +67,10 @@ def split_annotations(
 
     store = get_store(pre)
 
-    if contains_group(store, post):
+    if contains_group(store, post) and not overwrite:
         raise ContainsGroupError(f"{store.path}/{post}")
 
-    if contains_array(store, post):
+    if contains_array(store, post) and not overwrite:
         raise ContainsArrayError(f"{store.path}/{post}")
 
     source_fmt = guess_format(source)
@@ -91,7 +92,7 @@ def split_annotations(
     )
 
     crop_group = spec.to_zarr(
-        zarr.open(pre, mode="a").store, path=post, overwrite=False
+        zarr.open(pre, mode="a").store, path=post, overwrite=overwrite
     )
 
     # write out all labels
@@ -118,14 +119,76 @@ def split_annotations(
     return crop_group
 
 
+def update_airtable(
+    collection_id: str, annotation_id: str, image_name: str, group: zarr.Group
+):
+    images_upsert = []
+    base = get_airbase()
+    classes_query_result = base.table("class").all()
+    classes_dict = {
+        res["fields"]["field_name"]: res["id"] for res in classes_query_result
+    }
+    for name, value in group.items():
+        value_url = get_url(value)
+        # remove 'file://' from urls until ML pipelines can handle it
+        location = value_url.replace("file://", "")
+        xr: DataArray = read_xarray(value_url)["s0"].data
+
+        if name in classes_dict:
+            class_name = [classes_dict[name]]
+        elif name == "all":
+            class_name = list(classes_dict.values())
+        # upsert this image record
+        images_upsert.append(
+            ImageInsert.from_xarray(
+                xr,
+                name=f"{image_name}/{name}",
+                collection=collection_id,
+                location=location,
+                value_type="label",
+                image_type="human_segmentation",
+                format="zarr",
+                annotations=[annotation_id],
+                clas=class_name,
+            )
+        )
+    image_upsert_result = upsert_images_by_location(images_upsert)
+    print(
+        "Inserted {0} images, and updated {1}".format(
+            len(image_upsert_result["createdRecords"]),
+            len(image_upsert_result["updatedRecords"]),
+        )
+    )
+    # update the annotation record
+    # query the table again because it may have changed prior to saving the zarr arrays
+    annotation_query_result_2 = select_annotation_by_name(
+        image_name, resolve_images=False
+    )
+    new_image_ids = list(
+        set(
+            annotation_query_result_2.images
+            + [x["id"] for x in image_upsert_result["records"]]
+        )
+    )
+    base.table("annotation").update(
+        annotation_query_result_2.id, fields={"images": new_image_ids}
+    )
+
+
 @click.command
 @click.argument("source", type=click.STRING)
 @click.argument("dest", type=click.STRING)
 @click.argument("collection_name", type=click.STRING)
 @click.argument("image_name", type=click.STRING)
+@click.option("--overwrite", is_flag=True, default=False, type=click.BOOL)
 @click.option("--no-update-db", is_flag=True, default=False, type=click.BOOL)
 def crop_to_zarr(
-    source, dest, collection_name: str, image_name: str, no_update_db: bool
+    source,
+    dest,
+    collection_name: str,
+    image_name: str,
+    overwrite: bool,
+    no_update_db: bool,
 ):
     """
     Convert a dense annotation stored as a TIFF file located at SOURCE into an OME-NGFF Zarr group located at DEST.
@@ -137,21 +200,32 @@ def crop_to_zarr(
 
     annotation_query_result = select_annotation_by_name(image_name, resolve_images=True)
     collection_id = annotation_query_result.images[0].collection
+
     # only write out labels that are annotated
     class_encoding_annotated = {
         k: v
         for k, v in annotation_query_result.annotation_states().items()
         if v.annotated
     }
+
     result_group = split_annotations(
         source=source,
         dest=dest,
         image_name=image_name,
         collection_name=collection_name,
         class_encoding=class_encoding_annotated,
+        overwrite=overwrite,
     )
 
     if not no_update_db:
+        update_airtable(
+            collection_id=collection_id,
+            annotation_id=annotation_query_result.id,
+            image_name=image_name,
+            group=result_group,
+        )
+    """    
+        if not no_update_db:
         images_upsert = []
         base = get_airbase()
         classes_query_result = base.table("class").all()
@@ -164,8 +238,8 @@ def crop_to_zarr(
 
             if name in classes_dict:
                 class_name = [classes_dict[name]]
-            else:
-                class_name = None
+            elif name == "all":
+                class_name = list(classes_dict.values())
             # upsert this image record
             images_upsert.append(
                 ImageInsert.from_xarray(
@@ -180,24 +254,24 @@ def crop_to_zarr(
                     clas=class_name,
                 )
             )
-            image_upsert_result = upsert_images_by_location(images_upsert)
-            print(
-                "Inserted {0} images, and updated {1}".format(
-                    len(image_upsert_result["createdRecords"]),
-                    len(image_upsert_result["updatedRecords"]),
-                )
+        image_upsert_result = upsert_images_by_location(images_upsert)
+        print(
+            "Inserted {0} images, and updated {1}".format(
+                len(image_upsert_result["createdRecords"]),
+                len(image_upsert_result["updatedRecords"]),
             )
-            # update the annotation record
-            # query the table again because it may have changed prior to saving the zarr arrays
-            annotation_query_result_2 = select_annotation_by_name(
-                image_name, resolve_images=False
+        )
+        # update the annotation record
+        # query the table again because it may have changed prior to saving the zarr arrays
+        annotation_query_result_2 = select_annotation_by_name(
+            image_name, resolve_images=False
+        )
+        new_image_ids = list(
+            set(
+                annotation_query_result_2.images
+                + [x["id"] for x in image_upsert_result["records"]]
             )
-            new_image_ids = list(
-                set(
-                    annotation_query_result_2.images
-                    + [x["id"] for x in image_upsert_result["records"]]
-                )
-            )
-            base.table("annotation").update(
-                annotation_query_result_2.id, fields={"images": new_image_ids}
-            )
+        )
+        base.table("annotation").update(
+            annotation_query_result_2.id, fields={"images": new_image_ids}
+        ) """

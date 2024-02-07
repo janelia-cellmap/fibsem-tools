@@ -76,17 +76,18 @@ def test_array_copy_from_array(shape, keep_attrs):
     chunks = (3,) * data_a.ndim
     group_spec = GroupSpec(
         members={
-            'a': ArraySpec.from_array(data_a, attrs={'foo': 100}, chunks=chunks),
-            'b': ArraySpec.from_array(data_b, chunks=chunks)
-            },
-            attrs={})
-    group = group_spec.to_zarr(zarr.MemoryStore(), path='test')
-    arr_1 = group['a']
+            "a": ArraySpec.from_array(data_a, attrs={"foo": 100}, chunks=chunks),
+            "b": ArraySpec.from_array(data_b, chunks=chunks),
+        },
+        attrs={},
+    )
+    group = group_spec.to_zarr(zarr.MemoryStore(), path="test")
+    arr_1 = group["a"]
     arr_1[:] = data_a
-    arr_2 = group['b']
+    arr_2 = group["b"]
 
     copy_op = copy_array(arr_1, arr_2, keep_attrs=keep_attrs)
-    dask.compute(copy_op, scheduler='threads')
+    dask.compute(copy_op, scheduler="threads")
     if keep_attrs:
         assert arr_1.attrs == arr_2.attrs
     else:
@@ -128,48 +129,38 @@ def test_write_blocks_delayed():
 def test_interval_remainder(data, expected):
     assert interval_remainder(*data) == expected
 
+
 @pytest.mark.parametrize(
     "data, expected",
     [
         (
-            (
-                slice(None), 
-                (0, 10)
-            ), 
+            (slice(None), (0, 10)),
             slice(0, 10, 1),
         ),
         (
-            (
-                slice(0, 10, 1), 
-                (0, 10)
-            ), 
+            (slice(0, 10, 1), (0, 10)),
             slice(0, 10, 1),
         ),
-                (
-            (
-                slice(0, 10), 
-                (0, 10)
-            ), 
+        (
+            (slice(0, 10), (0, 10)),
             slice(0, 10, 1),
         ),
-                (
-            (
-                slice(None), 
-                (9, 10)
-            ), 
+        (
+            (slice(None), (9, 10)),
             slice(9, 10, 1),
-        )
+        ),
     ],
 )
 def test_resolve_slice(data, expected):
     assert resolve_slice(*data) == expected
 
+
 @pytest.mark.parametrize(
     "chunks",
     [
-    (10,),
-    (10,11),
-    (10,11,12),
+        (10,),
+        (10, 11),
+        (10, 11, 12),
     ],
 )
 def test_chunksafe_writes(chunks: Tuple[int, ...]):
@@ -184,6 +175,6 @@ def test_chunksafe_writes(chunks: Tuple[int, ...]):
     slices_resolved = resolve_slices(selection, tuple((0, s) for s in array.shape))
     shape_resolved = tuple(sl.stop - sl.start for sl in slices_resolved)
     invalid_data = np.zeros(shape_resolved) + 2
-    
+
     with pytest.raises(ValueError, match="Planned writes are not chunk-aligned."):
         setitem(invalid_data, array, selection, chunk_safe=True)

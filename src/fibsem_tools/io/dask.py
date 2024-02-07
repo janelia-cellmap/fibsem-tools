@@ -322,7 +322,8 @@ def autoscale_chunk_shape(
 
 def resolve_slice(slce: slice, interval: Tuple[int, int]) -> slice:
     """
-    Given a slice and an interval indexed by the slice, return a slice with integer start, stop and step/
+    Given a `slice` object and a half-open interval indexed by the slice,
+    return a `slice` object with `start`, `stop` and `step` attributes that are all integers.
     """
     step = 1 if slce.step is None else slce.step
     sliced_interval = tuple(range(*interval))[slce]
@@ -330,8 +331,11 @@ def resolve_slice(slce: slice, interval: Tuple[int, int]) -> slice:
 
 
 def resolve_slices(
-    slces: Sequence[slice], intervals: Tuple[Tuple[int, int]]
+    slces: Sequence[slice], intervals: Sequence[Tuple[int, int]]
 ) -> Tuple[slice, ...]:
+    """
+    Convenience function for applying `resolve_slice` to a collection of `slice` objects and a collection of half-open intervals.
+    """
     return tuple(map(lambda v: resolve_slice(*v), zip(slces, intervals)))
 
 

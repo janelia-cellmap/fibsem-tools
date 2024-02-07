@@ -4,9 +4,9 @@ from xarray_multiscale import multiscale, windowed_mean
 from numcodecs import Zstd
 from fibsem_tools.cli.fst import fst
 
-from fibsem_tools.io.core import access, read_xarray, read
+from fibsem_tools.io.core import access, read_xarray
 from fibsem_tools.io.multiscale import multiscale_group
-from fibsem_tools.io.zarr import chunk_keys, get_url, parse_url, get_store
+from fibsem_tools.io.zarr import get_url, parse_url, get_store
 import dask
 import os
 from rich import print
@@ -112,6 +112,8 @@ def group_to_group():
     ...
 
     raise NotImplementedError
+
+
 """     if dest_format == 'auto':
         dest = access(dest)
 

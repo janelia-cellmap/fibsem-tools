@@ -26,7 +26,7 @@ def recarray_to_dict(recarray) -> Dict[str, Any]:
     return result
 
 
-def access(path: PathLike, mode: str, **kwargs):
+def access(path: PathLike, mode: str, **kwargs) -> MrcArrayWrapper:
     # todo: make memory mapping optional via kwarg
     parsed = urlparse(path)
     if parsed.scheme in ("", "file"):
@@ -38,16 +38,16 @@ def access(path: PathLike, mode: str, **kwargs):
 
 def infer_dtype(mem: MrcFile) -> npt.DTypeLike:
     """
-    Infer the datatype of an MrcMemmap array. We cannot use the dtype
-    attribute because the MRC2014 specification does not officially support the uint8
-    datatype, but that doesn't stop people from storing uint8 data as int8. This can
+    Infer the datatype of an MrcMemmap array. We cannot rely on the `dtype`
+    attribute because, whyile the MRC2014 specification does not officially support the uint8
+    datatype, MRC users routinely store uint8 data as int8. This can
     only be inferred by checking if the header.dmax propert exceeds the upper limit of
     int8 (127).
     """
     dtype = mem.data.dtype
-    if dtype == "int8":
-        if mem.header.dmax > 127:
-            dtype = "uint8"
+    if (dtype == "int8") & (mem.header.dmax > 127):
+        dtype = "uint8"
+
     return dtype
 
 
@@ -75,7 +75,9 @@ def infer_coords(mem: MrcArrayWrapper) -> List[xarray.DataArray]:
     return coords
 
 
-def chunk_loader(fname, block_info=None):
+def chunk_loader(
+    fname: str, block_info=None
+) -> npt.NDArray[Union[np.int8, np.uint8, np.int16, np.uint16]]:
     dtype = block_info[None]["dtype"]
     array_location = block_info[None]["array-location"]
     shape = block_info[None]["chunk-shape"]
@@ -145,10 +147,11 @@ def to_dask(
         for idx, shpe in enumerate(shape):
             if idx > 0:
                 if (chunks[idx] != shpe) and (chunks[idx] != -1):
-                    raise ValueError(
+                    msg = (
                         f"Chunk sizes of non-leading axes must match the shape of the "
                         f"array. Got chunk_size={chunks[idx]}, expected {shpe}"
                     )
+                    raise ValueError()
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
     arr = da.map_blocks(chunk_loader, path, chunks=_chunks, dtype=dtype)
@@ -157,7 +160,7 @@ def to_dask(
 
 class MrcArrayWrapper:
     """
-    Wrap an mrcmemmap so that it satisfies the ArrayLike interface, and a few numpy-isms.
+    Wrap an mrcmemmap so that it satisfies the `ArrayLike` interface, and a few numpy-isms.
     """
 
     mrc: MrcMemmap
@@ -167,14 +170,14 @@ class MrcArrayWrapper:
     flags: np.core.multiarray.flagsobj
 
     def __init__(self, memmap: MrcMemmap):
-        self.dtype = memmap.data.dtype
+        self.dtype = infer_dtype(memmap)
         self.shape = memmap.data.shape
         self.size = memmap.data.size
         self.flags = memmap.data.flags
         self.mrc = memmap
 
     def __getitem__(self, *args):
-        return self.mrc.data.__getitem__(*args)
+        return self.mrc.data.__getitem__(*args).astype(self.dtype)
 
     def __repr__(self):
         return f"MrcArrayWrapper(shape={self.shape}, dtype={self.dtype})"

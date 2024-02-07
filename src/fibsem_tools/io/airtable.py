@@ -71,7 +71,7 @@ class ImageInsert(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
-    def to_stt(self: ImageInsert, order: Literal["C", "F"] = "C"):
+    def to_stt(self: Self, order: Literal["C", "F"] = "C"):
         scale = [self.resolution_x_nm, self.resolution_y_nm, self.resolution_z_nm]
         translate = [self.offset_x_nm, self.offset_y_nm, self.offset_z_nm]
         units = ["nm", "nm", "nm"]
@@ -110,7 +110,7 @@ class ImageInsert(BaseModel):
         notes: Optional[str] = None,
         format: Optional[str] = None,
         title: Optional[str] = None,
-    ):
+    ) -> Self:
         if set(data.dims) != {"x", "y", "z"}:
             msg = f'{cls.__name__} is only compatible with 3D data where the dimensions are named "x", "y", and "z". Got dimensions {data.dims} instead.'
             raise ValueError(msg)
@@ -203,6 +203,9 @@ class ImageInsert(BaseModel):
         else:
             raise NotImplementedError
 
+    def to_airtable(self, table: pyat.Table):
+        return table.create(self.dict(by_alias=True))
+
 
 class ImageSelect(ImageInsert):
     """
@@ -251,10 +254,24 @@ class ImageSelect(ImageInsert):
     @classmethod
     def from_airtable(cls, payload: RecordDict) -> Self:
         fields = payload["fields"]
-        if "class" in fields:
-            clas = fields.pop("class")
-            fields["clas"] = clas
         return cls(id=payload["id"], createdTime=payload["createdTime"], **fields)
+
+
+class ImageUpdate(ImageInsert):
+    id: str = Field(exclude=True)
+
+    @classmethod
+    def from_xarray(cls, data, id: str, **kwargs):
+        # this is the correct way to call the from_xarray method on the parent class
+        # but it doesn't work. Instead, super() binds to this class. todo: figure out why.
+        # result = super().from_xarray(data, **kwargs)
+        result = ImageInsert.from_xarray(data, **kwargs)
+        return cls(**result.dict(), id=id)
+
+    def to_airtable(self, table):
+        return table.update(
+            record_id=self.id, fields=self.dict(exclude_none=True, by_alias=True)
+        )
 
 
 class AnnotationState(BaseModel):
@@ -476,5 +493,6 @@ def upsert_images_by_location(images: Iterable[ImageInsert]):
 
     base = get_airbase()
     return base.table("image").batch_upsert(
-        [{"fields": im.dict(by_alias=True)} for im in images], key_fields=["location"]
+        [{"fields": im.dict(exclude_none=True, by_alias=True)} for im in images],
+        key_fields=["location"],
     )

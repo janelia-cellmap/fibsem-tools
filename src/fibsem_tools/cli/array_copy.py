@@ -1,136 +1,20 @@
 from fibsem_tools import read, access
+from fibsem_tools.cli.base import parse_chunks, parse_compressor
 import fibsem_tools.io.dask as fsd
 import click
-from typing import Literal, Optional, Tuple
-from numcodecs.abc import Codec
-import numcodecs
+from typing import Literal, Optional
 import zarr
-import json
 import dask
 from pydantic_zarr import GroupSpec, ArraySpec
 from zarr.errors import ContainsGroupError
 from dask.diagnostics import ProgressBar
 
+from fibsem_tools.io.zarr import copyable
+
 
 @click.group()
 def data():
     pass
-
-
-def copyable(source_group: GroupSpec, dest_group: GroupSpec, strict: bool = False):
-    """
-    Check whether a Zarr group modeled by a GroupSpec `source_group` can be copied into the Zarr group modeled by GroupSpec `dest_group`.
-    This entails checking that every (key, value) pair in `source_group.members` has a copyable counterpart in `dest_group.members`.
-    Arrays are copyable if their shape and dtype match. Groups are copyable if their members are copyable.
-    In general copyability as defined here is not symmetric for groups, because a `source_group`
-    may have fewer members than `dest_group`, but if each of the shared members are copyable,
-    then the source is copyable to the dest, but not vice versa.
-    """
-
-    if strict:
-        if set(source_group.members.keys) != set(dest_group.members.keys):
-            return False
-    else:
-        # extra members are allowed in the destination group
-        if not set(source_group.members.keys()).issubset(
-            set(dest_group.members.keys())
-        ):
-            return False
-
-    for key_source, key_dest in zip(
-        source_group.members.keys(), dest_group.members.keys()
-    ):
-        value_source = source_group.members[key_source]
-        value_dest = dest_group.members[key_dest]
-
-        if type(value_source) != type(value_dest):
-            return False
-        if isinstance(value_source, ArraySpec):
-            # shape and dtype are the two properties that must match for bulk copying to work.
-            if value_source.shape != value_dest.shape:
-                return False
-            if value_source.dtype != value_dest.dtype:
-                return False
-        else:
-            # recurse into subgroups
-            return copyable(value_source, value_dest, strict=strict)
-    return True
-
-
-def parse_chunks(chunks: Optional[str]) -> Optional[Tuple[int, ...]]:
-    if isinstance(chunks, str):
-        parts = chunks.split(",")
-        return tuple(map(int, parts))
-    else:
-        return chunks
-
-
-def parse_compressor(
-    source_compressor: Optional[Codec], compressor: str, compressor_opts: Optional[str]
-) -> Optional[Codec]:
-    if compressor == "same":
-        if isinstance(compressor_opts, str):
-            msg = f"You provided compressor options {compressor_opts} but `compressor` is set to `same`. This is an error."
-            raise ValueError(msg)
-        return source_compressor
-
-    compressor_class = getattr(numcodecs, compressor)
-    if compressor_opts is None:
-        compressor_opts = {}
-    compressor_opts_dict = json.loads(compressor_opts)
-    compressor_instance = eval("compressor_class(**compressor_opts_dict)")
-    return compressor_instance
-
-
-def parse_region(shape: Tuple[int, ...], region_spec: str) -> Tuple[slice, ...]:
-    """
-    convert a string into a tuple of slices
-    """
-    if region_spec == "all":
-        return tuple(slice(0, s) for s in shape)
-    else:
-        results = []
-        # depth represents whether we are inside a tuple (0) or between tuples (1)
-        depth = 1
-        for element in region_spec:
-            if element == "(":
-                # opening paren: start a new collection
-                results.append([""])
-                if depth == 0:
-                    msg = f"Extraneous parenthesis in {region_spec}"
-                    raise ValueError(msg)
-                depth = 0
-            elif element == "," and depth == 0:
-                # comma between parens:
-                # switch to the next element in the collection
-                results[-1].append("")
-            elif element == "," and depth == 1:
-                # comma between parenthesized values
-                # do nothing here
-                pass
-            elif element == ")":
-                # closing paren
-                # switch back to the first element in the collection
-                if depth == 0:
-                    depth = 1
-                else:
-                    msg = f"Extraneous parenthesis in {region_spec}"
-                    raise ValueError(msg)
-            elif element == " ":
-                # whitespace. do nothing
-                pass
-            else:
-                results[-1][-1] += element
-
-    results_int = tuple(map(lambda v: tuple(map(int, v)), results))
-    all_2 = all(tuple(len(x) == 2 for x in results_int))
-    if not all_2:
-        raise ValueError(
-            f"All of the elements of region must have length 2. Got {results_int}"
-        )
-
-    results_slice = tuple(map(lambda v: slice(*v), results_int))
-    return results_slice
 
 
 def copy_array(

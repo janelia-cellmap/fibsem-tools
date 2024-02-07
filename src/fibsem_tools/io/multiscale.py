@@ -108,7 +108,7 @@ def multiscale_group(
             ]
         else:
             msg = (
-                "Multiscale metadata type {flavor} is unknown."
+                f"Multiscale metadata type {flavor} is unknown."
                 f"Try one of {multiscale_metadata_types}"
             )
             raise ValueError(msg)
