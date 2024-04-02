@@ -1,4 +1,5 @@
 from __future__ import annotations
+from copy import deepcopy
 import os
 from typing import Dict, Iterable, List, Literal, Optional, Sequence, Union
 import datatree
@@ -295,7 +296,7 @@ class AnnotationState(BaseModel):
 
 
 class LabelledAnnotationState(AnnotationState):
-    numeric_label: int
+    numeric_labels: tuple[int, ...]
 
 
 class AnnotationSelect(BaseModel):
@@ -306,12 +307,12 @@ class AnnotationSelect(BaseModel):
     ecs: Optional[AnnotationState] = Field(alias="1_ecs")
     pm: Optional[AnnotationState] = Field(alias="2_pm")
     mito_mem: Optional[AnnotationState] = Field(alias="3_mito_mem")
-    mito_lum: Optional[AnnotationState] = Field(alias="4_mito_lim")
+    mito_lum: Optional[AnnotationState] = Field(alias="4_mito_lum")
     mito_ribo: Optional[AnnotationState] = Field(alias="5_mito_ribo")
     golgi_mem: Optional[AnnotationState] = Field(alias="6_golgi_mem")
     golgi_lum: Optional[AnnotationState] = Field(alias="7_golgi_lum")
     ves_mem: Optional[AnnotationState] = Field(alias="8_ves_mem")
-    ves_lum: Optional[AnnotationState] = Field(alias="9_ves_mem")
+    ves_lum: Optional[AnnotationState] = Field(alias="9_ves_lum")
     endo_mem: Optional[AnnotationState] = Field(alias="10_endo_mem")
     endo_lum: Optional[AnnotationState] = Field(alias="11_endo_lum")
     lyso_mem: Optional[AnnotationState] = Field(alias="12_lyso_mem")
@@ -378,39 +379,93 @@ class AnnotationSelect(BaseModel):
     vacuole: Optional[AnnotationState] = Field(alias="73_vacuole")
     plasmodesmata: Optional[AnnotationState] = Field(alias="74_plasmodesmata")
 
-    def annotation_states(self) -> Dict[str, AnnotationState]:
+    def annotation_states(self, composite: bool = False) -> Dict[str, AnnotationState]:
         """
         Return the annotation states as a dict.
 
         Returns
         -------
-        Dict[str, int]
+        Dict[str, AnnotationState]
             A mapping from class name to AnnotationState.
 
         """
+        class_query_result = select_classes()
+        # key by field_name
+        class_query_result_by_name = {v.field_name: v for v in class_query_result}
         result = {}
         for key, value in filter(
             lambda v: isinstance(v[1], AnnotationState), self.__dict__.items()
         ):
-            result[key] = value
+            result[key] = LabelledAnnotationState(
+                present=value.present,
+                annotated=value.annotated,
+                sparse=value.sparse,
+                numeric_labels=[class_query_result_by_name[key].class_id],
+            )
 
+        if composite:
+            # key by class_id
+            classes_by_class_id = {c.class_id: c for c in class_query_result}
+            for value in class_query_result:
+                group_id = value.group_id
+                if group_id is not None and len(group_id) > 1:
+                    cond = all(
+                        result.get(
+                            classes_by_class_id[gid].field_name,
+                            AnnotationState(annotated=False),
+                        ).annotated
+                        for gid in group_id
+                    )
+                    if cond:
+                        present = any(
+                            result.get(
+                                classes_by_class_id[gid].field_name,
+                                AnnotationState(present=False),
+                            ).present
+                            for gid in group_id
+                        )
+                        result[value.field_name] = LabelledAnnotationState(
+                            present=present,
+                            annotated=True,
+                            numeric_labels=value.group_id,
+                        )
         return result
 
     @classmethod
     def from_airtable(cls, data: RecordDict, *, resolve_images: bool = False):
+        data_copy = deepcopy(data)
         if resolve_images:
-            data["fields"]["images"] = [
+            data_copy["fields"]["images"] = [
                 select_image_by_id(im_id) for im_id in data["fields"]["images"]
             ]
 
-        return cls(id=data["id"], createdTime=data["createdTime"], **data["fields"])
+        return cls(
+            id=data_copy["id"],
+            createdTime=data_copy["createdTime"],
+            **data_copy["fields"],
+        )
+
+
+class ClassSelect(BaseModel):
+    """
+    A model of a row selected from the "class" table.
+    """
+
+    id: str
+    field_name: str
+    class_id: int
+    group_id: Optional[list[int]] = None
+    short_name: Optional[str] = None
+    long_name: Optional[str] = None
+    description: Optional[str] = None
+    alias: Optional[str] = None
 
 
 def select_annotation_by_name(name: str, resolve_images=False) -> AnnotationSelect:
     airbase = get_airbase()
     annotations = airbase.table("annotation")
-    class_query_result = airbase.table("class").all(fields=["field_name"])
-    class_names = [c["fields"]["field_name"] for c in class_query_result]
+    classes = select_classes()
+    classes_by_name = {c.field_name: c for c in classes}
     annotation_types = airbase.table("annotation_type").all(
         fields=["name", "present", "annotated", "sparse"]
     )
@@ -430,12 +485,15 @@ def select_annotation_by_name(name: str, resolve_images=False) -> AnnotationSele
         out["fields"] = {}
         for key, field in fields.items():
             value_str, *rest = key.split("_")
-            if "_".join(rest) in class_names:
+            class_name_maybe = "_".join(rest)
+            if class_name_maybe in classes_by_name:
                 # raises if the prefix is not an int
                 value = int(value_str)
+                # assert value == label_ids[class_name_maybe]
+                assert value == int(classes_by_name[class_name_maybe].class_id)
                 annotation_type = annotation_types_parsed[field[0]].dict()
                 out["fields"][key] = LabelledAnnotationState(
-                    **annotation_type, numeric_label=value
+                    **annotation_type, numeric_labels=[value]
                 )
             else:
                 out["fields"][key] = field
@@ -449,6 +507,16 @@ def select_image_by_id(id: str):
         msg = f"Airtable does not contain a record with id={id}"
         raise ValueError(msg)
     return ImageSelect.from_airtable(result)
+
+
+def select_classes() -> List[ClassSelect]:
+    """
+    Get all the class info from airtable
+    """
+    airbase = get_airbase()
+    classes = airbase.table("class").all()
+    result = [ClassSelect(id=c["id"], **c["fields"]) for c in classes]
+    return result
 
 
 def select_image_by_collection_and_name(identifier: str) -> ImageSelect:
