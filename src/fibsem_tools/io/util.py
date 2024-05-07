@@ -1,13 +1,9 @@
 from __future__ import annotations
 import os
-from glob import glob
 from pathlib import Path
-from shutil import rmtree
 from typing import Any, Iterable, Literal, Optional, Sequence, Tuple, Union, Dict, List
 
 import fsspec
-import toolz as tz
-from dask import bag, delayed
 from typing import Protocol, runtime_checkable
 
 from xarray import DataArray
@@ -45,69 +41,6 @@ class GroupLike(Protocol):
 
     def __getitem__(self, *args: Any) -> ArrayLike | "GroupLike":
         ...
-
-
-@delayed
-def _rmtree_after_delete_files(path: str, dependency: Any):
-    rmtree(path)
-
-
-def rmtree_parallel(
-    path: Union[str, Path], branch_depth: int = 1, compute: bool = True
-):
-    branches = glob(os.path.join(path, *("*",) * branch_depth))
-    deleter = os.remove
-    files = list_files_parallel(branches)
-    deleted_files = bag.from_sequence(files).map(deleter)
-    result = _rmtree_after_delete_files(path, dependency=deleted_files)
-
-    if compute:
-        return result.compute(scheduler="threads")
-    else:
-        return result
-
-
-def list_files(
-    paths: Union[Sequence[Union[str, Path]], str, Path], followlinks: bool = False
-):
-    if isinstance(paths, str) or isinstance(paths, Path):
-        if os.path.isdir(paths):
-            return list(
-                tz.concat(
-                    (os.path.join(dp, f) for f in fn)
-                    for dp, dn, fn in os.walk(paths, followlinks=followlinks)
-                )
-            )
-        elif os.path.isfile(paths):
-            return [paths]
-        else:
-            raise ValueError(f"Input argument {paths} is not a path or a directory")
-
-    elif isinstance(paths, Sequence):
-        sortd = sorted(paths, key=os.path.isdir)
-        files, dirs = tuple(tz.partitionby(os.path.isdir, sortd))
-        return list(tz.concatv(files, *tz.map(list_files, dirs)))
-
-
-def list_files_parallel(
-    paths: Union[Sequence[Union[str, Path]], str, Path],
-    followlinks=False,
-    compute: bool = True,
-):
-    result = []
-    delf = delayed(lambda p: list_files(p, followlinks=followlinks))
-
-    if isinstance(paths, str) or isinstance(paths, Path):
-        result = bag.from_delayed([delf(paths)])
-    elif isinstance(paths, Sequence):
-        result = bag.from_delayed([delf(p) for p in paths])
-    else:
-        raise TypeError(f"Input must be a string or a sequence, not {type(paths)}")
-
-    if compute:
-        return result.compute(scheduler="threads")
-    else:
-        return result
 
 
 def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> Tuple[str, str, str]:

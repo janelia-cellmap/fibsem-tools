@@ -2,7 +2,6 @@ import atexit
 import os
 import shutil
 import tempfile
-from pathlib import Path
 
 import dask
 import dask.array as da
@@ -11,45 +10,8 @@ import zarr
 
 from fibsem_tools.io.dask import store_blocks
 from fibsem_tools.io.core import create_group, access, read
-from fibsem_tools.io.util import list_files, list_files_parallel, split_by_suffix
+from fibsem_tools.io.util import split_by_suffix
 from fibsem_tools.io.zarr import delete_node
-
-
-def _make_local_files(files):
-    result = []
-    for f in files:
-        Path(f).parent.mkdir(parents=True, exist_ok=True)
-        Path(f).touch(exist_ok=True)
-        result.append(str(Path(f).absolute()))
-    return result
-
-
-def test_list_files(temp_dir):
-    fnames = [
-        os.path.join(temp_dir, f)
-        for f in [
-            os.path.join("foo", "foo.txt"),
-            os.path.join("foo", "bar", "bar.txt"),
-            os.path.join("foo", "bar", "baz", "baz.txt"),
-        ]
-    ]
-    _make_local_files(fnames)
-    files_found = list_files(temp_dir)
-    assert set(files_found) == set(fnames)
-
-
-def test_list_files_parellel(temp_dir):
-    fnames = [
-        os.path.join(temp_dir, f)
-        for f in [
-            os.path.join("foo", "foo.txt"),
-            os.path.join("foo", "bar", "bar.txt"),
-            os.path.join("foo", "bar", "baz", "baz.txt"),
-        ]
-    ]
-    _make_local_files(fnames)
-    files_found = list_files_parallel(temp_dir)
-    assert set(files_found) == set(fnames)
 
 
 def test_path_splitting():
@@ -66,11 +28,11 @@ def test_path_splitting():
     assert split == (os.path.join("0", "1", "2.n5"), "", ".n5")
 
 
-def test_store_blocks(temp_zarr):
+def test_store_blocks(tmp_zarr):
     data = da.arange(256).reshape(16, 16).rechunk((4, 4))
-    z = zarr.open(temp_zarr, mode="w", shape=data.shape, chunks=data.chunksize)
+    z = zarr.open(tmp_zarr, mode="w", shape=data.shape, chunks=data.chunksize)
     dask.delayed(store_blocks(data, z)).compute()
-    assert np.array_equal(read(temp_zarr)[:], data.compute())
+    assert np.array_equal(read(tmp_zarr)[:], data.compute())
 
 
 def test_group_initialization():
@@ -95,8 +57,8 @@ def test_group_initialization():
         assert a_attrs[d] == dict(group[d].attrs)
 
 
-def test_deletion(temp_zarr):
-    existing = access(f"{temp_zarr}/bar", mode="w", shape=(10,), chunks=(1,))
+def test_deletion(tmp_zarr):
+    existing = access(f"{tmp_zarr}/bar", mode="w", shape=(10,), chunks=(1,))
     existing[:] = 10
     keys = tuple(existing.chunk_store.keys())
 

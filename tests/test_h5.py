@@ -4,8 +4,8 @@ from fibsem_tools.io.h5 import access_h5
 import h5py
 
 
-def test_access_array(temp_dir):
-    path = os.path.join(temp_dir, "foo.h5")
+def test_access_array(tmpdir):
+    path = os.path.join(str(tmpdir), "foo.h5")
     key = "s0"
     data = np.random.randint(0, 255, size=(10, 10, 10), dtype="uint8")
     attrs = {"resolution": "1000"}
@@ -25,9 +25,9 @@ def test_access_array(temp_dir):
     arr3.file.close()
 
 
-def test_access_group(temp_dir):
+def test_access_group(tmpdir):
     key = "s0"
-    store = os.path.join(temp_dir, key)
+    store = os.path.join(str(tmpdir), key)
     attrs = {"resolution": "1000"}
 
     grp = access_h5(store, key, attrs=attrs, mode="w")

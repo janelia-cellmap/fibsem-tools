@@ -31,12 +31,12 @@ from zarr.indexing import BasicIndexer
 from fibsem_tools.io.util import PathLike
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.metadata.transform import STTransform
-from xarray_ome_ngff.registry import get_adapters
 from zarr.errors import ReadOnlyError
-from pydantic_zarr import GroupSpec, ArraySpec
+from pydantic_zarr.v2 import GroupSpec, ArraySpec
 from numcodecs.abc import Codec
 from operator import delitem
 from zarr.errors import PathNotFoundError
+from cellmap_schemas.n5_wrap import n5_spec_unwrapper, n5_spec_wrapper
 
 ureg = pint.UnitRegistry()
 
@@ -444,9 +444,12 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
             multiscale = multiscales[0]
             ngff_version = multiscale.get("version", None)
             if ngff_version == "0.4":
-                from pydantic_ome_ngff.v04 import Multiscale
-            elif ngff_version == "0.5-dev":
-                from pydantic_ome_ngff.latest import Multiscale
+                from xarray_ome_ngff.v04.multiscale import read_array
+                from xarray_ome_ngff.array_wrap import DaskArrayWrapper
+
+                coords = read_array(
+                    array=array, array_wrapper=DaskArrayWrapper(chunks="auto")
+                ).coords
             else:
                 raise ValueError(
                     "Could not resolve the version of the multiscales metadata ",
@@ -454,34 +457,6 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
                 )
         else:
             raise ValueError("Multiscales attribute was empty.")
-        xarray_adapters = get_adapters(ngff_version)
-        multiscales_meta = [Multiscale(**entry) for entry in multiscales]
-        transforms = []
-        axes = []
-        matched_multiscale = None
-        matched_dataset = None
-        # find the correct element in multiscales.datasets for this array
-        for multi in multiscales_meta:
-            for dataset in multi.datasets:
-                if dataset.path == array.basename:
-                    matched_multiscale = multi
-                    matched_dataset = dataset
-        if matched_dataset is None or matched_multiscale is None:
-            raise ValueError(
-                f"""
-            Could not find an entry referencing array {array.basename} 
-            in the `multiscales` metadata of the parent group.
-            """
-            )
-        else:
-            transforms.extend(matched_multiscale.coordinateTransformations)
-            transforms.extend(matched_dataset.coordinateTransformations)
-            axes.extend(matched_multiscale.axes)
-            coords = xarray_adapters.transforms_to_coords(axes, transforms, array.shape)
-            for coord in coords:
-                if "unit" in coord.attrs:
-                    units = coord.attrs.pop("unit")
-                    coord.attrs["units"] = units
     else:
         raise ValueError(
             f"Could not infer coordinates for {array.path}, located at {array.store.path}."
@@ -613,16 +588,15 @@ def create_datatree(
     chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ) -> DataTree:
     if coords != "auto":
-        raise NotImplementedError(
-            f"""
-        This function does not support values of `coords` other than `auto`. 
-        Got {coords}. This may change in the future.
-        """
+        msg = (
+            "This function does not support values of `coords` other than `auto`. "
+            f"Got {coords}. This may change in the future."
         )
+        raise NotImplementedError(msg)
 
     if name is None:
         name = element.basename
@@ -646,160 +620,6 @@ def create_datatree(
     nodes["/"] = xarray.Dataset(attrs=root_attrs)
     dtree = DataTree.from_dict(nodes, name=name)
     return dtree
-
-
-@overload
-def n5_spec_wrapper(spec: ArraySpec) -> ArraySpec:
-    ...
-
-
-@overload
-def n5_spec_wrapper(spec: GroupSpec) -> GroupSpec:
-    ...
-
-
-def n5_spec_wrapper(spec: Union[GroupSpec, ArraySpec]) -> Union[GroupSpec, ArraySpec]:
-    """
-    Convert an instance of GroupSpec into one that can be materialized
-    via N5Store or N5FSStore. This requires changing array compressor metadata
-    and checking that the `dimension_separator` attribute is compatible with N5.
-
-    Parameters
-    ----------
-    spec: Union[GroupSpec, ArraySpec]
-        The spec to transform. An n5-compatible version of this spec will be generated.
-
-    Returns
-    -------
-    Union[GroupSpec, ArraySpec]
-    """
-    if isinstance(spec, ArraySpec):
-        return n5_array_wrapper(spec)
-    else:
-        return n5_group_wrapper(spec)
-
-
-def n5_group_wrapper(spec: GroupSpec) -> GroupSpec:
-    """
-    Transform a GroupSpec to make it compatible with N5 storage. This function
-    recursively applies itself `n5_spec_wrapper` on its members to produce an
-    n5-compatible spec.
-
-    Parameters
-    ----------
-    spec: GroupSpec
-        The spec to transform. Only array descendants of this spec will actually be
-        altered after the transformation.
-
-    Returns
-    -------
-    GroupSpec
-    """
-    new_members = {}
-    for key, member in spec.members.items():
-        if hasattr(member, "shape"):
-            new_members[key] = n5_array_wrapper(member)
-        else:
-            new_members[key] = n5_group_wrapper(member)
-
-    return spec.__class__(attrs=spec.attrs, members=new_members)
-
-
-def n5_array_wrapper(spec: ArraySpec) -> ArraySpec:
-    """
-    Transform an ArraySpec into one that is compatible with N5FSStore. This function
-     ensures that the `dimension_separator` of the ArraySpec is ".".
-
-    Parameters
-    ----------
-    spec: ArraySpec
-        ArraySpec instance to be transformed.
-
-    Returns
-    -------
-    ArraySpec
-    """
-    return spec.__class__(**{**spec.dict(), **dict(dimension_separator=".")})
-
-
-def n5_array_unwrapper(spec: ArraySpec) -> ArraySpec:
-    """
-    Transform an ArraySpec from one parsed from an array stored in N5. This function
-    applies two changes: First, the `dimension_separator` of the ArraySpec is set to
-    "/", and second, the `compressor` field has some N5-specific wrapping removed.
-
-    Parameters
-    ----------
-    spec: ArraySpec
-        The ArraySpec to be transformed.
-
-    Returns
-    -------
-    ArraySpec
-    """
-    new_attributes = dict(
-        compressor=spec.compressor["compressor_config"], dimension_separator="/"
-    )
-    return spec.__class__(**{**spec.dict(), **new_attributes})
-
-
-def n5_group_unwrapper(spec: GroupSpec) -> GroupSpec:
-    """
-    Transform a GroupSpec to remove the N5-specific attributes. Used when generating
-    GroupSpec instances from Zarr groups that are stored using N5FSStore.
-    This function will be applied recursively to subgroups; subarrays will be
-    transformed with `n5_array_unwrapper`.
-
-    Parameters
-    ----------
-    spec: GroupSpec
-        The spec to be transformed.
-
-    Returns
-    -------
-    GroupSpec
-    """
-    new_members = {}
-    for key, member in spec.members.items():
-        if hasattr(member, "shape"):
-            new_members[key] = n5_array_unwrapper(member)
-        else:
-            new_members[key] = n5_group_unwrapper(member)
-    return spec.__class__(attrs=spec.attrs, members=new_members)
-
-
-@overload
-def n5_spec_unwrapper(spec: ArraySpec) -> ArraySpec:
-    ...
-
-
-@overload
-def n5_spec_unwrapper(spec: GroupSpec) -> GroupSpec:
-    ...
-
-
-def n5_spec_unwrapper(spec: Union[GroupSpec, ArraySpec]) -> Union[GroupSpec, ArraySpec]:
-    """
-    Transform a GroupSpec or ArraySpec to remove the N5-specific attributes.
-    Used when generating GroupSpec or ArraySpec instances from Zarr groups that are
-    stored using N5FSStore. If the input is an instance of GroupSpec, this
-    function will be applied recursively to subgroups; subarrays will be transformed
-    via `n5_array_unwrapper`. If the input is an ArraySpec, it will be transformed with
-    `n5_array_unwrapper`.
-
-    Parameters
-    ----------
-    spec: Union[GroupSpec, ArraySpec]
-        The spec to be transformed.
-
-    Returns
-    -------
-    Union[GroupSpec, ArraySpec]
-    """
-    if isinstance(spec, ArraySpec):
-        return n5_array_unwrapper(spec)
-    else:
-        return n5_group_unwrapper(spec)
 
 
 def ensure_spec(

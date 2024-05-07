@@ -14,7 +14,7 @@ import pytest
 import zarr
 import numpy as np
 import dask
-from pydantic_zarr import ArraySpec, GroupSpec
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from numpy.testing import assert_array_equal
 from dask.array.core import slices_from_chunks
 
@@ -76,10 +76,9 @@ def test_array_copy_from_array(shape, keep_attrs):
     chunks = (3,) * data_a.ndim
     group_spec = GroupSpec(
         members={
-            "a": ArraySpec.from_array(data_a, attrs={"foo": 100}, chunks=chunks),
+            "a": ArraySpec.from_array(data_a, attributes={"foo": 100}, chunks=chunks),
             "b": ArraySpec.from_array(data_b, chunks=chunks),
-        },
-        attrs={},
+        }
     )
     group = group_spec.to_zarr(zarr.MemoryStore(), path="test")
     arr_1 = group["a"]
@@ -96,8 +95,8 @@ def test_array_copy_from_array(shape, keep_attrs):
 
 
 @pytest.mark.parametrize("shape", ((1000,), (100, 100)))
-def test_array_copy_from_path(temp_zarr, shape):
-    g = zarr.group(zarr.NestedDirectoryStore(temp_zarr))
+def test_array_copy_from_path(tmp_zarr, shape):
+    g = zarr.group(zarr.NestedDirectoryStore(tmp_zarr))
     arr_1 = g.create_dataset(name="a", data=np.random.randint(0, 255, shape))
     arr_2 = g.create_dataset(name="b", data=np.zeros(arr_1.shape, dtype=arr_1.dtype))
 

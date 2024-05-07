@@ -14,9 +14,9 @@ from fibsem_tools.io.mrc import (
 from xarray.testing import assert_equal
 
 
-def test_access_mrc(temp_dir):
+def test_access_mrc(tmpdir):
     name = "test.mrc"
-    mrc_path = os.path.join(temp_dir, name)
+    mrc_path = os.path.join(str(tmpdir), name)
 
     data = np.arange(27, dtype="uint8").reshape((3, 3, 3))
     original = mrcfile.new(mrc_path, data=data, overwrite=True)
@@ -36,9 +36,9 @@ def test_access_mrc(temp_dir):
 
 
 @pytest.mark.parametrize("attrs", (None, {"foo": 10}))
-def test_read_xarray(temp_dir, attrs):
+def test_read_xarray(tmpdir, attrs):
     name = "test.mrc"
-    mrc_path = os.path.join(temp_dir, name)
+    mrc_path = os.path.join(tmpdir, name)
     scales = [1.0, 2.0, 3.0]
     data = np.arange(4 * 5 * 6, dtype="uint8").reshape((4, 5, 6))
     original = mrcfile.new(mrc_path, data=data, overwrite=True)

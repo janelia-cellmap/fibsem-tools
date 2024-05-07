@@ -5,7 +5,7 @@ from numcodecs import Zstd
 from fibsem_tools.cli.fst import fst
 
 from fibsem_tools.io.core import access, read_xarray
-from fibsem_tools.io.multiscale import multiscale_group
+from fibsem_tools.io.multiscale import model_multiscale_group
 from fibsem_tools.io.zarr import get_url, parse_url, get_store
 import dask
 import os
@@ -55,7 +55,7 @@ def mrc_multiscale(
 
     array_paths = [f"s{idx}" for idx in range(len(multi_plan))]
 
-    multi_group_spec = multiscale_group(
+    multi_group_spec = model_multiscale_group(
         multi_plan,
         ["ome-ngff"],
         compressor=Zstd(level=3),
@@ -66,7 +66,7 @@ def mrc_multiscale(
     store_path, node_path = parse_url(dest_path)
 
     # create the group
-    multi_group = multi_group_spec.to_zarr(
+    _ = multi_group_spec.to_zarr(
         get_store(store_path), path=node_path, overwrite=overwrite
     )
 

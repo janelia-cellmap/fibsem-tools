@@ -10,7 +10,7 @@ from time import time
 import dask
 from fibsem_tools.io.core import read_xarray
 
-from fibsem_tools.io.multiscale import multiscale_group
+from fibsem_tools.io.multiscale import model_multiscale_group
 from fibsem_tools.io.zarr import ensure_spec, parse_url
 import click
 from rich import print
@@ -25,7 +25,7 @@ def parse_start_index(data: Optional[Any]) -> int:
     return int(data)
 
 
-def save_single_chunked(
+def convert(
     source_url: str,
     dest_url: str,
     *,
@@ -48,7 +48,7 @@ def save_single_chunked(
     ]
 
     array_names = [f"s{idx}" for idx in range(len(multi_template))]
-    dest_groupspec = multiscale_group(
+    dest_groupspec = model_multiscale_group(
         multi_template,
         ["ome-ngff"],
         array_paths=array_names,
@@ -62,9 +62,7 @@ def save_single_chunked(
     #    get_store(store_path), group_path, overwrite=False
     # )
 
-    dest_group = ensure_spec(
-        dest_groupspec, access(store_path, mode="a").store, group_path
-    )
+    _ = ensure_spec(dest_groupspec, access(store_path, mode="a").store, group_path)
     slices = slices_from_chunks(normalize_chunks(in_chunks, source_template.shape))
 
     num_iter = len(slices)
@@ -102,7 +100,7 @@ def save_single_chunked(
         print(f"\tsaving took {time() - start} s")
 
 
-@click.command("save-single-chunked")
+@click.command("convert")
 @click.argument("source_url", type=click.STRING)
 @click.argument("dest_url", type=click.STRING)
 @click.argument("content_type", type=click.STRING)
@@ -139,7 +137,7 @@ def save_single_chunked_cli(
         None, compressor=compressor, compressor_opts=compressor_opts
     )
     # todo: allow specifying a region instead of using the stupid start_index hack
-    save_single_chunked(
+    convert(
         source_url,
         dest_url,
         content_type=content_type_parsed,

@@ -1,11 +1,12 @@
-from typing import Dict, List, Optional, Sequence, Tuple, Union, Literal
+from __future__ import annotations
+from typing import Literal, Sequence
 
-from pydantic import BaseModel, root_validator
+from cellmap_schemas.multiscale.cosem import STTransform
 from xarray import DataArray
 import fibsem_tools.io.xr as fsxr
 
 
-class STTransform(BaseModel):
+class STTransform(STTransform):
     """
     Representation of an N-dimensional scaling -> translation transform for labelled
     axes with units.
@@ -35,30 +36,7 @@ class STTransform(BaseModel):
         The default is "C".
     """
 
-    order: Optional[Literal["C", "F"]] = "C"
-    axes: Sequence[str]
-    units: Sequence[str]
-    translate: Sequence[float]
-    scale: Sequence[float]
-
-    @root_validator
-    def validate_argument_length(
-        cls, values: Dict[str, Union[Sequence[str], Sequence[float]]]
-    ):
-        scale = values.get("scale")
-        axes = values.get("axes")
-        units = values.get("units")
-        translate = values.get("translate")
-        if not len(axes) == len(units) == len(translate) == len(scale):
-            raise ValueError(
-                f"""
-                The length of all arguments must match. len(axes) = {len(axes)}, 
-                len(units) = {len(units)}, len(translate) = {len(translate)}, 
-                len(scale) = {len(scale)}"""
-            )
-        return values
-
-    def to_coords(self, shape: Tuple[int, ...]) -> List[DataArray]:
+    def to_coords(self, shape: tuple[int, ...]) -> list[DataArray]:
         """
         Given an array shape, return a list of DataArrays representing a
         bounded coordinate grid derived from this transform. This list can be used as

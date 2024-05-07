@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 import tifffile
 import os
@@ -9,8 +11,8 @@ from fibsem_tools import read
 
 @pytest.mark.parametrize("file_name", ("test.tif", "test.tiff"))
 @pytest.mark.parametrize("memmap", (True, False))
-def test_access(temp_dir, file_name, memmap):
-    path = os.path.join(temp_dir, file_name)
+def test_access(tmpdir, file_name: str, memmap: bool) -> None:
+    path = os.path.join(str(tmpdir), file_name)
 
     data = np.arange(27, dtype="uint8").reshape((3, 3, 3))
     tifffile.imwrite(path, data)
