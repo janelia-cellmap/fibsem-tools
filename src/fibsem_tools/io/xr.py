@@ -27,7 +27,7 @@ def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
     )
 
 
-def stt_from_array(
+def stt_array(
     data: npt.ArrayLike,
     dims: Tuple[str, ...],
     scales: Tuple[float, ...],

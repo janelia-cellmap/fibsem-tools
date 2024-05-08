@@ -10,7 +10,7 @@ import numpy as np
 import itertools
 from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import model_multiscale_group
-from fibsem_tools.io.xr import stt_from_array
+from fibsem_tools.io.xr import stt_array
 from fibsem_tools.io.zarr import (
     DEFAULT_ZARR_STORE,
     DEFAULT_N5_STORE,
@@ -42,7 +42,7 @@ def test_read_xarray(tmp_zarr: str) -> None:
     url = os.path.join(tmp_zarr, path)
 
     data = {
-        "s0": stt_from_array(
+        "s0": stt_array(
             np.zeros((10, 10, 10)),
             dims=("z", "y", "x"),
             scales=(1, 2, 3),
@@ -98,7 +98,7 @@ def test_read_datatree(
         name_expected = name
 
     data = {
-        "s0": stt_from_array(
+        "s0": stt_array(
             base_data,
             dims=("z", "y", "x"),
             scales=(1, 2, 3),
@@ -172,7 +172,7 @@ def test_read_dataarray(
     name: Optional[str],
 ) -> None:
     path = "test"
-    data = stt_from_array(
+    data = stt_array(
         np.zeros((10, 10, 10)),
         dims=("z", "y", "x"),
         scales=(1, 2, 3),

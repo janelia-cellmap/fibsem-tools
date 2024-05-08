@@ -38,6 +38,7 @@ from operator import delitem
 from zarr.errors import PathNotFoundError
 from cellmap_schemas.n5_wrap import n5_spec_unwrapper, n5_spec_wrapper
 
+
 ureg = pint.UnitRegistry()
 
 # default axis order of zarr spatial metadata
@@ -417,6 +418,9 @@ def infer_coords(array: zarr.Array) -> List[DataArray]:
     """
     group = access_parent(array, mode="r")
 
+    if is_n5(array.store):
+        pass
+
     if (transform := array.attrs.get("transform", None)) is not None:
         coords = STTransform(**transform).to_coords(array.shape)
 
@@ -562,7 +566,15 @@ def create_dataarray(
     xarray.DataArray
 
     """
-
+    """
+    if is_n5(element):
+        # n5-specific coordinate inference
+        
+    else:
+        # this is v04 specific and duplicative. not great.
+        from xarray_ome_ngff.v04.multiscale import read_array
+        coords = read_array(array=element, array_wrapper={'name': 'dask', 'config': {'chunks': 'auto'}}).coords
+    """
     if name is None:
         name = element.basename
 

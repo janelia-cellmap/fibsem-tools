@@ -3,7 +3,7 @@ import mrcfile
 import numpy as np
 import pytest
 from fibsem_tools.io.core import read_xarray
-from fibsem_tools.io.xr import stt_from_array
+from fibsem_tools.io.xr import stt_array
 from fibsem_tools.io.mrc import (
     MrcArrayWrapper,
     access,
@@ -45,7 +45,7 @@ def test_read_xarray(tmpdir, attrs):
     original.voxel_size = [x * 10 for x in reversed(scales)]
     original.flush()
 
-    expected = stt_from_array(
+    expected = stt_array(
         data,
         dims=("z", "y", "x"),
         translates=(0, 0, 0),
