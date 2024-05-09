@@ -1,16 +1,17 @@
 """
-Functions for reading FIB-SEM data from Shan Xu's proprietary format. The core routines here were 
+Functions for reading FIB-SEM data from Shan Xu's proprietary format. The core routines here were
 adapted from David Hoffman's work which can be found in https://github.com/janelia-cellmap/FIB-SEM-Aligner/blob/master/fibsem.py
 """
+
 from __future__ import annotations
+
 import os
+import warnings
 from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
 
 import dask.array as da
 import numpy as np
 from xarray import DataArray
-
-import warnings
 
 from fibsem_tools.io.util import AccessMode, PathLike
 from fibsem_tools.io.xr import stt_coord

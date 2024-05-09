@@ -1,19 +1,23 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
+
 import numpy as np
 
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.io.zarr import access_parent
 
 if TYPE_CHECKING:
-    from typing import Union, Literal
+    from typing import Literal, Union
 
-from xarray import DataArray
-from .transform import STTransform
-from fibsem_tools.io.util import normalize_chunks
-from cellmap_schemas.multiscale.neuroglancer_n5 import Group
-import zarr
 import dask.array as da
+import zarr
+from cellmap_schemas.multiscale.neuroglancer_n5 import Group
+from xarray import DataArray
+
+from fibsem_tools.io.util import normalize_chunks
+
+from .transform import STTransform
 
 N5_AXES_3D = ["x", "y", "z"]
 
@@ -53,13 +57,26 @@ def multiscale_group(
     )
 
 
-def read_dataarray(
+def create_dataarray(
     *,
     array: zarr.Array,
     use_dask: bool = True,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
 ) -> DataArray:
-    # we need the downscaling factors to figure out the translation transform for a given array
+    """
+    Create a DataArray from an N5 dataset that uses Neuroglancer-compatible N5 metadata.
+
+    Parameters
+    ----------
+
+    array: zarr.Array
+        A handle to the Zarr array
+    use_dask: bool = True
+        Whether to wrap the result in a dask array. Default is True.
+    chunks: Literal["auto"] | tuple[int, ...] = "auto"
+        The chunks to use for the returned array. When `use_dask` is `False`, then `chunks` must be
+        "auto".
+    """
     group_model = Group.from_zarr(access_parent(array))
     array_model = group_model.members[array.basename]
     members_sorted_by_shape = dict(
@@ -76,6 +93,9 @@ def read_dataarray(
     if use_dask:
         array_wrapped = da.from_array(array, chunks=chunks)
     else:
+        if chunks != "auto":
+            msg = f"If use_dask is False, then chunks must be 'auto'. Got {chunks} instead."
+            raise ValueError(msg)
         array_wrapped = array
 
     pixelResolution = array_model.attributes.pixelResolution
@@ -91,4 +111,6 @@ def read_dataarray(
         for idx, ax in enumerate(dims_out)
     )
 
-    return DataArray(array_wrapped, dims=dims_out, coords=coords)
+    return DataArray(
+        array_wrapped, dims=dims_out, coords=coords, attrs=array.attrs.asdict()
+    )

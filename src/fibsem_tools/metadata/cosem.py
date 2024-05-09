@@ -1,11 +1,16 @@
-from typing import Iterable, Literal, Optional, Sequence, Tuple, Union
-from typing_extensions import deprecated
+from __future__ import annotations
 
+from typing import Iterable, Literal, Optional, Sequence, Union
+
+import dask.array as da
+import zarr
 from pydantic import BaseModel
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
+from typing_extensions import deprecated
 from xarray import DataArray
-from pydantic_zarr.v2 import GroupSpec, ArraySpec
+
 from fibsem_tools.io.util import normalize_chunks
-from fibsem_tools.metadata.transform import STTransform
+from fibsem_tools.metadata.transform import STTransform, stt_to_coords
 
 
 def normalize_paths(
@@ -158,7 +163,7 @@ class CosemMultiscaleGroupV1(GroupSpec):
     def from_xarrays(
         cls,
         arrays: dict[str, DataArray],
-        chunks: Union[Tuple[Tuple[int, ...], ...], Literal["auto"]] = "auto",
+        chunks: Union[tuple[tuple[int, ...], ...], Literal["auto"]] = "auto",
         name: Optional[str] = None,
         **kwargs,
     ):
@@ -209,7 +214,7 @@ class CosemMultiscaleGroupV2(GroupSpec):
     def from_xarrays(
         cls,
         arrays: Iterable[DataArray],
-        chunks: Union[Tuple[Tuple[int, ...]], Literal["auto"]] = "auto",
+        chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
         paths: Union[Sequence[str], Literal["auto"]] = "auto",
         name: Optional[str] = None,
         **kwargs,
@@ -271,3 +276,33 @@ def multiscale_group(
 
     """
     return CosemMultiscaleGroupV1.from_xarrays(arrays)
+
+
+from cellmap_schemas.multiscale.cosem import Array
+
+
+def create_dataarray(
+    *,
+    array: zarr.Array,
+    use_dask: bool = True,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+) -> DataArray:
+    """
+    create a DataArray from an N5 container with cosem / cellmap metadata
+    """
+    if use_dask:
+        array_wrapped = da.from_array(array, chunks=chunks)
+    else:
+        if chunks != "auto":
+            msg = f"If use_dask is False, then chunks must be 'auto'. Got {chunks} instead."
+            raise ValueError(msg)
+        array_wrapped = array
+    array_model = Array.from_array(array)
+    transform = array_model.attributes.transform
+    coords = stt_to_coords(transform, array.shape)
+    return DataArray(
+        array_wrapped,
+        coords=coords,
+        dims=transform.axes,
+        attrs=array_model.attributes.model_dump(),
+    )
