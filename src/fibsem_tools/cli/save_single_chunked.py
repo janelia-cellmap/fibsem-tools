@@ -1,21 +1,21 @@
+import os
+from time import time
 from typing import Any, List, Literal, Optional, Tuple
 
+import click
+import dask
+from dask.array.core import normalize_chunks, slices_from_chunks
+from numcodecs.abc import Codec
+from rich import print
 from xarray import DataArray
-from fibsem_tools.cli.base import parse_chunks, parse_compressor, parse_content_type
-import os
-from fibsem_tools import access
 from xarray_multiscale import multiscale, windowed_mean, windowed_mode
 from xarray_multiscale.multiscale import downsampling_depth
-from time import time
-import dask
-from fibsem_tools.io.core import read_xarray
 
+from fibsem_tools import access
+from fibsem_tools.cli.base import parse_chunks, parse_compressor, parse_content_type
+from fibsem_tools.io.core import read_xarray
 from fibsem_tools.io.multiscale import model_multiscale_group
 from fibsem_tools.io.zarr import ensure_spec, parse_url
-import click
-from rich import print
-from dask.array.core import slices_from_chunks, normalize_chunks
-from numcodecs.abc import Codec
 
 
 # todo: widen return type to Tuple[slice, ...]

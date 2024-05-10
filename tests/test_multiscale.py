@@ -1,15 +1,16 @@
 from typing import Tuple
-import pytest
-import dask.array as da
-from xarray import DataArray
 
-from fibsem_tools.io.util import normalize_chunks
-from .conftest import PyramidRequest
+import dask.array as da
+import pytest
+import zarr
 from fibsem_tools.io.core import access
 from fibsem_tools.io.dask import store_blocks
-from numcodecs import GZip
 from fibsem_tools.io.multiscale import model_multiscale_group
-import zarr
+from fibsem_tools.io.util import normalize_chunks
+from numcodecs import GZip
+from xarray import DataArray
+
+from .conftest import PyramidRequest
 
 
 @pytest.mark.parametrize(

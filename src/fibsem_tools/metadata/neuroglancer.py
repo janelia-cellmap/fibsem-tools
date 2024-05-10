@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+from xarray_ome_ngff import DaskArrayWrapper, ZarrArrayWrapper
 
 from fibsem_tools.io.xr import stt_coord
 from fibsem_tools.io.zarr import access_parent
@@ -17,7 +18,7 @@ from xarray import DataArray
 
 from fibsem_tools.io.util import normalize_chunks
 
-from .transform import STTransform
+from .transform import stt_from_array
 
 N5_AXES_3D = ["x", "y", "z"]
 
@@ -43,7 +44,7 @@ def multiscale_group(
     """
     _chunks = normalize_chunks(arrays.values(), chunks)
 
-    transforms = tuple(STTransform.from_xarray(array) for array in arrays.values())
+    transforms = tuple(stt_from_array(array) for array in arrays.values())
 
     return Group.from_arrays(
         arrays=tuple(arrays.values()),
@@ -55,6 +56,26 @@ def multiscale_group(
         chunks=_chunks[0],
         **kwargs,
     )
+
+
+from xarray_ome_ngff.array_wrap import ArrayWrapperSpec, parse_wrapper
+
+
+def create_datarray_array_wrapper(
+    array: zarr.Array,
+    *,
+    array_wrapper: ZarrArrayWrapper
+    | DaskArrayWrapper
+    | ArrayWrapperSpec = DaskArrayWrapper(chunks="auto"),
+) -> DataArray:
+    wrapper_parsed = parse_wrapper(array_wrapper)
+    if isinstance(wrapper_parsed, DaskArrayWrapper):
+        use_dask = True
+        chunks = wrapper_parsed.chunks
+    else:
+        use_dask = False
+        chunks = "auto"
+    return create_dataarray(array=array, chunks=chunks, use_dask=use_dask)
 
 
 def create_dataarray(

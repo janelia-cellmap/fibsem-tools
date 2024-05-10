@@ -1,8 +1,9 @@
 import warnings
 from typing import Any, Dict, Tuple, Union
-from fibsem_tools.io.util import PathLike
 
 import h5py
+
+from fibsem_tools.io.util import PathLike
 
 H5_ACCESS_MODES = ("r", "r+", "w", "w-", "x", "a")
 

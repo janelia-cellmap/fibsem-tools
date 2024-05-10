@@ -1,33 +1,36 @@
-import os
-from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
-from datatree import DataTree
-import pytest
-from xarray import DataArray
-from zarr.storage import FSStore
-from pathlib import Path
-import zarr
-import numpy as np
 import itertools
+import os
+from pathlib import Path
+from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
+
+import dask.array as da
+import numpy as np
+import pytest
+import zarr
+from datatree import DataTree
 from fibsem_tools.io.core import read_dask, read_xarray
 from fibsem_tools.io.multiscale import model_multiscale_group
 from fibsem_tools.io.xr import stt_array
 from fibsem_tools.io.zarr import (
-    DEFAULT_ZARR_STORE,
     DEFAULT_N5_STORE,
+    DEFAULT_ZARR_STORE,
     access_n5,
     access_zarr,
+    array_from_dask,
+    chunk_keys,
     create_dataarray,
     create_datatree,
-    chunk_keys,
     get_url,
+    parse_url,
     to_dask,
     to_xarray,
-    array_from_dask,
 )
-from fibsem_tools.metadata.transform import STTransform
-import dask.array as da
+from fibsem_tools.metadata.transform import STTransform, stt_from_array
+from xarray import DataArray
 from xarray.testing import assert_equal
-from fibsem_tools.io.zarr import parse_url
+from zarr.storage import FSStore
+
+from tests.conftest import PyramidRequest
 
 
 def test_url(tmp_zarr: str) -> None:
@@ -63,7 +66,7 @@ def test_read_xarray(tmp_zarr: str) -> None:
 
     for key, value in data.items():
         zgroup[key] = value.data
-        zgroup[key].attrs["transform"] = STTransform.from_xarray(value).model_dump()
+        zgroup[key].attrs["transform"] = stt_from_array(value).model_dump()
 
     tree_expected = DataTree.from_dict(data, name=path)
     assert_equal(to_xarray(zgroup["s0"]), data["s0"])
@@ -160,41 +163,58 @@ def test_read_datatree(
         assert dict(data_store.attrs) == attrs
 
 
+from typing import Literal
+
+from fibsem_tools.metadata.cosem import multiscale_group as cosem_multiscale_group
+from fibsem_tools.metadata.neuroglancer import (
+    multiscale_group as neuroglancer_multiscale_group,
+)
+from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_multiscale_group
+
+
+@pytest.mark.parametrize("metadata_type", ("neuroglancer_n5", "cellmap", "ome_ngff"))
+@pytest.mark.parametrize(
+    "pyramid",
+    (
+        PyramidRequest(
+            dims=("z", "y", "x"),
+            shape=(12, 13, 14),
+            scale=(1, 2, 3),
+            translate=(0, 0, 0),
+        ),
+        PyramidRequest(
+            dims=("z", "y", "x"),
+            shape=(22, 53, 14),
+            scale=(4, 6, 3),
+            translate=(0, 0, 0),
+        ),
+    ),
+    indirect=["pyramid"],
+)
 @pytest.mark.parametrize("attrs", (None, {"foo": 10}))
 @pytest.mark.parametrize("coords", ("auto",))
 @pytest.mark.parametrize("use_dask", (True, False))
 @pytest.mark.parametrize("name", (None, "foo"))
 def test_read_dataarray(
-    tmp_zarr: str,
-    attrs: Optional[Dict[str, Any]],
+    tmpdir,
+    metadata_type: Literal["neuroglancer_n5", "cellmap", "ome_ngff"],
+    pyramid: list[DataArray],
+    attrs: Optional[dict[str, Any]],
     coords: str,
     use_dask: bool,
     name: Optional[str],
 ) -> None:
     path = "test"
-    data = stt_array(
-        np.zeros((10, 10, 10)),
-        dims=("z", "y", "x"),
-        scales=(1, 2, 3),
-        translates=(0, 1, 2),
-        units=("nm", "m", "mm"),
-    )
 
     if attrs is None:
         _attrs = {}
     else:
         _attrs = attrs
 
-    tmp_zarr = access_zarr(
-        tmp_zarr,
-        path,
-        mode="w",
-        shape=data.shape,
-        dtype=data.dtype,
-        attrs={"transform": STTransform.from_xarray(data).model_dump(), **_attrs},
-    )
-
-    tmp_zarr[:] = data.data
+    if metadata_type == "cellmap":
+        group = cosem_multiscale_group(pyramid)
+    elif metadata_type == "neuroglancer_n5":
+        group = neuroglancer_multiscale_group(pyramid)
     data_store = create_dataarray(
         tmp_zarr,
         use_dask=use_dask,

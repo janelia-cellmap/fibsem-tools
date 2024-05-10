@@ -1,16 +1,19 @@
 from __future__ import annotations
+
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Sequence, Tuple, Union
-import numpy.typing as npt
+from urllib.parse import urlparse
+
 import dask.array as da
 import mrcfile
 import numpy as np
+import numpy.typing as npt
+import xarray
 from dask.array.core import normalize_chunks
 from mrcfile.mrcfile import MrcFile
 from mrcfile.mrcmemmap import MrcMemmap
-import xarray
+
 from fibsem_tools.io.util import PathLike
-from pathlib import Path
-from urllib.parse import urlparse
 
 
 def recarray_to_dict(recarray) -> Dict[str, Any]:

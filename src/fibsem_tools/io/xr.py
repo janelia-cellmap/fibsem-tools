@@ -1,7 +1,8 @@
-import xarray
+from typing import Any, Sequence, Tuple
+
 import numpy as np
 import numpy.typing as npt
-from typing import Any, Tuple, Sequence
+import xarray
 
 
 def flip(data: xarray.DataArray, dims: Sequence[str] = []) -> xarray.DataArray:

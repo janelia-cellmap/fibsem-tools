@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 from typing import Literal, Sequence
 
 from cellmap_schemas.multiscale.cosem import STTransform
 from xarray import DataArray
+
 import fibsem_tools.io.xr as fsxr
 
 

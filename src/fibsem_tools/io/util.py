@@ -1,11 +1,22 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import Any, Iterable, Literal, Optional, Sequence, Tuple, Union, Dict, List
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    Union,
+    runtime_checkable,
+)
 
 import fsspec
-from typing import Protocol, runtime_checkable
-
 from xarray import DataArray
 
 JSON = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, None]
@@ -19,8 +30,7 @@ class ArrayLike(Protocol):
     shape: Tuple[int, ...]
     dtype: Any
 
-    def __getitem__(self, *args: Any) -> "ArrayLike" | float:
-        ...
+    def __getitem__(self, *args: Any) -> "ArrayLike" | float: ...
 
 
 @runtime_checkable
@@ -31,16 +41,13 @@ class GroupLike(Protocol):
         """
         ...
 
-    def create_group(self, name: str, **kwargs: Any) -> "GroupLike":
-        ...
+    def create_group(self, name: str, **kwargs: Any) -> "GroupLike": ...
 
     def create_array(
         self, name: str, dtype: Any, chunks: Tuple[int, ...], compressor: Any
-    ) -> ArrayLike:
-        ...
+    ) -> ArrayLike: ...
 
-    def __getitem__(self, *args: Any) -> ArrayLike | "GroupLike":
-        ...
+    def __getitem__(self, *args: Any) -> ArrayLike | "GroupLike": ...
 
 
 def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> Tuple[str, str, str]:

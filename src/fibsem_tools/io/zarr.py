@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import logging
 import os
+from operator import delitem
 from pathlib import Path
 from typing import (
     Any,
@@ -14,30 +16,29 @@ from typing import (
     Union,
     overload,
 )
-from datatree import DataTree
-import pint
 
 import dask.array as da
-from dask.bag import Bag
 import numpy as np
+import pint
 import xarray
-from dask.base import tokenize
 import zarr
-from zarr.storage import FSStore, BaseStore
+from cellmap_schemas.n5_wrap import n5_spec_unwrapper, n5_spec_wrapper
 from dask import bag, delayed
+from dask.bag import Bag
+from dask.base import tokenize
+from datatree import DataTree
 from distributed import Client, Lock
+from numcodecs.abc import Codec
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from xarray import DataArray, Dataset
+from xarray_ome_ngff import DaskArrayWrapper, ZarrArrayWrapper
+from zarr.errors import PathNotFoundError, ReadOnlyError
 from zarr.indexing import BasicIndexer
+from zarr.storage import BaseStore, FSStore
+
 from fibsem_tools.io.util import PathLike
 from fibsem_tools.io.xr import stt_coord
-from fibsem_tools.metadata.transform import STTransform
-from zarr.errors import ReadOnlyError
-from pydantic_zarr.v2 import GroupSpec, ArraySpec
-from numcodecs.abc import Codec
-from operator import delitem
-from zarr.errors import PathNotFoundError
-from cellmap_schemas.n5_wrap import n5_spec_unwrapper, n5_spec_wrapper
-
+from fibsem_tools.metadata.transform import STTransform, stt_to_coords
 
 ureg = pint.UnitRegistry()
 
@@ -411,64 +412,6 @@ def are_chunks_aligned(
     )
 
 
-def infer_coords(array: zarr.Array) -> List[DataArray]:
-    """
-    Attempt to infer coordinate data from a Zarr array. This function loops over potential
-    metadata schemes, trying each until one works.
-    """
-    group = access_parent(array, mode="r")
-
-    if is_n5(array.store):
-        pass
-
-    if (transform := array.attrs.get("transform", None)) is not None:
-        coords = STTransform(**transform).to_coords(array.shape)
-
-    elif "pixelResolution" in array.attrs or "resolution" in array.attrs:
-        input_axes = N5_AXES_3D
-        output_axes = input_axes[::-1]
-        translates = {ax: 0 for ax in output_axes}
-        units = {ax: "nanometer" for ax in output_axes}
-
-        if "pixelResolution" in array.attrs:
-            pixelResolution = array.attrs["pixelResolution"]
-            scales = dict(zip(input_axes, pixelResolution["dimensions"]))
-            units = {ax: pixelResolution["unit"] for ax in input_axes}
-
-        elif "resolution" in array.attrs:
-            _scales = array.attrs["resolution"]
-            scales = dict(zip(N5_AXES_3D, _scales))
-
-        coords = [
-            stt_coord(array.shape[idx], ax, scales[ax], translates[ax], units[ax])
-            for idx, ax in enumerate(output_axes)
-        ]
-    elif (multiscales := group.attrs.get("multiscales", None)) is not None:
-        if len(multiscales) > 0:
-            multiscale = multiscales[0]
-            ngff_version = multiscale.get("version", None)
-            if ngff_version == "0.4":
-                from xarray_ome_ngff.v04.multiscale import read_array
-                from xarray_ome_ngff.array_wrap import DaskArrayWrapper
-
-                coords = read_array(
-                    array=array, array_wrapper=DaskArrayWrapper(chunks="auto")
-                ).coords
-            else:
-                raise ValueError(
-                    "Could not resolve the version of the multiscales metadata ",
-                    f"found in the group metadata {dict(group.attrs)}",
-                )
-        else:
-            raise ValueError("Multiscales attribute was empty.")
-    else:
-        raise ValueError(
-            f"Could not infer coordinates for {array.path}, located at {array.store.path}."
-        )
-
-    return coords
-
-
 @overload
 def to_xarray(
     element: zarr.Array,
@@ -477,8 +420,7 @@ def to_xarray(
     attrs: Dict[str, Any] | None = None,
     coords: Any = "auto",
     name: str | None = None,
-) -> DataArray:
-    ...
+) -> DataArray: ...
 
 
 @overload
@@ -489,8 +431,7 @@ def to_xarray(
     attrs: Dict[str, Any] | None = None,
     coords: Any = "auto",
     name: str | None = None,
-) -> DataTree:
-    ...
+) -> DataTree: ...
 
 
 def to_xarray(
@@ -524,6 +465,16 @@ def to_xarray(
             "This function only accepts instances of zarr.Group and zarr.Array. ",
             f"Got {type(element)} instead.",
         )
+
+
+from xarray_ome_ngff.v04.multiscale import read_array as create_omengff_datarray
+
+from fibsem_tools.metadata.cosem import (
+    create_datarray_array_wrapper as create_cosem_dataarray,
+)
+from fibsem_tools.metadata.neuroglancer import (
+    create_datarray_array_wrapper as create_n5_dataarray,
+)
 
 
 def create_dataarray(
@@ -566,32 +517,45 @@ def create_dataarray(
     xarray.DataArray
 
     """
-    """
-    if is_n5(element):
-        # n5-specific coordinate inference
-        
-    else:
-        # this is v04 specific and duplicative. not great.
-        from xarray_ome_ngff.v04.multiscale import read_array
-        coords = read_array(array=element, array_wrapper={'name': 'dask', 'config': {'chunks': 'auto'}}).coords
-    """
+
     if name is None:
         name = element.basename
 
-    if coords == "auto":
-        coords = infer_coords(element)
-
-    # todo: fix this unfortunate structure
-    elif hasattr(coords, "to_coords"):
-        coords = coords.to_coords(element.shape)
-
     if attrs is None:
-        attrs = dict(element.attrs)
+        attrs = element.attrs.asdict()
 
-    if use_dask:
-        element = to_dask(element, chunks=chunks)
+    if coords == "auto":
+        # iterate over known multiscale models
+        if is_n5(element):
+            creation_funcs = (create_cosem_dataarray, create_n5_dataarray)
+        else:
+            creation_funcs = (create_omengff_datarray,)
+        # try different dataarray construction routines until one works
+        if use_dask:
+            array_wrapper = DaskArrayWrapper(chunks=chunks)
+        else:
+            array_wrapper = ZarrArrayWrapper()
+        exceptions: tuple[ValueError] = ()
+        for func in creation_funcs:
+            try:
+                result = func(array=element, array_wrapper=array_wrapper)
+                result.attrs.update(**attrs)
+                result.name = name
+                break
+            except ValueError as e:
+                # insert log statement here
+                exceptions += (e,)
+            msg = (
+                f"Could not create a DataArray from {element}. "
+                "The following exceptions were raised when attempting to create the dataarray: "
+                f"{[str(e) for e in exceptions]}."
+                "Try calling this function with coords set to a specific value instead of "
+                f'"auto", or adjust the coordinate metadata in {element}'
+            )
+            raise ValueError(msg)
+    else:
+        result = xarray.DataArray(element, coords=coords, attrs=attrs, name=name)
 
-    result = xarray.DataArray(element, coords=coords, attrs=attrs, name=name)
     return result
 
 

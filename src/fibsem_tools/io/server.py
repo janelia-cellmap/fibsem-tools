@@ -1,6 +1,6 @@
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer, test
-import socket
 import random
+import socket
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer, test
 
 PORT = 5000
 HOST = "0.0.0.0"

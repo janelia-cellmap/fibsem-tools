@@ -1,14 +1,15 @@
-from fibsem_tools import read, access
-from fibsem_tools.cli.base import parse_chunks, parse_compressor
-import fibsem_tools.io.dask as fsd
-import click
 from typing import Literal, Optional
-import zarr
-import dask
-from pydantic_zarr import GroupSpec, ArraySpec
-from zarr.errors import ContainsGroupError
-from dask.diagnostics import ProgressBar
 
+import click
+import dask
+import zarr
+from dask.diagnostics import ProgressBar
+from pydantic_zarr import ArraySpec, GroupSpec
+from zarr.errors import ContainsGroupError
+
+import fibsem_tools.io.dask as fsd
+from fibsem_tools import access, read
+from fibsem_tools.cli.base import parse_chunks, parse_compressor
 from fibsem_tools.io.zarr import copyable
 
 

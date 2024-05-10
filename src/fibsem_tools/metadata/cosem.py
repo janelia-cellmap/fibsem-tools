@@ -8,9 +8,10 @@ from pydantic import BaseModel
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from typing_extensions import deprecated
 from xarray import DataArray
+from xarray_ome_ngff import DaskArrayWrapper, ZarrArrayWrapper
 
 from fibsem_tools.io.util import normalize_chunks
-from fibsem_tools.metadata.transform import STTransform, stt_to_coords
+from fibsem_tools.metadata.transform import STTransform, stt_from_array, stt_to_coords
 
 
 def normalize_paths(
@@ -76,7 +77,7 @@ class CosemGroupMetadataV1(BaseModel):
             MultiscaleMetaV1(
                 name=name,
                 datasets=[
-                    ScaleMetaV1(path=path, transform=STTransform.from_xarray(array=arr))
+                    ScaleMetaV1(path=path, transform=stt_from_array(array=arr))
                     for path, arr in arrays.items()
                 ],
             )
@@ -148,7 +149,7 @@ class CosemMultiscaleArray(ArraySpec):
 
     @classmethod
     def from_xarray(cls, array: DataArray, **kwargs):
-        attrs = CosemArrayAttrs(transform=STTransform.from_xarray(array))
+        attrs = CosemArrayAttrs(transform=stt_from_array(array))
         return cls.from_array(array, attributes=attrs, **kwargs)
 
 
@@ -256,12 +257,15 @@ class CosemMultiscaleGroupV2(GroupSpec):
         return cls(attributes=attrs, members=array_specs)
 
 
+from cellmap_schemas.multiscale.cosem import Group
+
+
 def multiscale_group(
     *,
     arrays: dict[str, DataArray],
     chunks: Union[tuple[tuple[int, ...]], Literal["auto"]],
     **kwargs,
-) -> CosemMultiscaleGroupV1:
+) -> Group:
     """
     Create a model of a COSEM-style multiscale group from a collection of
     DataArrays
@@ -273,12 +277,34 @@ def multiscale_group(
         The data to model.
     chunks: The chunks for each Zarr array in the group.
 
-
     """
-    return CosemMultiscaleGroupV1.from_xarrays(arrays)
+    return Group.from_arrays(
+        arrays=tuple(arrays.values()),
+        paths=tuple(arrays.keys()),
+        transforms=tuple(stt_from_array(a) for a in arrays),
+        chunks=chunks,
+        **kwargs,
+    )
 
 
-from cellmap_schemas.multiscale.cosem import Array
+from xarray_ome_ngff.array_wrap import ArrayWrapperSpec, parse_wrapper
+
+
+def create_datarray_array_wrapper(
+    array: zarr.Array,
+    *,
+    array_wrapper: ZarrArrayWrapper
+    | DaskArrayWrapper
+    | ArrayWrapperSpec = DaskArrayWrapper(chunks="auto"),
+) -> DataArray:
+    wrapper_parsed = parse_wrapper(array_wrapper)
+    if isinstance(wrapper_parsed, DaskArrayWrapper):
+        use_dask = True
+        chunks = wrapper_parsed.chunks
+    else:
+        use_dask = False
+        chunks = "auto"
+    return create_dataarray(array=array, chunks=chunks, use_dask=use_dask)
 
 
 def create_dataarray(
@@ -297,12 +323,12 @@ def create_dataarray(
             msg = f"If use_dask is False, then chunks must be 'auto'. Got {chunks} instead."
             raise ValueError(msg)
         array_wrapped = array
-    array_model = Array.from_array(array)
-    transform = array_model.attributes.transform
+    array_attrs = array.attrs.asdict()
+    transform = STTransform(**array_attrs["transform"])
     coords = stt_to_coords(transform, array.shape)
     return DataArray(
         array_wrapped,
         coords=coords,
         dims=transform.axes,
-        attrs=array_model.attributes.model_dump(),
+        attrs=array.attrs.asdict(),
     )

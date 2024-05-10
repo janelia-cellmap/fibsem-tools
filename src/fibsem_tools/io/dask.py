@@ -1,33 +1,35 @@
 from __future__ import annotations
+
+import random
 from os import PathLike
 from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
 import backoff
 import dask
 import dask.array as da
-from dask.bag import from_sequence
 import distributed
 import numpy as np
-
 from aiohttp import ServerDisconnectedError
+from dask import delayed
 from dask.array.core import (
-    slices_from_chunks,
     normalize_chunks as normalize_chunks_dask,
 )
+from dask.array.core import (
+    slices_from_chunks,
+)
 from dask.array.optimization import fuse_slice
+from dask.bag import from_sequence
 from dask.base import tokenize
 from dask.core import flatten
 from dask.delayed import Delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.optimization import fuse
 from dask.utils import parse_bytes
+from numpy.typing import DTypeLike, NDArray
 from zarr.util import normalize_chunks as normalize_chunksize
-from numpy.typing import NDArray, DTypeLike
-import random
+
 from fibsem_tools.io.core import access, read
 from fibsem_tools.io.zarr import are_chunks_aligned
-from dask import delayed
-
 from fibsem_tools.types import Arrayish, ImplicitlyChunkedArrayish
 
 random.seed(0)

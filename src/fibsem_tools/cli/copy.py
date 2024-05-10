@@ -1,15 +1,16 @@
+import os
 from typing import Any, Literal, Optional
-import click
-from xarray_multiscale import multiscale, windowed_mean
-from numcodecs import Zstd
-from fibsem_tools.cli.fst import fst
 
+import click
+import dask
+from numcodecs import Zstd
+from rich import print
+from xarray_multiscale import multiscale, windowed_mean
+
+from fibsem_tools.cli.fst import fst
 from fibsem_tools.io.core import access, read_xarray
 from fibsem_tools.io.multiscale import model_multiscale_group
-from fibsem_tools.io.zarr import get_url, parse_url, get_store
-import dask
-import os
-from rich import print
+from fibsem_tools.io.zarr import get_store, get_url, parse_url
 
 
 @fst.command("convert")

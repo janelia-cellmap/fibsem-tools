@@ -1,9 +1,8 @@
-from numcodecs.abc import Codec
-
-
-from typing import Literal, Optional, Tuple
-import numcodecs
 import json
+from typing import Literal, Optional, Tuple
+
+import numcodecs
+from numcodecs.abc import Codec
 
 
 def parse_compressor(

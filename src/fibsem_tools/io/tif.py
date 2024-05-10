@@ -1,4 +1,5 @@
 from typing import Any, Literal
+
 import tifffile
 
 from fibsem_tools.io.util import ArrayLike, PathLike

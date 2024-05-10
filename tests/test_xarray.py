@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from fibsem_tools.io.xr import flip, stt_coord, stt_array
+from fibsem_tools.io.xr import flip, stt_array, stt_coord
 
 
 @pytest.mark.parametrize("length", (1, 10, 100))

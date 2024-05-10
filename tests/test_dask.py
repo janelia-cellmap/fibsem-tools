@@ -1,22 +1,23 @@
 from typing import Tuple
+
+import dask
 import dask.array as da
+import numpy as np
+import pytest
+import zarr
+from dask.array.core import slices_from_chunks
 from fibsem_tools.io.dask import (
+    autoscale_chunk_shape,
     copy_array,
     ensure_minimum_chunksize,
-    autoscale_chunk_shape,
     interval_remainder,
     resolve_slice,
     resolve_slices,
     setitem,
     write_blocks_delayed,
 )
-import pytest
-import zarr
-import numpy as np
-import dask
-from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from numpy.testing import assert_array_equal
-from dask.array.core import slices_from_chunks
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
 
 
 def test_ensure_minimum_chunksize():

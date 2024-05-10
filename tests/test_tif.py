@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import os
+
+import numpy as np
 import pytest
 import tifffile
-import os
-import numpy as np
-
-from fibsem_tools.io.tif import access
 from fibsem_tools import read
+from fibsem_tools.io.tif import access
 
 
 @pytest.mark.parametrize("file_name", ("test.tif", "test.tiff"))

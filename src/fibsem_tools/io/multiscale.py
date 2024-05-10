@@ -1,7 +1,12 @@
 from __future__ import annotations
+
 from typing import Literal, Tuple, Union
 
+import zarr
 from numcodecs.abc import Codec
+from pydantic_zarr.v2 import GroupSpec
+from xarray import DataArray
+from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_v04_multiscale_group
 from zarr.storage import BaseStore
 
 from fibsem_tools.io.util import normalize_chunks
@@ -9,11 +14,6 @@ from fibsem_tools.metadata.cosem import multiscale_group as cosem_multiscale_gro
 from fibsem_tools.metadata.neuroglancer import (
     multiscale_group as neuroglancer_multiscale_group,
 )
-
-from pydantic_zarr.v2 import GroupSpec
-from xarray import DataArray
-from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_v04_multiscale_group
-import zarr
 
 NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import (
@@ -11,12 +12,17 @@ from typing import (
     Union,
 )
 
-
-from xarray import DataArray
+import dask.array as da
 from datatree import DataTree
 from numpy.typing import NDArray
+from xarray import DataArray
 
-import dask.array as da
+import fibsem_tools.io.dat
+import fibsem_tools.io.h5
+import fibsem_tools.io.mrc
+import fibsem_tools.io.tif
+import fibsem_tools.io.xr
+import fibsem_tools.io.zarr
 from fibsem_tools.io.util import (
     AccessMode,
     ArrayLike,
@@ -25,13 +31,6 @@ from fibsem_tools.io.util import (
     PathLike,
     split_by_suffix,
 )
-
-import fibsem_tools.io.mrc
-import fibsem_tools.io.dat
-import fibsem_tools.io.xr
-import fibsem_tools.io.h5
-import fibsem_tools.io.zarr
-import fibsem_tools.io.tif
 
 _formats = (".dat", ".mrc", ".tif", ".tiff")
 _container_extensions = (".zarr", ".n5", ".h5")
