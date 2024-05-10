@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import itertools
 import os
 from pathlib import Path
@@ -165,11 +167,17 @@ def test_read_datatree(
 
 from typing import Literal
 
+from fibsem_tools.metadata.cosem import create_dataarray as create_dataarray_cosem
 from fibsem_tools.metadata.cosem import multiscale_group as cosem_multiscale_group
+from fibsem_tools.metadata.neuroglancer import (
+    create_dataarray as create_dataarray_neuroglancer,
+)
 from fibsem_tools.metadata.neuroglancer import (
     multiscale_group as neuroglancer_multiscale_group,
 )
 from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_multiscale_group
+from xarray_ome_ngff.v04.multiscale import read_array as create_dataarray_ome_ngff
+from zarr import N5FSStore, NestedDirectoryStore
 
 
 @pytest.mark.parametrize("metadata_type", ("neuroglancer_n5", "cellmap", "ome_ngff"))
@@ -195,6 +203,7 @@ from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_multiscale_gr
 @pytest.mark.parametrize("coords", ("auto",))
 @pytest.mark.parametrize("use_dask", (True, False))
 @pytest.mark.parametrize("name", (None, "foo"))
+@pytest.mark.parametrize("chunks", ((5, 5, 5),))
 def test_read_dataarray(
     tmpdir,
     metadata_type: Literal["neuroglancer_n5", "cellmap", "ome_ngff"],
@@ -203,40 +212,37 @@ def test_read_dataarray(
     coords: str,
     use_dask: bool,
     name: Optional[str],
+    chunks: tuple[int, int, int],
 ) -> None:
+    array_names = ("s0", "s1", "s2")
+    pyramid_dict = dict(zip(array_names, pyramid))
     path = "test"
 
-    if attrs is None:
-        _attrs = {}
-    else:
-        _attrs = attrs
-
     if metadata_type == "cellmap":
-        group = cosem_multiscale_group(pyramid)
+        store = N5FSStore(str(tmpdir))
+        group_model = cosem_multiscale_group(arrays=pyramid_dict, chunks=chunks)
+        dataarray_creator = create_dataarray_cosem
     elif metadata_type == "neuroglancer_n5":
-        group = neuroglancer_multiscale_group(pyramid)
-    data_store = create_dataarray(
-        tmp_zarr,
-        use_dask=use_dask,
-        attrs=attrs,
-        coords=coords,
-        name=name,
-    )
-
-    if name is None:
-        assert data_store.name == tmp_zarr.basename
-        if use_dask:
-            assert data_store.data.name.startswith(get_url(tmp_zarr))
+        store = N5FSStore(str(tmpdir))
+        group_model = neuroglancer_multiscale_group(arrays=pyramid_dict, chunks=chunks)
+        dataarray_creator = create_dataarray_neuroglancer
+    elif metadata_type == "ome_ngff":
+        store = NestedDirectoryStore(str(tmpdir))
+        group_model = ome_ngff_multiscale_group(
+            arrays=pyramid_dict, transform_precision=4, chunks=chunks
+        )
+        dataarray_creator = create_dataarray_ome_ngff
     else:
-        assert data_store.name == name
+        assert False
 
-    assert_equal(data_store, data)
-    assert isinstance(data_store.data, da.Array) == use_dask
+    group = group_model.to_zarr(store, path=path)
 
-    if attrs is None:
-        assert dict(tmp_zarr.attrs) == dict(data_store.attrs)
-    else:
-        assert dict(data_store.attrs) == attrs
+    for name, value in pyramid_dict.items():
+        observed = dataarray_creator(group[name])
+        assert observed.dims == value.dims
+        assert all(
+            a.equals(b) for a, b in zip(observed.coords.values(), value.coords.values())
+        )
 
 
 def test_access_array_zarr(tmp_zarr: str) -> None:

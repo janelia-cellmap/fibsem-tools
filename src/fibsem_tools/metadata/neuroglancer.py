@@ -26,7 +26,7 @@ N5_AXES_3D = ["x", "y", "z"]
 def multiscale_group(
     *,
     arrays: dict[str, DataArray],
-    chunks: Union[tuple[tuple[int, ...]], Literal["auto"]],
+    chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
     **kwargs,
 ) -> Group:
     """
@@ -58,29 +58,9 @@ def multiscale_group(
     )
 
 
-from xarray_ome_ngff.array_wrap import ArrayWrapperSpec, parse_wrapper
-
-
-def create_datarray_array_wrapper(
-    array: zarr.Array,
-    *,
-    array_wrapper: ZarrArrayWrapper
-    | DaskArrayWrapper
-    | ArrayWrapperSpec = DaskArrayWrapper(chunks="auto"),
-) -> DataArray:
-    wrapper_parsed = parse_wrapper(array_wrapper)
-    if isinstance(wrapper_parsed, DaskArrayWrapper):
-        use_dask = True
-        chunks = wrapper_parsed.chunks
-    else:
-        use_dask = False
-        chunks = "auto"
-    return create_dataarray(array=array, chunks=chunks, use_dask=use_dask)
-
-
 def create_dataarray(
-    *,
     array: zarr.Array,
+    *,
     use_dask: bool = True,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
 ) -> DataArray:

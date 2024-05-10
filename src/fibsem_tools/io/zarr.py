@@ -31,14 +31,18 @@ from distributed import Client, Lock
 from numcodecs.abc import Codec
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from xarray import DataArray, Dataset
-from xarray_ome_ngff import DaskArrayWrapper, ZarrArrayWrapper
 from zarr.errors import PathNotFoundError, ReadOnlyError
 from zarr.indexing import BasicIndexer
 from zarr.storage import BaseStore, FSStore
 
 from fibsem_tools.io.util import PathLike
-from fibsem_tools.io.xr import stt_coord
-from fibsem_tools.metadata.transform import STTransform, stt_to_coords
+from fibsem_tools.metadata.cosem import (
+    create_dataarray as create_cosem_dataarray,
+)
+from fibsem_tools.metadata.neuroglancer import (
+    create_dataarray as create_n5_dataarray,
+)
+from fibsem_tools.metadata.ome_ngff import create_dataarray as create_omengff_datarray
 
 ureg = pint.UnitRegistry()
 
@@ -467,16 +471,6 @@ def to_xarray(
         )
 
 
-from xarray_ome_ngff.v04.multiscale import read_array as create_omengff_datarray
-
-from fibsem_tools.metadata.cosem import (
-    create_datarray_array_wrapper as create_cosem_dataarray,
-)
-from fibsem_tools.metadata.neuroglancer import (
-    create_datarray_array_wrapper as create_n5_dataarray,
-)
-
-
 def create_dataarray(
     element: zarr.Array,
     chunks: Literal["auto"] | Tuple[int, ...] = "auto",
@@ -531,14 +525,10 @@ def create_dataarray(
         else:
             creation_funcs = (create_omengff_datarray,)
         # try different dataarray construction routines until one works
-        if use_dask:
-            array_wrapper = DaskArrayWrapper(chunks=chunks)
-        else:
-            array_wrapper = ZarrArrayWrapper()
         exceptions: tuple[ValueError] = ()
         for func in creation_funcs:
             try:
-                result = func(array=element, array_wrapper=array_wrapper)
+                result = func(array=element, chunks=chunks, use_dask=use_dask)
                 result.attrs.update(**attrs)
                 result.name = name
                 break
