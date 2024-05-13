@@ -3,6 +3,7 @@ import os
 import mrcfile
 import numpy as np
 import pytest
+from fibsem_tools.coordinate import stt_array
 from fibsem_tools.io.core import read_xarray
 from fibsem_tools.io.mrc import (
     MrcArrayWrapper,
@@ -11,7 +12,6 @@ from fibsem_tools.io.mrc import (
     to_dask,
     to_xarray,
 )
-from fibsem_tools.io.xr import stt_array
 from xarray.testing import assert_equal
 
 

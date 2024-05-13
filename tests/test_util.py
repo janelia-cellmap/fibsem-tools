@@ -2,7 +2,7 @@ from typing import Literal, Tuple, Union
 
 import dask.array as da
 import pytest
-from fibsem_tools.io.util import normalize_chunks
+from fibsem_tools.chunk import normalize_chunks
 from xarray import DataArray
 
 

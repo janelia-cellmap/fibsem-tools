@@ -2,25 +2,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np
-from xarray_ome_ngff import DaskArrayWrapper, ZarrArrayWrapper
-
-from fibsem_tools.io.xr import stt_coord
-from fibsem_tools.io.zarr import access_parent
-
 if TYPE_CHECKING:
     from typing import Literal, Union
 
 import dask.array as da
+import numpy as np
 import zarr
 from cellmap_schemas.multiscale.neuroglancer_n5 import Group
 from xarray import DataArray
 
-from fibsem_tools.io.util import normalize_chunks
-
-from .transform import stt_from_array
-
-N5_AXES_3D = ["x", "y", "z"]
+from fibsem_tools.chunk import normalize_chunks
+from fibsem_tools.coordinate import Literal, stt_coord, stt_from_array
+from fibsem_tools.io.n5 import N5_AXES_3D
+from fibsem_tools.io.zarr import access_parent
 
 
 def multiscale_group(

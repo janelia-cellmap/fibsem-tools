@@ -6,8 +6,9 @@ from typing import Literal
 import numpy as np
 import pytest
 from cellmap_schemas.multiscale.cosem import Group
-from fibsem_tools.metadata.cosem import create_dataarray
-from fibsem_tools.metadata.transform import STTransform, stt_from_array, stt_to_coords
+from fibsem_tools.coordinate import stt_from_array, stt_to_coords
+from fibsem_tools.io.multiscale.cosem import create_dataarray
+from fibsem_tools.metadata.transform import STTransform
 from xarray import DataArray
 from zarr import N5FSStore
 

@@ -9,7 +9,7 @@ from xarray_multiscale import multiscale, windowed_mean
 
 from fibsem_tools.cli.fst import fst
 from fibsem_tools.io.core import access, read_xarray
-from fibsem_tools.io.multiscale import model_multiscale_group
+from fibsem_tools.io.multiscale.multiscale import model_multiscale_group
 from fibsem_tools.io.zarr import get_store, get_url, parse_url
 
 

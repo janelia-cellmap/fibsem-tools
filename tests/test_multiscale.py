@@ -3,10 +3,10 @@ from typing import Tuple
 import dask.array as da
 import pytest
 import zarr
+from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.io.core import access
 from fibsem_tools.io.dask import store_blocks
-from fibsem_tools.io.multiscale import model_multiscale_group
-from fibsem_tools.io.util import normalize_chunks
+from fibsem_tools.io.multiscale.multiscale import model_multiscale_group
 from numcodecs import GZip
 from xarray import DataArray
 

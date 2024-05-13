@@ -2,7 +2,7 @@ import os
 
 import h5py
 import numpy as np
-from fibsem_tools.io.h5 import access_h5
+from fibsem_tools.io.h5 import access
 
 
 def test_access_array(tmpdir):
@@ -15,12 +15,12 @@ def test_access_array(tmpdir):
         arr1 = h5f.create_dataset(key, data=data)
         arr1.attrs.update(**attrs)
 
-    arr2 = access_h5(path, key, mode="r")
+    arr2 = access(path, key, mode="r")
     assert dict(arr2.attrs) == attrs
     assert np.array_equal(arr2[:], data)
     arr2.file.close()
 
-    arr3 = access_h5(path, key, data=data, attrs=attrs, mode="w")
+    arr3 = access(path, key, data=data, attrs=attrs, mode="w")
     assert dict(arr3.attrs) == attrs
     assert np.array_equal(arr3[:], data)
     arr3.file.close()
@@ -31,10 +31,10 @@ def test_access_group(tmpdir):
     store = os.path.join(str(tmpdir), key)
     attrs = {"resolution": "1000"}
 
-    grp = access_h5(store, key, attrs=attrs, mode="w")
+    grp = access(store, key, attrs=attrs, mode="w")
     assert dict(grp.attrs) == attrs
     grp.file.close()
 
-    grp2 = access_h5(store, key, mode="r")
+    grp2 = access(store, key, mode="r")
     assert dict(grp2.attrs) == attrs
     grp2.file.close()

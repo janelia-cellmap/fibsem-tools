@@ -1,8 +1,13 @@
-from typing import Any, Literal
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any, Literal
 
 import tifffile
 
-from fibsem_tools.io.util import ArrayLike, PathLike
+from fibsem_tools.types import ArrayLike, PathLike
 
 
 def access(

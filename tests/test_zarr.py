@@ -10,24 +10,26 @@ import numpy as np
 import pytest
 import zarr
 from datatree import DataTree
-from fibsem_tools.io.core import read_dask, read_xarray
-from fibsem_tools.io.multiscale import model_multiscale_group
-from fibsem_tools.io.xr import stt_array
+from fibsem_tools.coordinate import stt_array, stt_from_array
+from fibsem_tools.io.core import (
+    create_dataarray,
+    create_datatree,
+    read_dask,
+    read_xarray,
+)
+from fibsem_tools.io.multiscale.multiscale import model_multiscale_group
 from fibsem_tools.io.zarr import (
-    DEFAULT_N5_STORE,
     DEFAULT_ZARR_STORE,
-    access_n5,
     access_zarr,
     array_from_dask,
     chunk_keys,
-    create_dataarray,
-    create_datatree,
     get_url,
     parse_url,
     to_dask,
     to_xarray,
 )
-from fibsem_tools.metadata.transform import STTransform, stt_from_array
+from fibsem_tools.io.zarr.n5 import DEFAULT_N5_STORE, access_n5
+from fibsem_tools.metadata.transform import STTransform
 from xarray import DataArray
 from xarray.testing import assert_equal
 from zarr.storage import FSStore
@@ -167,13 +169,13 @@ def test_read_datatree(
 
 from typing import Literal
 
-from fibsem_tools.metadata.cosem import create_dataarray as create_dataarray_cosem
-from fibsem_tools.metadata.cosem import multiscale_group as cosem_multiscale_group
-from fibsem_tools.metadata.neuroglancer import (
-    create_dataarray as create_dataarray_neuroglancer,
-)
-from fibsem_tools.metadata.neuroglancer import (
+from fibsem_tools.io.multiscale.cosem import create_dataarray as create_dataarray_cosem
+from fibsem_tools.io.multiscale.cosem import multiscale_group as cosem_multiscale_group
+from fibsem_tools.io.n5 import (
     multiscale_group as neuroglancer_multiscale_group,
+)
+from fibsem_tools.io.n5.hierarchy.neuroglancer import (
+    create_dataarray as create_dataarray_neuroglancer,
 )
 from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_multiscale_group
 from xarray_ome_ngff.v04.multiscale import read_array as create_dataarray_ome_ngff

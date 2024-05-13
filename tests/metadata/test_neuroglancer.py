@@ -5,8 +5,8 @@ from typing import Literal
 
 import pytest
 from cellmap_schemas.multiscale.neuroglancer_n5 import Group
-from fibsem_tools.metadata.neuroglancer import create_dataarray
-from fibsem_tools.metadata.transform import stt_from_array
+from fibsem_tools.coordinate import stt_from_array
+from fibsem_tools.io.n5.hierarchy.neuroglancer import create_dataarray
 from xarray import DataArray
 from zarr import N5FSStore
 

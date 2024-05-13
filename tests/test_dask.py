@@ -6,13 +6,15 @@ import numpy as np
 import pytest
 import zarr
 from dask.array.core import slices_from_chunks
-from fibsem_tools.io.dask import (
+from fibsem_tools.chunk import (
     autoscale_chunk_shape,
-    copy_array,
     ensure_minimum_chunksize,
     interval_remainder,
     resolve_slice,
     resolve_slices,
+)
+from fibsem_tools.io.dask import (
+    copy_array,
     setitem,
     write_blocks_delayed,
 )

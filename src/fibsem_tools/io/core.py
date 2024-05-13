@@ -1,36 +1,53 @@
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
+import zarr
+from zarr.storage import BaseStore
 import os
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Literal,
-    Sequence,
-    Tuple,
-    Union,
-)
+
+from fibsem_tools.chunk import normalize_chunks
+from fibsem_tools.io.n5 import is_n5
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Iterable,
+        Literal,
+        Sequence,
+        Union,
+        Optional
+    )
+    from numpy.typing import NDArray
 
 import dask.array as da
 from datatree import DataTree
-from numpy.typing import NDArray
 from xarray import DataArray
 
-import fibsem_tools.io.dat
-import fibsem_tools.io.h5
-import fibsem_tools.io.mrc
-import fibsem_tools.io.tif
-import fibsem_tools.io.xr
-import fibsem_tools.io.zarr
-from fibsem_tools.io.util import (
-    AccessMode,
-    ArrayLike,
-    Attrs,
-    GroupLike,
-    PathLike,
-    split_by_suffix,
-)
+from fibsem_tools.types import AccessMode, Attrs, PathLike
+from pydantic_zarr.v2 import GroupSpec
+
+
+from fibsem_tools.io.n5.hierarchy.neuroglancer import multiscale_group as neuroglancer_multiscale_group
+from fibsem_tools.io.n5.hierarchy.cosem import multiscale_group as cosem_multiscale_group
+from fibsem_tools.io.zarr.hierarchy.omengff import multiscale_group as ome_ngff_v04_multiscale_group
+
+from fibsem_tools.io.zarr import access as access_zarr
+from fibsem_tools.io.n5 import access as access_n5
+from fibsem_tools.io.tif import access as access_tif
+from fibsem_tools.io.mrc import access as access_mrc
+from fibsem_tools.io.dat import access as access_dat
+from fibsem_tools.io.h5 import access as access_h5
+
+from fibsem_tools.io.zarr import to_dask as zarr_to_dask
+from fibsem_tools.io.mrc import to_dask as mrc_to_dask
+from fibsem_tools.io.dat import to_dask as dat_to_dask
+
+from fibsem_tools.io.mrc import to_xarray as mrc_to_xarray
+from fibsem_tools.io.zarr import to_xarray as zarr_to_xarray
+
+from numcodecs.abc import Codec
+import fsspec
+NGFF_DEFAULT_VERSION = "0.4"
+multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]
 
 _formats = (".dat", ".mrc", ".tif", ".tiff")
 _container_extensions = (".zarr", ".n5", ".h5")
@@ -41,7 +58,7 @@ def access(
     path: PathLike,
     mode: AccessMode,
     **kwargs: Any,
-) -> ArrayLike | GroupLike:
+) -> Any:
     """
 
     Access a variety of hierarchical array storage formats.
@@ -79,17 +96,17 @@ def access(
     is_container = suffix in _container_extensions
 
     if suffix == ".zarr":
-        accessor = fibsem_tools.io.zarr.access_zarr
+        accessor = access_zarr
     elif suffix == ".n5":
-        accessor = fibsem_tools.io.zarr.access_n5
+        accessor = access_n5
     elif suffix == ".h5":
-        accessor = fibsem_tools.io.h5.access_h5
+        accessor = access_h5
     elif suffix in (".tif", ".tiff"):
-        accessor = fibsem_tools.io.tif.access
+        accessor = access_tif
     elif suffix == ".mrc":
-        accessor = fibsem_tools.io.mrc.access
+        accessor = access_mrc
     elif suffix == ".dat":
-        accessor = fibsem_tools.io.dat.access
+        accessor = access_dat
     else:
         raise ValueError(
             f"Cannot access file with extension {suffix}. Try one of {_suffixes}"
@@ -101,7 +118,7 @@ def access(
         return accessor(path_outer, mode=mode, **kwargs)
 
 
-def read(path: PathLike, **kwargs) -> ArrayLike | GroupLike:
+def read(path: PathLike, **kwargs) -> Any:
     """
 
     Read-only access for data (arrays and groups) from a variety of hierarchical array
@@ -137,7 +154,7 @@ def read(path: PathLike, **kwargs) -> ArrayLike | GroupLike:
 
 def read_dask(
     path: PathLike,
-    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
+    chunks: Union[Literal["auto"], tuple[int, ...]] = "auto",
     **kwargs: Any,
 ) -> da.Array:
     """
@@ -145,11 +162,11 @@ def read_dask(
     """
     _, _, suffix = split_by_suffix(path, _suffixes)
     if suffix in (".zarr", ".n5"):
-        dasker = fibsem_tools.io.zarr.to_dask
+        dasker = zarr_to_dask
     elif suffix == ".mrc":
-        dasker = fibsem_tools.io.mrc.to_dask
+        dasker = mrc_to_dask
     elif suffix == ".dat":
-        dasker = fibsem_tools.io.dat.to_dask
+        dasker = dat_to_dask
     else:
         raise ValueError(
             f"Cannot access file with extension {suffix} as a dask array. Extensions "
@@ -160,17 +177,17 @@ def read_dask(
 
 def read_xarray(
     path: PathLike,
-    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
+    chunks: Union[Literal["auto"], tuple[int, ...]] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
     **kwargs: Any,
 ) -> DataArray | DataTree:
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
     if suffix in (".zarr", ".n5"):
-        return fibsem_tools.io.zarr.to_xarray(
+        return zarr_read_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -181,7 +198,7 @@ def read_xarray(
     elif suffix == ".mrc":
         # todo: support datatree semantics for mrc files, maybe by considering a folder
         # group?
-        return fibsem_tools.io.mrc.to_xarray(
+        return mrc_to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -206,7 +223,7 @@ def create_group(
     group_mode: AccessMode = "w-",
     array_mode: AccessMode = "w-",
     **array_kwargs: Any,
-) -> GroupLike:
+) -> zarr.Group:
     _arrays = tuple(a for a in arrays)
     _array_paths = tuple(p for p in array_paths)
 
@@ -225,7 +242,7 @@ def create_group(
     a_urls = [os.path.join(group_url, name) for name in _array_paths]
 
     if array_attrs is None:
-        _array_attrs: Tuple[Attrs, ...] = ({},) * len(_arrays)
+        _array_attrs: tuple[Attrs, ...] = ({},) * len(_arrays)
     else:
         _array_attrs = array_attrs
 
@@ -242,3 +259,263 @@ def create_group(
         )
 
     return group
+
+
+""" def create_dataarray(
+    element: zarr.Array,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: dict[str, Any] | None = None,
+    name: str | None = None,
+) -> DataArray:
+    """
+    Create an xarray.DataArray from a zarr array.
+
+    Parameters
+    ----------
+
+    element : zarr.Array
+
+    chunks : Literal['auto'] | tuple[int, ...] = "auto"
+        The chunks for the array, if `use_dask` is set to `True`
+
+    coords : Any, default is "auto"
+        Coordinates for the data. If `coords` is "auto", then `infer_coords` will be called on
+        `element` to read the coordinates based on metadata. Otherwise, `coords` should be
+        a valid argument to the `coords` keyword argument in the `DataArray` constructor.
+
+    use_dask : bool
+        Whether to wrap `element` in a Dask array before creating the DataArray.
+
+    attrs : dict[str, Any] | None
+        Attributes for the `DataArray`. if None, then attributes will be inferred from the `attrs`
+        property of `element`.
+
+    name : str | None
+        Name for the `DataArray` (and the underlying Dask array, if `to_dask` is `True`)
+
+    Returns
+    -------
+
+    xarray.DataArray
+
+    """
+
+    if name is None:
+        name = element.basename
+
+    if attrs is None:
+        attrs = element.attrs.asdict()
+
+    if coords == "auto":
+        # iterate over known multiscale models
+        if is_n5(element):
+            creation_func = (create_n5_dataarray,)
+        else:
+            creation_funcs = (create_omengff_datarray,)
+        # try different dataarray construction routines until one works
+        exceptions: tuple[ValueError] = ()
+        for func in creation_funcs:
+            try:
+                result = func(array=element, chunks=chunks, use_dask=use_dask)
+                result.attrs.update(**attrs)
+                result.name = name
+                break
+            except ValueError as e:
+                # insert log statement here
+                exceptions += (e,)
+            msg = (
+                f"Could not create a DataArray from {element}. "
+                "The following exceptions were raised when attempting to create the dataarray: "
+                f"{[str(e) for e in exceptions]}."
+                "Try calling this function with coords set to a specific value instead of "
+                f'"auto", or adjust the coordinate metadata in {element}'
+            )
+            raise ValueError(msg)
+    else:
+        result = DataArray(element, coords=coords, attrs=attrs, name=name)
+
+    return result
+
+
+def create_datatree(
+    element: zarr.Group,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: dict[str, Any] | None = None,
+    name: str | None = None) -> DataTree:
+    if coords != "auto":
+        msg = (
+            "This function does not support values of `coords` other than `auto`. "
+            f"Got {coords}. This may change in the future."
+        )
+        raise NotImplementedError(msg)
+
+    if name is None:
+        name = element.basename
+
+    nodes: MutableMapping[str, Dataset | DataArray | DataTree | None] = {
+        name: create_dataarray(
+            array,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=None,
+            name="data",
+        )
+        for name, array in element.arrays()
+    }
+    if attrs is None:
+        root_attrs = element.attrs.asdict()
+    else:
+        root_attrs = attrs
+    # insert root element
+    nodes["/"] = Dataset(attrs=root_attrs)
+    dtree = DataTree.from_dict(nodes, name=name)
+    return dtree
+
+def to_xarray(
+    element: Any,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    use_dask: bool = True,
+    attrs: dict[str, Any] | None = None,
+    coords: Any = "auto",
+    name: str | None = None,
+) -> DataArray | DataTree:
+    if isinstance(element, zarr.Group):
+        return create_datatree(
+            element,
+            chunks=chunks,
+            coords=coords,
+            attrs=attrs,
+            use_dask=use_dask,
+            name=name,
+        )
+    elif isinstance(element, zarr.Array):
+        return create_dataarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            attrs=attrs,
+            use_dask=use_dask,
+            name=name,
+        )
+    else:
+        raise ValueError(
+            "This function only accepts instances of zarr.Group and zarr.Array. ",
+            f"Got {type(element)} instead.",
+        )
+ """
+
+def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, str]:
+    """
+    Given a string and a collection of suffixes, return
+    the string split at the last instance of any element of the string
+    containing one of the suffixes, as well as the suffix.
+    If the last element of the string bears a suffix, return the string,
+    the empty string, and the suffix.
+    """
+    protocol: Optional[str]
+    subpath: str
+    protocol, subpath = fsspec.core.split_protocol(str(uri))
+    if protocol is None:
+        separator = os.path.sep
+    else:
+        separator = "/"
+    parts = Path(subpath).parts
+    suffixed = [Path(part).suffix in suffixes for part in parts]
+
+    if not any(suffixed):
+        msg = f"No path elements found with the suffix(es) {suffixes} in {uri}"
+        raise ValueError(msg)
+
+    index = [idx for idx, val in enumerate(suffixed) if val][-1]
+    if index == (len(parts) - 1):
+        pre, post = subpath, ""
+    else:
+        pre, post = (
+            separator.join([p.strip(separator) for p in parts[: index + 1]]),
+            separator.join([p.strip(separator) for p in parts[index + 1 :]]),
+        )
+
+    suffix = Path(pre).suffix
+    if protocol:
+        pre = f"{protocol}://{pre}"
+    return pre, post, suffix
+
+
+def model_multiscale_group(
+    arrays: dict[str, DataArray],
+    metadata_type: Literal["neuroglancer_n5", "ome-ngff", "cosem"],
+    chunks: Union[tuple[tuple[int, ...], ...], Literal["auto"]] = "auto",
+    **kwargs,
+) -> GroupSpec:
+    """
+    Generate a model of a multiscale group from a list of DataArrays
+
+    Arguments
+    ---------
+
+    arrays : dict[str, DataArray]
+        The arrays to store.
+    metadata_type : Literal["neuroglancer_n5", "ome-ngff", "cosem"],
+        The metadata flavor to use.
+    chunks : Union[Tuple[Tuple[int, ...], ...], Literal["auto"]], default is "auto"
+        The chunks for the arrays instances. Either an explicit collection of
+        chunk sizes, one per array, or the string "auto". If `chunks` is "auto" and
+        the `data` attribute of the arrays is chunked, then each stored array
+        will inherit the chunks of the input arrays. If the `data` attribute
+        is not chunked, then each stored array will have chunks equal to the shape of
+        the input array.
+
+    Returns
+    -------
+
+    A GroupSpec instance representing the multiscale group
+
+    """
+    _chunks = normalize_chunks(arrays.values(), chunks=chunks)
+
+    if metadata_type == "neuroglancer":
+        return neuroglancer_multiscale_group(arrays=arrays, chunks=_chunks, **kwargs)
+    elif metadata_type == "cosem":
+        return cosem_multiscale_group(arrays=arrays, chunks=_chunks, **kwargs)
+    elif metadata_type.startswith("ome-ngff"):
+        _, _, ome_ngff_version = metadata_type.partition("@")
+        if ome_ngff_version in ("", "0.4"):
+            return ome_ngff_v04_multiscale_group(
+                arrays=arrays, transform_precision=5, chunks=_chunks, **kwargs
+            )
+        else:
+            msg = (
+                f"Metadata type {metadata_type} refers to an unsupported version of "
+                "ome-ngff ({ome_ngff_version})"
+            )
+            raise ValueError(msg)
+
+    else:
+        msg = (
+            f"Multiscale metadata type {metadata_type} is unknown."
+            f"Try one of {multiscale_metadata_types}"
+        )
+        raise ValueError(msg)
+
+
+def create_multiscale_group(
+    *,
+    store: BaseStore,
+    path: str,
+    arrays: dict[str, DataArray],
+    metadata_type: Literal["neuroglancer", "cosem", "ome-ngff", "ome-ngff@0.4"],
+    chunks: Union[tuple[tuple[int, ...], ...], Literal["auto"]] = "auto",
+    compressor: Codec | Literal["auto"] = "auto",
+    **kwargs,
+) -> zarr.Group:
+    group_model = model_multiscale_group(
+        arrays=arrays, metadata_type=metadata_type, chunks=chunks, compressor=compressor
+    )
+
+    return group_model.to_zarr(store=store, path=path, **kwargs)
+

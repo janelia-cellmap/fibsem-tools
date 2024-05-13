@@ -8,20 +8,10 @@ from pydantic import BaseModel
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from typing_extensions import deprecated
 from xarray import DataArray
-from xarray_ome_ngff import DaskArrayWrapper, ZarrArrayWrapper
 
-from fibsem_tools.io.util import normalize_chunks
-from fibsem_tools.metadata.transform import STTransform, stt_from_array, stt_to_coords
-
-
-def normalize_paths(
-    arrays: Sequence[DataArray], paths: Union[Sequence[str], Literal["auto"]]
-):
-    if paths == "auto":
-        _paths = [f"s{idx}" for idx in range(len(arrays))]
-    else:
-        _paths = paths
-    return _paths
+from fibsem_tools.chunk import normalize_chunks
+from fibsem_tools.coordinate import stt_from_array, stt_to_coords
+from fibsem_tools.metadata.transform import STTransform
 
 
 class ScaleMetaV1(BaseModel):
@@ -96,8 +86,7 @@ class CosemGroupMetadataV2(BaseModel):
     @classmethod
     def from_xarrays(
         cls,
-        arrays: Sequence[DataArray],
-        paths: Union[Sequence[str], Literal["auto"]] = "auto",
+        arrays: dict[str, DataArray],
         name: Optional[str] = None,
     ):
         """
@@ -123,15 +112,13 @@ class CosemGroupMetadataV2(BaseModel):
 
         """
 
-        _paths = normalize_paths(arrays, paths)
-
         multiscales = [
             MultiscaleMetaV2(
                 name=name,
-                datasets=_paths,
+                datasets=tuple(arrays.keys()),
             )
         ]
-        return cls(name=name, multiscales=multiscales, paths=_paths)
+        return cls(name=name, multiscales=multiscales, paths=tuple(arrays.keys()))
 
 
 @deprecated(
@@ -214,9 +201,8 @@ class CosemMultiscaleGroupV2(GroupSpec):
     @classmethod
     def from_xarrays(
         cls,
-        arrays: Iterable[DataArray],
+        arrays: dict[str, DataArray],
         chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
-        paths: Union[Sequence[str], Literal["auto"]] = "auto",
         name: Optional[str] = None,
         **kwargs,
     ):
@@ -226,7 +212,7 @@ class CosemMultiscaleGroupV2(GroupSpec):
         Parameters
         ----------
 
-        arrays: Iterable[DataArray]
+        arrays: dict[str, DataArray]
             The arrays comprising the multiscale image.
         chunks : Union[Tuple[Tuple[int, ...], ...], Literal["auto"]], default is "auto"
             The chunks for the `ArraySpec` instances. Either an explicit collection of
@@ -235,9 +221,6 @@ class CosemMultiscaleGroupV2(GroupSpec):
             instance will inherit the chunks of the arrays. If the `data` attribute
             is not chunked, then each `ArraySpec` will have chunks equal to the shape of
             the source array.
-        paths: Union[Sequence[str], Literal["auto"]] = "auto"
-            The names for each of the arrays in the multiscale
-            collection.
         name: Optional[str], default is None
             The name for the multiscale collection.
         **kwargs:
@@ -245,13 +228,13 @@ class CosemMultiscaleGroupV2(GroupSpec):
             constructor.
         """
 
-        _paths = normalize_paths(arrays, paths)
         _chunks = normalize_chunks(arrays, chunks)
-        attrs = CosemGroupMetadataV2.from_xarrays(arrays, _paths, name)
+        paths = tuple(arrays.keys())
+        attrs = CosemGroupMetadataV2.from_xarrays(arrays, name)
 
         array_specs = {
             key: CosemMultiscaleArray.from_xarray(arr, chunks=cnks, **kwargs)
-            for arr, cnks, key in zip(arrays, _chunks, _paths)
+            for arr, cnks, key in zip(arrays.values(), _chunks, paths)
         }
 
         return cls(attributes=attrs, members=array_specs)
@@ -294,7 +277,7 @@ def create_dataarray(
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
 ) -> DataArray:
     """
-    create a DataArray from an N5 container with cosem / cellmap metadata
+    Create a DataArray from an N5 container with cosem / cellmap metadata
     """
     if use_dask:
         array_wrapped = da.from_array(array, chunks=chunks)

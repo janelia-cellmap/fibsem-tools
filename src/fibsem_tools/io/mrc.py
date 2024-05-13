@@ -13,7 +13,7 @@ from dask.array.core import normalize_chunks
 from mrcfile.mrcfile import MrcFile
 from mrcfile.mrcmemmap import MrcMemmap
 
-from fibsem_tools.io.util import PathLike
+from fibsem_tools.types import PathLike
 
 
 def recarray_to_dict(recarray) -> Dict[str, Any]:

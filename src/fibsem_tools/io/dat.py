@@ -5,16 +5,20 @@ adapted from David Hoffman's work which can be found in https://github.com/janel
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
+
+    from fibsem_tools.types import AccessMode, PathLike
 import os
 import warnings
-from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
 
 import dask.array as da
 import numpy as np
 from xarray import DataArray
 
-from fibsem_tools.io.util import AccessMode, PathLike
-from fibsem_tools.io.xr import stt_coord
+from fibsem_tools.coordinate import stt_coord
 
 # This value is used to ensure that the endianness of the data is correct
 MAGIC_NUMBER = 3_555_587_570

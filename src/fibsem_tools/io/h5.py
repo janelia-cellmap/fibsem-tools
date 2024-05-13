@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple, Union
 
 import h5py
 
-from fibsem_tools.io.util import PathLike
+from fibsem_tools.types import PathLike
 
 H5_ACCESS_MODES = ("r", "r+", "w", "w-", "x", "a")
 
@@ -58,7 +58,7 @@ def partition_h5_kwargs(**kwargs: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return file_kwargs, dataset_kwargs
 
 
-def access_h5(
+def access(
     store: PathLike, path: PathLike, mode: str, **kwargs: Any
 ) -> Union[h5py.Dataset, h5py.Group]:
     """

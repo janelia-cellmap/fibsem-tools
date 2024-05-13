@@ -7,9 +7,8 @@ import dask
 import dask.array as da
 import numpy as np
 import zarr
-from fibsem_tools.io.core import access, create_group, read
+from fibsem_tools.io.core import access, create_group, read, split_by_suffix
 from fibsem_tools.io.dask import store_blocks
-from fibsem_tools.io.util import split_by_suffix
 from fibsem_tools.io.zarr import delete_node
 
 
