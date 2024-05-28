@@ -25,11 +25,13 @@ from fibsem_tools.io.zarr import (
     access,
     array_from_dask,
     chunk_keys,
+    create_datatree,
     get_url,
     parse_url,
     to_dask,
     to_xarray,
 )
+from fibsem_tools.io.zarr.hierarchy import omengff
 from xarray import DataArray
 from xarray.testing import assert_equal
 from zarr.storage import FSStore, NestedDirectoryStore
@@ -207,10 +209,10 @@ def test_read_dataarray(
 
     if metadata_type == "ome_ngff":
         store = NestedDirectoryStore(str(tmpdir))
-        group_model = ome_ngff_multiscale_group(
+        group_model = omengff.model_group(
             arrays=pyramid_dict, transform_precision=4, chunks=chunks
         )
-        dataarray_creator = create_dataarray_ome_ngff
+        dataarray_creator = omengff.create_dataarray
     else:
         assert False
 
