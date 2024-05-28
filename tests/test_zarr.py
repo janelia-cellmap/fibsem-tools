@@ -169,6 +169,7 @@ def test_read_datatree(
         assert dict(data_store.attrs) == attrs
 
 
+# leave this parameter here in case new zarr-based formats emerge
 @pytest.mark.parametrize("metadata_type", ("ome_ngff",))
 @pytest.mark.parametrize(
     "pyramid",
@@ -183,22 +184,18 @@ def test_read_datatree(
             dims=("z", "y", "x"),
             shape=(22, 53, 14),
             scale=(4, 6, 3),
-            translate=(0, 0, 0),
+            translate=(1, 3, 5),
         ),
     ),
     indirect=["pyramid"],
 )
-@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
-@pytest.mark.parametrize("coords", ("auto",))
 @pytest.mark.parametrize("use_dask", (True, False))
 @pytest.mark.parametrize("name", (None, "foo"))
 @pytest.mark.parametrize("chunks", ((5, 5, 5),))
 def test_read_dataarray(
     tmpdir,
-    metadata_type: Literal["neuroglancer_n5", "cellmap", "ome_ngff"],
+    metadata_type: Literal["ome_ngff"],
     pyramid: list[DataArray],
-    attrs: dict[str, Any] | None,
-    coords: str,
     use_dask: bool,
     name: str | None,
     chunks: tuple[int, int, int],
@@ -219,11 +216,15 @@ def test_read_dataarray(
     group = group_model.to_zarr(store, path=path)
 
     for name, value in pyramid_dict.items():
-        observed = dataarray_creator(group[name])
+        observed = dataarray_creator(
+            group[name],
+            use_dask=use_dask,
+        )
         assert observed.dims == value.dims
         assert all(
             a.equals(b) for a, b in zip(observed.coords.values(), value.coords.values())
         )
+        assert isinstance(observed.data, da.Array) == use_dask
 
 
 def test_access_array(tmp_zarr: str) -> None:

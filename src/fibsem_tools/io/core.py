@@ -29,10 +29,10 @@ from fibsem_tools.io.mrc import to_dask as mrc_to_dask
 from fibsem_tools.io.mrc import to_xarray as mrc_to_xarray
 from fibsem_tools.io.n5 import access as access_n5
 from fibsem_tools.io.n5.hierarchy.cosem import (
-    multiscale_group as cosem_multiscale_group,
+    model_group as cosem_multiscale_group,
 )
 from fibsem_tools.io.n5.hierarchy.neuroglancer import (
-    multiscale_group as neuroglancer_multiscale_group,
+    model_group as neuroglancer_multiscale_group,
 )
 from fibsem_tools.io.tif import access as access_tif
 from fibsem_tools.io.zarr import access as access_zarr

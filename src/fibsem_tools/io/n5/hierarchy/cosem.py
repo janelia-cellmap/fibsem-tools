@@ -246,7 +246,7 @@ class CosemMultiscaleGroupV2(GroupSpec):
 from cellmap_schemas.multiscale.cosem import Group
 
 
-def multiscale_group(
+def model_group(
     *,
     arrays: dict[str, DataArray],
     chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",

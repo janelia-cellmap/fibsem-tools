@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Literal, Union
 
+import warnings
+
 import dask.array as da
 import numpy as np
 import zarr
@@ -17,7 +19,7 @@ from fibsem_tools.io.n5 import N5_AXES_3D
 from fibsem_tools.io.zarr import access_parent
 
 
-def multiscale_group(
+def model_group(
     *,
     arrays: dict[str, DataArray],
     chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
@@ -39,6 +41,16 @@ def multiscale_group(
     _chunks = normalize_chunks(arrays.values(), chunks)
 
     transforms = tuple(stt_from_array(array) for array in arrays.values())
+    base_transform = transforms[0]
+    nonzero_translate = any(map(lambda v: v != 0, base_transform.translate))
+
+    if nonzero_translate:
+        msg = (
+            "Non-zero translation parameters ({base_transform.translate}) detected in the base "
+            "coordinates. Be advised that this translation parameter will not be stored, due to limitations "
+            "of the metadata format you are using."
+        )
+        warnings.warn(msg)
 
     return Group.from_arrays(
         arrays=tuple(arrays.values()),
