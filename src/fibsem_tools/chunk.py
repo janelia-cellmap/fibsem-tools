@@ -1,4 +1,11 @@
-from typing import Literal, Sequence, Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Literal, Sequence
+
+    import numpy.typing as npt
 
 import numpy as np
 from dask.utils import parse_bytes
@@ -34,10 +41,10 @@ def ensure_minimum_chunksize(array, chunksize):
 
 
 def autoscale_chunk_shape(
-    chunk_shape: Tuple[int, ...],
-    array_shape: Tuple[int, ...],
-    size_limit: Union[str, int],
-    dtype: DTypeLike,
+    chunk_shape: tuple[int, ...],
+    array_shape: tuple[int, ...],
+    size_limit: str | int,
+    dtype: npt.DTypeLike,
 ):
     """
     Scale a chunk size by an integer factor along each axis as much as possible without
@@ -120,7 +127,7 @@ def autoscale_chunk_shape(
     return result
 
 
-def resolve_slice(slce: slice, interval: Tuple[int, int]) -> slice:
+def resolve_slice(slce: slice, interval: tuple[int, int]) -> slice:
     """
     Given a `slice` object and a half-open interval indexed by the slice,
     return a `slice` object with `start`, `stop` and `step` attributes that are all integers.
@@ -131,8 +138,8 @@ def resolve_slice(slce: slice, interval: Tuple[int, int]) -> slice:
 
 
 def resolve_slices(
-    slces: Sequence[slice], intervals: Sequence[Tuple[int, int]]
-) -> Tuple[slice, ...]:
+    slces: Sequence[slice], intervals: Sequence[tuple[int, int]]
+) -> tuple[slice, ...]:
     """
     Convenience function for applying `resolve_slice` to a collection of `slice` objects and a collection of half-open intervals.
     """
@@ -140,8 +147,8 @@ def resolve_slices(
 
 
 def interval_remainder(
-    interval_a: Tuple[int, int], interval_b: Tuple[int, int]
-) -> Tuple[int, int]:
+    interval_a: tuple[int, int], interval_b: tuple[int, int]
+) -> tuple[int, int]:
     """
     Repeat interval_b until it forms an interval that is larger than or equal to interval_a.
     Return the number of elements that must be added to the start and end of interval_a to match this length.
@@ -173,8 +180,8 @@ def interval_remainder(
 
 def normalize_chunks(
     arrays: Sequence[DataArray],
-    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], Literal["auto"]],
-) -> Tuple[Tuple[int, ...], ...]:
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"],
+) -> tuple[tuple[int, ...], ...]:
     """
     Normalize a chunk specification, given a list of arrays.
 
@@ -195,7 +202,7 @@ def normalize_chunks(
     -------
         Tuple[Tuple[int, ...], ...]
     """
-    result: Tuple[Tuple[int, ...]] = ()
+    result: tuple[tuple[int, ...]] = ()
     if chunks == "auto":
         for arr in arrays:
             if arr.chunks is None:

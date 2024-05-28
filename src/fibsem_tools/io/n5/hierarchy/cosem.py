@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import Iterable, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from typing import Literal
 
 import dask.array as da
 import zarr
+from cellmap_schemas.multiscale.cosem import STTransform
 from pydantic import BaseModel
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from typing_extensions import deprecated
@@ -11,7 +15,6 @@ from xarray import DataArray
 
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.coordinate import stt_from_array, stt_to_coords
-from fibsem_tools.metadata.transform import STTransform
 
 
 class ScaleMetaV1(BaseModel):
@@ -151,7 +154,7 @@ class CosemMultiscaleGroupV1(GroupSpec):
     def from_xarrays(
         cls,
         arrays: dict[str, DataArray],
-        chunks: Union[tuple[tuple[int, ...], ...], Literal["auto"]] = "auto",
+        chunks: tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
         name: Optional[str] = None,
         **kwargs,
     ):
@@ -202,7 +205,7 @@ class CosemMultiscaleGroupV2(GroupSpec):
     def from_xarrays(
         cls,
         arrays: dict[str, DataArray],
-        chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
+        chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
         name: Optional[str] = None,
         **kwargs,
     ):
@@ -246,7 +249,7 @@ from cellmap_schemas.multiscale.cosem import Group
 def multiscale_group(
     *,
     arrays: dict[str, DataArray],
-    chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
+    chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
     **kwargs,
 ) -> Group:
     """

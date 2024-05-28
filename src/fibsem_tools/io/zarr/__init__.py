@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 if TYPE_CHECKING:
-    from typing import Any, Generator, Literal, Sequence, Union
+    from typing import Any, Generator, Literal, Union
 
     from fibsem_tools.types import PathLike
 
@@ -50,7 +50,7 @@ def parse_url(url: str) -> tuple[str, str]:
 
 class FSStorePatched(FSStore):
     """
-    Patch delitems to delete "blind", i.e. without checking if to-be-deleted keys exist.
+    Patch delitems to delete without checking if to-be-deleted keys exist.
     This is temporary and should be removed when
     https://github.com/zarr-developers/zarr-python/issues/1336
     is resolved.
@@ -300,8 +300,10 @@ def create_dataarray(
     """
     Create an xarray.DataArray from a Zarr array in an OME-NGFF hierarchy.
     """
-    if coords == "Auto":
-        return omengff.create_dataarray(element, use_dask=use_dask, chunks=chunks)
+    if coords == "auto":
+        return omengff.create_dataarray(
+            element, use_dask=use_dask, chunks=chunks, name=name
+        )
     else:
         return DataArray(
             to_dask(element, chunks=chunks), coords=coords, attrs=attrs, name=name

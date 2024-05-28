@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
+    from typing import Any, Callable, Literal, Optional, Union
 
-    from numpy.typing import NDArray
 import random
 from os import PathLike
 
@@ -51,11 +50,11 @@ def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
 def sequential_rechunk(
     source: Any,
     target: Any,
-    slab_size: Tuple[int],
-    intermediate_chunks: Tuple[int],
+    slab_size: tuple[int],
+    intermediate_chunks: tuple[int],
     client: distributed.Client,
     num_workers: int,
-) -> List[None]:
+) -> list[None]:
     """
     Load slabs of an array into local memory, then create a dask array and rechunk that
     dask array, then store into chunked array storage.
@@ -75,7 +74,7 @@ def sequential_rechunk(
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(
-    target: NDArray[Any], key: Tuple[slice, ...], value: NDArray[Any]
+    target: zarr.Array, key: tuple[slice, ...], value: np.ndarray
 ) -> Literal[0]:
     """
     A function inserted in a Dask graph for storing a chunk.
@@ -84,7 +83,7 @@ def store_chunk(
     ----------
     target: NDArray
         Where to store the value.
-    key: Tuple[slice, ...]
+    key: tuple[slice, ...]
         The location in the array for the value.
     value: NDArray
         The value to be stored.
@@ -98,7 +97,7 @@ def store_chunk(
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_value(
-    target: NDArray[Any], key: Tuple[slice, ...], value: NDArray[Any]
+    target: zarr.Array, key: tuple[slice, ...], value: np.ndarray
 ) -> Literal[0]:
     """
     A function inserted in a Dask graph for storing a chunk.
@@ -107,7 +106,7 @@ def store_value(
     ----------
     target: NDArray
         Where to store the value.
-    key: Tuple[slice, ...]
+    key: tuple[slice, ...]
         The location in the array for the value.
     value: NDArray
         The value to be stored.
@@ -126,7 +125,7 @@ def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
     return np.array([func(*args, **kwargs)]).reshape((1,) * ndim)
 
 
-def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
+def write_blocks(source, target, region: tuple[slice, ...] | None) -> da.Array:
     """
     Return a dask array with where each chunk contains the result of writing
     each chunk of `source` to `target`.
@@ -168,7 +167,7 @@ def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Arra
     )
 
 
-def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.Array]:
+def store_blocks(sources, targets, regions: Optional[slice] = None) -> list[da.Array]:
     """
     Write dask array(s) to sliceable storage. Like `da.store` but instead of
     returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,
@@ -207,7 +206,7 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.A
 
 
 def write_blocks_delayed(
-    source, target, region: Optional[Tuple[slice, ...]] = None
+    source, target, region: Optional[tuple[slice, ...]] = None
 ) -> Sequence[Any]:
     """
     Return a collection fo task each task returns the result of writing
@@ -233,7 +232,7 @@ def write_blocks_delayed(
 def setitem(
     source,
     dest: zarr.Array,
-    selection: Tuple[slice, ...],
+    selection: tuple[slice, ...],
     *,
     chunk_safe: bool = True,
 ):
@@ -260,9 +259,9 @@ def copy_from_slices(slices, source_array, dest_array):
 
 
 def copy_array(
-    source: Union[PathLike, NDArray],
-    dest: Union[PathLike, NDArray],
-    chunk_size: Union[str, Tuple[int, ...]] = "100 MB",
+    source: Union[PathLike, np.ndarray | zarr.Array],
+    dest: Union[PathLike, np.ndarray | zarr.Array],
+    chunk_size: Union[str, tuple[int, ...]] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
     randomize: bool = True,

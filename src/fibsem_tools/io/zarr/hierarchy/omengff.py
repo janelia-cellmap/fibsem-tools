@@ -40,10 +40,15 @@ def create_dataarray(
     array: zarr.Array,
     use_dask: bool = True,
     chunks: tuple[int, ...] | Literal["auto"] = "auto",
+    name: str | None = None,
 ) -> DataArray:
     if use_dask:
         wrapper = DaskArrayWrapper(chunks=chunks)
     else:
         wrapper = ZarrArrayWrapper()
 
-    return read_array(array=array, array_wrapper=wrapper)
+    result = read_array(array=array, array_wrapper=wrapper)
+    # read_array doesn't take the name kwarg at the moment
+    if name is not None:
+        result.name = name
+    return result

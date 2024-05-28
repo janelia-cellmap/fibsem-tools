@@ -1,51 +1,48 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-import zarr
-from zarr.storage import BaseStore
+
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import zarr
+from zarr.storage import BaseStore
 
 from fibsem_tools.chunk import normalize_chunks
-from fibsem_tools.io.n5 import is_n5
+
 if TYPE_CHECKING:
-    from typing import (
-        Any,
-        Iterable,
-        Literal,
-        Sequence,
-        Union,
-        Optional
-    )
+    from typing import Any, Iterable, Literal, Optional, Sequence, Union
+
     from numpy.typing import NDArray
 
 import dask.array as da
+import fsspec
 from datatree import DataTree
+from numcodecs.abc import Codec
+from pydantic_zarr.v2 import GroupSpec
 from xarray import DataArray
 
-from fibsem_tools.types import AccessMode, Attrs, PathLike
-from pydantic_zarr.v2 import GroupSpec
-
-
-from fibsem_tools.io.n5.hierarchy.neuroglancer import multiscale_group as neuroglancer_multiscale_group
-from fibsem_tools.io.n5.hierarchy.cosem import multiscale_group as cosem_multiscale_group
-from fibsem_tools.io.zarr.hierarchy.omengff import multiscale_group as ome_ngff_v04_multiscale_group
-
-from fibsem_tools.io.zarr import access as access_zarr
-from fibsem_tools.io.n5 import access as access_n5
-from fibsem_tools.io.tif import access as access_tif
-from fibsem_tools.io.mrc import access as access_mrc
 from fibsem_tools.io.dat import access as access_dat
-from fibsem_tools.io.h5 import access as access_h5
-
-from fibsem_tools.io.zarr import to_dask as zarr_to_dask
-from fibsem_tools.io.mrc import to_dask as mrc_to_dask
 from fibsem_tools.io.dat import to_dask as dat_to_dask
-
+from fibsem_tools.io.h5 import access as access_h5
+from fibsem_tools.io.mrc import access as access_mrc
+from fibsem_tools.io.mrc import to_dask as mrc_to_dask
 from fibsem_tools.io.mrc import to_xarray as mrc_to_xarray
+from fibsem_tools.io.n5 import access as access_n5
+from fibsem_tools.io.n5.hierarchy.cosem import (
+    multiscale_group as cosem_multiscale_group,
+)
+from fibsem_tools.io.n5.hierarchy.neuroglancer import (
+    multiscale_group as neuroglancer_multiscale_group,
+)
+from fibsem_tools.io.tif import access as access_tif
+from fibsem_tools.io.zarr import access as access_zarr
+from fibsem_tools.io.zarr import to_dask as zarr_to_dask
 from fibsem_tools.io.zarr import to_xarray as zarr_to_xarray
+from fibsem_tools.io.zarr.hierarchy.omengff import (
+    multiscale_group as ome_ngff_v04_multiscale_group,
+)
+from fibsem_tools.types import AccessMode, Attrs, PathLike
 
-from numcodecs.abc import Codec
-import fsspec
 NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]
 
@@ -187,7 +184,7 @@ def read_xarray(
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
     if suffix in (".zarr", ".n5"):
-        return zarr_read_xarray(
+        return zarr_to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -269,7 +266,7 @@ def create_group(
     attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ) -> DataArray:
-    """
+    """ """
     Create an xarray.DataArray from a zarr array.
 
     Parameters
@@ -300,7 +297,7 @@ def create_group(
 
     xarray.DataArray
 
-    """
+    """ """
 
     if name is None:
         name = element.basename
@@ -408,6 +405,7 @@ def to_xarray(
             f"Got {type(element)} instead.",
         )
  """
+
 
 def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, str]:
     """
@@ -518,4 +516,3 @@ def create_multiscale_group(
     )
 
     return group_model.to_zarr(store=store, path=path, **kwargs)
-

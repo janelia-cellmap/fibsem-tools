@@ -12,13 +12,14 @@ from zarr.errors import ReadOnlyError
 from fibsem_tools.types import PathLike
 
 from ..zarr import access as access_zarr
+from ..zarr import to_dask
 
 N5_AXES_3D = ["x", "y", "z"]
 
 
 class N5FSStorePatched(zarr.N5FSStore):
     """
-    Patch delitems to delete "blindly", i.e. without checking if to-be-deleted keys exist.
+    Patch delitems to delete without checking if to-be-deleted keys exist.
     This is temporary and should be removed when
     https://github.com/zarr-developers/zarr-python/issues/1336 is resolved.
     """
@@ -45,13 +46,6 @@ def access(store: PathLike, path: PathLike, **kwargs: Any) -> zarr.Group | zarr.
     return access_zarr(store, path, **kwargs)
 
 
-def is_n5(array: zarr.core.Array) -> bool:
-    """
-    Check if a Zarr array is backed by N5 storage.
-    """
-    return isinstance(array.store, (zarr.N5Store, zarr.N5FSStore))
-
-
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer
 
 
@@ -72,3 +66,10 @@ def create_dataarray(
         return neuroglancer.create_dataarray(
             array=array, use_dask=use_dask, chunks=chunks
         )
+
+
+def is_n5(array: zarr.core.Array) -> bool:
+    """
+    Check if a Zarr array is backed by N5 storage.
+    """
+    return isinstance(array.store, (zarr.N5Store, zarr.N5FSStore))

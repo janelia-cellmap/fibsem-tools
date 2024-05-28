@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any, Literal
+
 import itertools
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union
 
 import dask.array as da
 import numpy as np
@@ -12,15 +16,13 @@ import zarr
 from datatree import DataTree
 from fibsem_tools.coordinate import stt_array, stt_from_array
 from fibsem_tools.io.core import (
-    create_dataarray,
-    create_datatree,
+    model_multiscale_group,
     read_dask,
     read_xarray,
 )
-from fibsem_tools.io.multiscale.multiscale import model_multiscale_group
 from fibsem_tools.io.zarr import (
     DEFAULT_ZARR_STORE,
-    access_zarr,
+    access,
     array_from_dask,
     chunk_keys,
     get_url,
@@ -28,11 +30,9 @@ from fibsem_tools.io.zarr import (
     to_dask,
     to_xarray,
 )
-from fibsem_tools.io.zarr.n5 import DEFAULT_N5_STORE, access_n5
-from fibsem_tools.metadata.transform import STTransform
 from xarray import DataArray
 from xarray.testing import assert_equal
-from zarr.storage import FSStore
+from zarr.storage import FSStore, NestedDirectoryStore
 
 from tests.conftest import PyramidRequest
 
@@ -86,10 +86,10 @@ def test_read_xarray(tmp_zarr: str) -> None:
 @pytest.mark.parametrize("path", ("a", "a/b"))
 def test_read_datatree(
     tmp_zarr: str,
-    attrs: Optional[Dict[str, Any]],
+    attrs: dict[str, Any] | None,
     coords: str,
     use_dask: bool,
-    name: Optional[str],
+    name: str | None,
     path: str,
 ) -> None:
     base_data = np.zeros((10, 10, 10))
@@ -130,7 +130,7 @@ def test_read_datatree(
         # group[key].attrs["transform"] = STTransform.from_xarray(value).model_dump()
 
     data_store = create_datatree(
-        access_zarr(tmp_zarr, path, mode="r"),
+        access(tmp_zarr, path, mode="r"),
         use_dask=use_dask,
         name=name,
         coords=coords,
@@ -150,7 +150,7 @@ def test_read_datatree(
     # create a datatree directly
     tree_dict = {
         k: DataArray(
-            access_zarr(tmp_zarr, os.path.join(path, k), mode="r"),
+            access(tmp_zarr, os.path.join(path, k), mode="r"),
             coords=data[k].coords,
             name="data",
         )
@@ -167,22 +167,7 @@ def test_read_datatree(
         assert dict(data_store.attrs) == attrs
 
 
-from typing import Literal
-
-from fibsem_tools.io.multiscale.cosem import create_dataarray as create_dataarray_cosem
-from fibsem_tools.io.multiscale.cosem import multiscale_group as cosem_multiscale_group
-from fibsem_tools.io.n5 import (
-    multiscale_group as neuroglancer_multiscale_group,
-)
-from fibsem_tools.io.n5.hierarchy.neuroglancer import (
-    create_dataarray as create_dataarray_neuroglancer,
-)
-from xarray_ome_ngff.v04.multiscale import model_group as ome_ngff_multiscale_group
-from xarray_ome_ngff.v04.multiscale import read_array as create_dataarray_ome_ngff
-from zarr import N5FSStore, NestedDirectoryStore
-
-
-@pytest.mark.parametrize("metadata_type", ("neuroglancer_n5", "cellmap", "ome_ngff"))
+@pytest.mark.parametrize("metadata_type", ("ome_ngff",))
 @pytest.mark.parametrize(
     "pyramid",
     (
@@ -210,25 +195,17 @@ def test_read_dataarray(
     tmpdir,
     metadata_type: Literal["neuroglancer_n5", "cellmap", "ome_ngff"],
     pyramid: list[DataArray],
-    attrs: Optional[dict[str, Any]],
+    attrs: dict[str, Any] | None,
     coords: str,
     use_dask: bool,
-    name: Optional[str],
+    name: str | None,
     chunks: tuple[int, int, int],
 ) -> None:
     array_names = ("s0", "s1", "s2")
     pyramid_dict = dict(zip(array_names, pyramid))
     path = "test"
 
-    if metadata_type == "cellmap":
-        store = N5FSStore(str(tmpdir))
-        group_model = cosem_multiscale_group(arrays=pyramid_dict, chunks=chunks)
-        dataarray_creator = create_dataarray_cosem
-    elif metadata_type == "neuroglancer_n5":
-        store = N5FSStore(str(tmpdir))
-        group_model = neuroglancer_multiscale_group(arrays=pyramid_dict, chunks=chunks)
-        dataarray_creator = create_dataarray_neuroglancer
-    elif metadata_type == "ome_ngff":
+    if metadata_type == "ome_ngff":
         store = NestedDirectoryStore(str(tmpdir))
         group_model = ome_ngff_multiscale_group(
             arrays=pyramid_dict, transform_precision=4, chunks=chunks
@@ -247,43 +224,32 @@ def test_read_dataarray(
         )
 
 
-def test_access_array_zarr(tmp_zarr: str) -> None:
+def test_access_array(tmp_zarr: str) -> None:
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
     z = zarr.open(tmp_zarr, mode="w", shape=data.shape, chunks=10)
     z[:] = data
-    assert np.array_equal(access_zarr(tmp_zarr, "", mode="r")[:], data)
+    assert np.array_equal(access(tmp_zarr, "", mode="r")[:], data)
 
 
-def test_access_array_n5(tmp_n5: str) -> None:
-    data = np.random.randint(0, 255, size=(100,), dtype="uint8")
-    z = zarr.open(tmp_n5, mode="w", shape=data.shape, chunks=10)
-    z[:] = data
-    assert np.array_equal(access_n5(tmp_n5, "", mode="r")[:], data)
-
-
-@pytest.mark.parametrize("accessor", (access_zarr, access_n5))
-def test_access_group(tmp_zarr: str, accessor: Callable[[Any], None]) -> None:
-    if accessor == access_zarr:
-        default_store = DEFAULT_ZARR_STORE
-    elif accessor == access_n5:
-        default_store = DEFAULT_N5_STORE
+def test_access_group(tmp_zarr: str) -> None:
+    default_store = DEFAULT_ZARR_STORE
     data = np.zeros(100, dtype="uint8") + 42
     path = "foo"
     zg = zarr.open(default_store(tmp_zarr), mode="a")
     zg[path] = data
     zg.attrs["bar"] = 10
-    assert accessor(tmp_zarr, "", mode="a") == zg
+    assert access(tmp_zarr, "", mode="a") == zg
 
-    zg = accessor(tmp_zarr, "", mode="w", attrs={"bar": 10})
+    zg = access(tmp_zarr, "", mode="w", attrs={"bar": 10})
     zg["foo"] = data
     assert zarr.open(default_store(tmp_zarr), mode="a") == zg
 
 
 @pytest.mark.parametrize("chunks", ("auto", (10,)))
-def test_dask(tmp_zarr: str, chunks: Union[Literal["auto"], Tuple[int, ...]]) -> None:
+def test_dask(tmp_zarr: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     path = "foo"
     data = np.arange(100)
-    zarray = access_zarr(tmp_zarr, path, mode="w", shape=data.shape, dtype=data.dtype)
+    zarray = access(tmp_zarr, path, mode="w", shape=data.shape, dtype=data.dtype)
     zarray[:] = data
     name_expected = "foo"
 
@@ -298,13 +264,13 @@ def test_dask(tmp_zarr: str, chunks: Union[Literal["auto"], Tuple[int, ...]]) ->
 
 
 @pytest.mark.parametrize(
-    "store_class", (zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore)
+    "store_class", (zarr.DirectoryStore, zarr.NestedDirectoryStore)
 )
 @pytest.mark.parametrize("shape", ((10,), (10, 11, 12)))
 def test_chunk_keys(
     tmp_path: Path,
-    store_class: Union[zarr.N5Store, zarr.DirectoryStore, zarr.NestedDirectoryStore],
-    shape: Tuple[int, ...],
+    store_class: zarr.DirectoryStore | zarr.NestedDirectoryStore,
+    shape: tuple[int, ...],
 ) -> None:
     store: zarr.storage.BaseStore = store_class(tmp_path)
     arr_path = "test"

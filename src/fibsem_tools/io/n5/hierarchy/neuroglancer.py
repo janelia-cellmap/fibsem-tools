@@ -12,7 +12,7 @@ from cellmap_schemas.multiscale.neuroglancer_n5 import Group
 from xarray import DataArray
 
 from fibsem_tools.chunk import normalize_chunks
-from fibsem_tools.coordinate import Literal, stt_coord, stt_from_array
+from fibsem_tools.coordinate import stt_coord, stt_from_array
 from fibsem_tools.io.n5 import N5_AXES_3D
 from fibsem_tools.io.zarr import access_parent
 

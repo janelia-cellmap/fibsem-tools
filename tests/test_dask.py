@@ -1,4 +1,11 @@
-from typing import Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from fibsem_tools.io.core import read
+
+if TYPE_CHECKING:
+    from typing import Tuple, Union
 
 import dask
 import dask.array as da
@@ -16,6 +23,7 @@ from fibsem_tools.chunk import (
 from fibsem_tools.io.dask import (
     copy_array,
     setitem,
+    store_blocks,
     write_blocks_delayed,
 )
 from numpy.testing import assert_array_equal
@@ -180,3 +188,10 @@ def test_chunksafe_writes(chunks: Tuple[int, ...]):
 
     with pytest.raises(ValueError, match="Planned writes are not chunk-aligned."):
         setitem(invalid_data, array, selection, chunk_safe=True)
+
+
+def test_store_blocks(tmp_zarr):
+    data = da.arange(256).reshape(16, 16).rechunk((4, 4))
+    z = zarr.open(tmp_zarr, mode="w", shape=data.shape, chunks=data.chunksize)
+    dask.delayed(store_blocks(data, z)).compute()
+    assert np.array_equal(read(tmp_zarr)[:], data.compute())
