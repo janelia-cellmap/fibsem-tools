@@ -13,8 +13,7 @@ from xarray_multiscale.multiscale import downsampling_depth
 
 from fibsem_tools import access
 from fibsem_tools.cli.base import parse_chunks, parse_compressor, parse_content_type
-from fibsem_tools.io.core import read_xarray
-from fibsem_tools.io.multiscale import model_multiscale_group
+from fibsem_tools.io.core import model_multiscale_group, read_xarray
 from fibsem_tools.io.zarr import ensure_spec, parse_url
 
 

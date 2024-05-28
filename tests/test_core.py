@@ -1,10 +1,13 @@
 import os
+from typing import Literal
 
+import numpy as np
 import pytest
 import zarr
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.io.core import access, model_multiscale_group, split_by_suffix
 from numcodecs import GZip
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from xarray import DataArray
 
 from tests.conftest import PyramidRequest
@@ -24,9 +27,48 @@ def test_path_splitting():
     assert split == (os.path.join("0", "1", "2.n5"), "", ".n5")
 
 
+@pytest.mark.parametrize("fmt", ("zarr", "n5"))
+@pytest.mark.parametrize("mode", ("r", "a", "w"))
+def test_access_zarr_n5(
+    tmpdir, fmt: Literal["zarr", "n5"], mode: Literal["r", "a", "w"]
+):
+    group_path = "group"
+    array_path = "array"
+    if fmt == "zarr":
+        store_path = os.path.join(str(tmpdir), "test.zarr")
+        store = zarr.NestedDirectoryStore(store_path)
+        dimsep = "/"
+    elif fmt == "n5":
+        store_path = os.path.join(str(tmpdir), "test.n5")
+        store = zarr.N5FSStore(store_path)
+        dimsep = "."
+
+    model = GroupSpec(
+        attributes={"foo": 10},
+        members={
+            array_path: ArraySpec.from_array(np.arange(10), dimension_separator=dimsep)
+        },
+    )
+    stored = model.to_zarr(store=store, path=group_path)
+    if mode in ("r", "a"):
+        assert (
+            model.members[array_path].shape
+            == access(os.path.join(store_path, group_path, array_path), mode=mode).shape
+        )
+        assert (
+            model.attributes
+            == access(os.path.join(store_path, group_path), mode=mode).attrs.asdict()
+        )
+    else:
+        assert isinstance(
+            access(os.path.join(store_path, group_path, array_path), mode=mode),
+            zarr.Group,
+        )
+
+
 @pytest.mark.parametrize(
     "pyramid",
-    (PyramidRequest(shape=(12, 13, 14), scale=(1, 2, 3), translate=(4, 5, 6)),),
+    (PyramidRequest(shape=(12, 13, 14), scale=(1, 2, 3), translate=(0, 0, 0)),),
     indirect=["pyramid"],
 )
 @pytest.mark.parametrize(
@@ -55,10 +97,6 @@ def test_multiscale_storage(
     )
 
     group = g_spec.to_zarr(store, path="/")
-
-    array_urls = [f"{tmp_zarr}/{ap}" for ap in array_paths]
-    for a_url, d in zip(array_urls, pyr.values()):
-        access(a_url, mode="a")[:] = d.data
 
     assert group.attrs.asdict() == g_spec.attributes.model_dump()
     assert all(a.chunks == chunks for name, a in group.arrays())

@@ -10,9 +10,7 @@ from zarr.storage import BaseStore
 from fibsem_tools.chunk import normalize_chunks
 
 if TYPE_CHECKING:
-    from typing import Any, Iterable, Literal, Optional, Sequence, Union
-
-    from numpy.typing import NDArray
+    from typing import Any, Literal, Optional, Sequence, Union
 
 import dask.array as da
 import fsspec
@@ -21,23 +19,13 @@ from numcodecs.abc import Codec
 from pydantic_zarr.v2 import GroupSpec
 from xarray import DataArray
 
-from fibsem_tools.io.dat import access as access_dat
-from fibsem_tools.io.dat import to_dask as dat_to_dask
-from fibsem_tools.io.h5 import access as access_h5
-from fibsem_tools.io.mrc import access as access_mrc
-from fibsem_tools.io.mrc import to_dask as mrc_to_dask
-from fibsem_tools.io.mrc import to_xarray as mrc_to_xarray
-from fibsem_tools.io.n5 import access as access_n5
+from fibsem_tools.io import dat, h5, mrc, n5, tif, zarr
 from fibsem_tools.io.n5.hierarchy.cosem import (
     model_group as cosem_multiscale_group,
 )
 from fibsem_tools.io.n5.hierarchy.neuroglancer import (
     model_group as neuroglancer_multiscale_group,
 )
-from fibsem_tools.io.tif import access as access_tif
-from fibsem_tools.io.zarr import access as access_zarr
-from fibsem_tools.io.zarr import to_dask as zarr_to_dask
-from fibsem_tools.io.zarr import to_xarray as zarr_to_xarray
 from fibsem_tools.io.zarr.hierarchy.omengff import (
     multiscale_group as ome_ngff_v04_multiscale_group,
 )
@@ -93,17 +81,17 @@ def access(
     is_container = suffix in _container_extensions
 
     if suffix == ".zarr":
-        accessor = access_zarr
+        accessor = zarr.access
     elif suffix == ".n5":
-        accessor = access_n5
+        accessor = n5.access
     elif suffix == ".h5":
-        accessor = access_h5
+        accessor = h5.access
     elif suffix in (".tif", ".tiff"):
-        accessor = access_tif
+        accessor = tif.access
     elif suffix == ".mrc":
-        accessor = access_mrc
+        accessor = mrc.access
     elif suffix == ".dat":
-        accessor = access_dat
+        accessor = dat.access
     else:
         raise ValueError(
             f"Cannot access file with extension {suffix}. Try one of {_suffixes}"
@@ -159,11 +147,11 @@ def read_dask(
     """
     _, _, suffix = split_by_suffix(path, _suffixes)
     if suffix in (".zarr", ".n5"):
-        dasker = zarr_to_dask
+        dasker = zarr.to_dask
     elif suffix == ".mrc":
-        dasker = mrc_to_dask
+        dasker = mrc.to_dask
     elif suffix == ".dat":
-        dasker = dat_to_dask
+        dasker = dat.to_dask
     else:
         raise ValueError(
             f"Cannot access file with extension {suffix} as a dask array. Extensions "
@@ -184,7 +172,7 @@ def read_xarray(
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
     if suffix in (".zarr", ".n5"):
-        return zarr_to_xarray(
+        return zarr.to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -195,7 +183,7 @@ def read_xarray(
     elif suffix == ".mrc":
         # todo: support datatree semantics for mrc files, maybe by considering a folder
         # group?
-        return mrc_to_xarray(
+        return mrc.to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -208,203 +196,6 @@ def read_xarray(
             f"Xarray data structures are only supported for data saved as zarr, n5, and mrc. "
             f"Got {type(element)}, which is not supported."
         )
-
-
-def create_group(
-    group_url: PathLike,
-    arrays: Iterable[NDArray[Any]],
-    array_paths: Iterable[str],
-    chunks: Sequence[int],
-    group_attrs: Attrs = {},
-    array_attrs: Sequence[Attrs] | None = None,
-    group_mode: AccessMode = "w-",
-    array_mode: AccessMode = "w-",
-    **array_kwargs: Any,
-) -> zarr.Group:
-    _arrays = tuple(a for a in arrays)
-    _array_paths = tuple(p for p in array_paths)
-
-    bad_paths = []
-    for path in _array_paths:
-        if len(Path(path).parts) > 1:
-            bad_paths.append(path)
-
-    if len(bad_paths):
-        raise ValueError(
-            "Array paths cannot be nested. The following paths violate this rule: "
-            f"{bad_paths}"
-        )
-
-    group = access(group_url, mode=group_mode, attrs=group_attrs)
-    a_urls = [os.path.join(group_url, name) for name in _array_paths]
-
-    if array_attrs is None:
-        _array_attrs: tuple[Attrs, ...] = ({},) * len(_arrays)
-    else:
-        _array_attrs = array_attrs
-
-    for idx, vals in enumerate(zip(_arrays, a_urls, _array_attrs)):
-        array, path, attrs = vals
-        access(
-            path=path,
-            mode=array_mode,
-            shape=array.shape,
-            dtype=array.dtype,
-            chunks=chunks[idx],
-            attrs=attrs,
-            **array_kwargs,
-        )
-
-    return group
-
-
-""" def create_dataarray(
-    element: zarr.Array,
-    chunks: Literal["auto"] | tuple[int, ...] = "auto",
-    coords: Any = "auto",
-    use_dask: bool = True,
-    attrs: dict[str, Any] | None = None,
-    name: str | None = None,
-) -> DataArray:
-    """ """
-    Create an xarray.DataArray from a zarr array.
-
-    Parameters
-    ----------
-
-    element : zarr.Array
-
-    chunks : Literal['auto'] | tuple[int, ...] = "auto"
-        The chunks for the array, if `use_dask` is set to `True`
-
-    coords : Any, default is "auto"
-        Coordinates for the data. If `coords` is "auto", then `infer_coords` will be called on
-        `element` to read the coordinates based on metadata. Otherwise, `coords` should be
-        a valid argument to the `coords` keyword argument in the `DataArray` constructor.
-
-    use_dask : bool
-        Whether to wrap `element` in a Dask array before creating the DataArray.
-
-    attrs : dict[str, Any] | None
-        Attributes for the `DataArray`. if None, then attributes will be inferred from the `attrs`
-        property of `element`.
-
-    name : str | None
-        Name for the `DataArray` (and the underlying Dask array, if `to_dask` is `True`)
-
-    Returns
-    -------
-
-    xarray.DataArray
-
-    """ """
-
-    if name is None:
-        name = element.basename
-
-    if attrs is None:
-        attrs = element.attrs.asdict()
-
-    if coords == "auto":
-        # iterate over known multiscale models
-        if is_n5(element):
-            creation_func = (create_n5_dataarray,)
-        else:
-            creation_funcs = (create_omengff_datarray,)
-        # try different dataarray construction routines until one works
-        exceptions: tuple[ValueError] = ()
-        for func in creation_funcs:
-            try:
-                result = func(array=element, chunks=chunks, use_dask=use_dask)
-                result.attrs.update(**attrs)
-                result.name = name
-                break
-            except ValueError as e:
-                # insert log statement here
-                exceptions += (e,)
-            msg = (
-                f"Could not create a DataArray from {element}. "
-                "The following exceptions were raised when attempting to create the dataarray: "
-                f"{[str(e) for e in exceptions]}."
-                "Try calling this function with coords set to a specific value instead of "
-                f'"auto", or adjust the coordinate metadata in {element}'
-            )
-            raise ValueError(msg)
-    else:
-        result = DataArray(element, coords=coords, attrs=attrs, name=name)
-
-    return result
-
-
-def create_datatree(
-    element: zarr.Group,
-    chunks: Literal["auto"] | tuple[int, ...] = "auto",
-    coords: Any = "auto",
-    use_dask: bool = True,
-    attrs: dict[str, Any] | None = None,
-    name: str | None = None) -> DataTree:
-    if coords != "auto":
-        msg = (
-            "This function does not support values of `coords` other than `auto`. "
-            f"Got {coords}. This may change in the future."
-        )
-        raise NotImplementedError(msg)
-
-    if name is None:
-        name = element.basename
-
-    nodes: MutableMapping[str, Dataset | DataArray | DataTree | None] = {
-        name: create_dataarray(
-            array,
-            chunks=chunks,
-            coords=coords,
-            use_dask=use_dask,
-            attrs=None,
-            name="data",
-        )
-        for name, array in element.arrays()
-    }
-    if attrs is None:
-        root_attrs = element.attrs.asdict()
-    else:
-        root_attrs = attrs
-    # insert root element
-    nodes["/"] = Dataset(attrs=root_attrs)
-    dtree = DataTree.from_dict(nodes, name=name)
-    return dtree
-
-def to_xarray(
-    element: Any,
-    chunks: Literal["auto"] | tuple[int, ...] = "auto",
-    use_dask: bool = True,
-    attrs: dict[str, Any] | None = None,
-    coords: Any = "auto",
-    name: str | None = None,
-) -> DataArray | DataTree:
-    if isinstance(element, zarr.Group):
-        return create_datatree(
-            element,
-            chunks=chunks,
-            coords=coords,
-            attrs=attrs,
-            use_dask=use_dask,
-            name=name,
-        )
-    elif isinstance(element, zarr.Array):
-        return create_dataarray(
-            element,
-            chunks=chunks,
-            coords=coords,
-            attrs=attrs,
-            use_dask=use_dask,
-            name=name,
-        )
-    else:
-        raise ValueError(
-            "This function only accepts instances of zarr.Group and zarr.Array. ",
-            f"Got {type(element)} instead.",
-        )
- """
 
 
 def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, str]:
