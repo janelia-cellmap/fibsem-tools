@@ -5,7 +5,12 @@ import numpy as np
 import pytest
 import zarr
 from fibsem_tools.chunk import normalize_chunks
-from fibsem_tools.io.core import access, model_multiscale_group, split_by_suffix
+from fibsem_tools.io.core import (
+    access,
+    model_multiscale_group,
+    read_xarray,
+    split_by_suffix,
+)
 from numcodecs import GZip
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from xarray import DataArray
@@ -100,3 +105,7 @@ def test_multiscale_storage(
 
     assert group.attrs.asdict() == g_spec.attributes.model_dump()
     assert all(a.chunks == chunks for name, a in group.arrays())
+
+
+def test_read_xarray():
+    read_xarray("s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.n5/em/fibsem-uint16")

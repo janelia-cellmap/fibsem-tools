@@ -173,8 +173,17 @@ def read_xarray(
 ) -> DataArray | DataTree:
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
-    if suffix in (".zarr", ".n5"):
+    if suffix == ".zarr":
         return zarrio.to_xarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=attrs,
+            name=name,
+        )
+    elif suffix == ".n5":
+        return n5.to_xarray(
             element,
             chunks=chunks,
             coords=coords,

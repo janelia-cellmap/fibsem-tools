@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any, Literal, Sequence
 
+from datatree import DataTree
 import zarr
-from xarray import DataArray
+from xarray import DataArray, Dataset
 from zarr.errors import ReadOnlyError
 
 from fibsem_tools.types import PathLike
@@ -83,22 +84,73 @@ def access(store: PathLike, path: PathLike, **kwargs: Any) -> zarr.Group | zarr.
 
 
 def create_dataarray(
-    array: zarr.Array,
-    use_dask: bool = True,
+    element: zarr.Array,
     chunks: tuple[int, ...] | Literal["auto"] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: dict[str, Any] | None = None,
+    name: str | None = None,
 ) -> DataArray:
     """
     Create a DataArray from a Zarr array (wrapping an N5 dataset). Coordinates will be inferred from
     the array attributes.
     """
-    array_attrs = array.attrs.asdict()
+    array_attrs = element.attrs.asdict()
     # cosem first, then neuroglancer
-    if "transform" in array_attrs:
-        return cosem.create_dataarray(array=array, use_dask=use_dask, chunks=chunks)
+    if coords == "auto":
+        if "transform" in array_attrs:
+            return cosem.create_dataarray(
+                array=element, use_dask=use_dask, chunks=chunks
+            )
+        else:
+            return neuroglancer.create_dataarray(
+                array=element, use_dask=use_dask, chunks=chunks
+            )
     else:
-        return neuroglancer.create_dataarray(
-            array=array, use_dask=use_dask, chunks=chunks
+        if use_dask:
+            wrapped = to_dask(element, chunks=chunks)
+        else:
+            wrapped = element
+        return DataArray(wrapped, coords=coords, attrs=attrs, name=name)
+
+
+def create_datatree(
+    element: zarr.Group,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    coords: Any = "auto",
+    use_dask: bool = True,
+    attrs: dict[str, Any] | None = None,
+    name: str | None = None,
+) -> DataTree:
+    if coords != "auto":
+        msg = (
+            "This function does not support values of `coords` other than `auto`. "
+            f"Got {coords}. This may change in the future."
         )
+        raise NotImplementedError(msg)
+
+    if name is None:
+        name = element.basename
+
+    nodes: dict[str, Dataset | DataArray | DataTree | None] = {
+        name: create_dataarray(
+            array,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=None,
+            name="data",
+        )
+        for name, array in element.arrays()
+    }
+    if attrs is None:
+        root_attrs = element.attrs.asdict()
+    else:
+        root_attrs = attrs
+    # insert root element
+    nodes["/"] = Dataset(attrs=root_attrs)
+    dtree = DataTree.from_dict(nodes, name=name)
+    return dtree
 
 
 def is_n5(array: zarr.core.Array) -> bool:
@@ -106,3 +158,36 @@ def is_n5(array: zarr.core.Array) -> bool:
     Check if a Zarr array is backed by N5 storage.
     """
     return isinstance(array.store, (zarr.N5Store, zarr.N5FSStore))
+
+
+def to_xarray(
+    element: Any,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    use_dask: bool = True,
+    attrs: dict[str, Any] | None = None,
+    coords: Any = "auto",
+    name: str | None = None,
+) -> DataArray | DataTree:
+    if isinstance(element, zarr.Group):
+        return create_datatree(
+            element,
+            chunks=chunks,
+            coords=coords,
+            attrs=attrs,
+            use_dask=use_dask,
+            name=name,
+        )
+    elif isinstance(element, zarr.Array):
+        return create_dataarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            attrs=attrs,
+            use_dask=use_dask,
+            name=name,
+        )
+    else:
+        raise ValueError(
+            "This function only accepts instances of zarr.Group and zarr.Array. ",
+            f"Got {type(element)} instead.",
+        )

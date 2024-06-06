@@ -305,9 +305,11 @@ def create_dataarray(
             element, use_dask=use_dask, chunks=chunks, name=name
         )
     else:
-        return DataArray(
-            to_dask(element, chunks=chunks), coords=coords, attrs=attrs, name=name
-        )
+        if use_dask:
+            wrapped = to_dask(element, chunks=chunks)
+        else:
+            wrapped = element
+        return DataArray(wrapped, coords=coords, attrs=attrs, name=name)
 
 
 def create_datatree(
