@@ -14,16 +14,16 @@ from zarr.util import normalize_chunks as normalize_chunksize
 
 
 def chunk_grid_shape(
-    array_shape: Tuple[int, ...], chunk_shape: Tuple[int, ...]
-) -> Tuple[int, ...]:
+    array_shape: tuple[int, ...], chunk_shape: tuple[int, ...]
+) -> tuple[int, ...]:
     """
-    Get the shape of the chunk grid of a Zarr array.
+    Get the shape of the chunk grid of a regularly chunked array.
     """
     return tuple(np.ceil(np.divide(array_shape, chunk_shape)).astype("int").tolist())
 
 
 def are_chunks_aligned(
-    source_chunks: Tuple[int, ...], dest_chunks: Tuple[int, ...]
+    source_chunks: tuple[int, ...], dest_chunks: tuple[int, ...]
 ) -> bool:
     assert len(source_chunks) == len(dest_chunks)
     return all(

@@ -49,7 +49,7 @@ def test_access_zarr_n5(
             array_path: ArraySpec.from_array(np.arange(10), dimension_separator=dimsep)
         },
     )
-    stored = model.to_zarr(store=store, path=group_path)
+    _ = model.to_zarr(store=store, path=group_path)
     if mode in ("r", "a"):
         assert (
             model.members[array_path].shape

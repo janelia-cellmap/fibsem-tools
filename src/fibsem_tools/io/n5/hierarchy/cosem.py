@@ -13,6 +13,7 @@ from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from typing_extensions import deprecated
 from xarray import DataArray
 
+from cellmap_schemas.multiscale.cosem import Group
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.coordinate import stt_from_array, stt_to_coords
 
@@ -241,9 +242,6 @@ class CosemMultiscaleGroupV2(GroupSpec):
         }
 
         return cls(attributes=attrs, members=array_specs)
-
-
-from cellmap_schemas.multiscale.cosem import Group
 
 
 def model_group(

@@ -19,7 +19,9 @@ from numcodecs.abc import Codec
 from pydantic_zarr.v2 import GroupSpec
 from xarray import DataArray
 
-from fibsem_tools.io import dat, h5, mrc, n5, tif, zarr
+from fibsem_tools.io import dat, h5, mrc, n5, tif
+from fibsem_tools.io import zarr as zarrio
+
 from fibsem_tools.io.n5.hierarchy.cosem import (
     model_group as cosem_multiscale_group,
 )
@@ -29,7 +31,7 @@ from fibsem_tools.io.n5.hierarchy.neuroglancer import (
 from fibsem_tools.io.zarr.hierarchy.omengff import (
     multiscale_group as ome_ngff_v04_multiscale_group,
 )
-from fibsem_tools.types import AccessMode, Attrs, PathLike
+from fibsem_tools.types import AccessMode, PathLike
 
 NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]
@@ -81,7 +83,7 @@ def access(
     is_container = suffix in _container_extensions
 
     if suffix == ".zarr":
-        accessor = zarr.access
+        accessor = zarrio.access
     elif suffix == ".n5":
         accessor = n5.access
     elif suffix == ".h5":
@@ -147,7 +149,7 @@ def read_dask(
     """
     _, _, suffix = split_by_suffix(path, _suffixes)
     if suffix in (".zarr", ".n5"):
-        dasker = zarr.to_dask
+        dasker = zarrio.to_dask
     elif suffix == ".mrc":
         dasker = mrc.to_dask
     elif suffix == ".dat":
@@ -172,7 +174,7 @@ def read_xarray(
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
     if suffix in (".zarr", ".n5"):
-        return zarr.to_xarray(
+        return zarrio.to_xarray(
             element,
             chunks=chunks,
             coords=coords,

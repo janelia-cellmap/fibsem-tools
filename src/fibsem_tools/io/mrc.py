@@ -154,7 +154,7 @@ def to_dask(
                         f"Chunk sizes of non-leading axes must match the shape of the "
                         f"array. Got chunk_size={chunks[idx]}, expected {shpe}"
                     )
-                    raise ValueError()
+                    raise ValueError(msg)
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
     arr = da.map_blocks(chunk_loader, path, chunks=_chunks, dtype=dtype)

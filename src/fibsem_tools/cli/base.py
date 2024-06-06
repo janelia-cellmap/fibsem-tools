@@ -18,7 +18,7 @@ def parse_compressor(
     if compressor_opts is None:
         compressor_opts = "{}"
     compressor_opts_dict = json.loads(compressor_opts)
-    compressor_instance = eval("compressor_class(**compressor_opts_dict)")
+    compressor_instance = compressor_class(**compressor_opts_dict)
     return compressor_instance
 
 
