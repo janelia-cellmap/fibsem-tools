@@ -85,13 +85,13 @@ def test_read_array(
         msg = f"If use_dask is False, then chunks must be 'auto'. Got {chunks} instead."
         with pytest.raises(ValueError, match=re.escape(msg)):
             observed = tuple(
-                create_dataarray(array=group[path], use_dask=use_dask, chunks=chunks)
+                create_dataarray(element=group[path], use_dask=use_dask, chunks=chunks)
                 for path in paths
             )
         return None
     else:
         observed = tuple(
-            create_dataarray(array=group[path], use_dask=use_dask, chunks=chunks)
+            create_dataarray(element=group[path], use_dask=use_dask, chunks=chunks)
             for path in paths
         )
         result = tuple(a.equals(b) for a, b in zip(observed, pyramid))
