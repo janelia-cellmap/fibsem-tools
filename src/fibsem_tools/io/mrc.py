@@ -179,8 +179,8 @@ class MrcArrayWrapper:
         self.flags = memmap.data.flags
         self.mrc = memmap
 
-    def __getitem__(self, *args):
+    def __getitem__(self, *args) -> np.ndarray:
         return self.mrc.data.__getitem__(*args).astype(self.dtype)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"MrcArrayWrapper(shape={self.shape}, dtype={self.dtype})"

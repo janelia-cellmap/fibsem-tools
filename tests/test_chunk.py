@@ -30,7 +30,7 @@ def test_normalize_chunks(
         assert observed == chunks
 
 
-def test_ensure_minimum_chunksize():
+def test_ensure_minimum_chunksize() -> None:
     data = da.zeros((10,), chunks=(2,))
     assert ensure_minimum_chunksize(data, (4,)).chunksize == (4,)
 

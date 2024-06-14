@@ -49,7 +49,7 @@ class FIBSEMHeader:
         """update internal dictionary"""
         self.__dict__.update(kwargs)
 
-    def to_native_types(self):
+    def to_native_types(self) -> None:
         """
         Replace numpy numeric types with stdlib equivalents. This method modifies an
         object in place, which is terrible. Sorry about that.
@@ -881,7 +881,7 @@ def to_dask(
     data: FibsemDataset | FIBSEMData,
     chunks: Literal["auto"] | Sequence[int],
     pad_values=None,
-):
+) -> da.Array:
     if isinstance(data, FIBSEMData):
         return da.from_array(data, chunks=chunks)
     elif isinstance(data, FibsemDataset):
@@ -912,12 +912,12 @@ def to_dask(
         return darr
 
 
-def infer_coords(array: FIBSEMData):
+def infer_coords(array: FIBSEMData) -> tuple[DataArray, ...]:
     grid_spacing_xy = array.attrs["PixelSize"]
     dims = ("x", "y", "c")
     scales = (grid_spacing_xy, grid_spacing_xy, 1)
     translates = (0, 0, 0)
-    coords = [
+    coords = tuple(
         stt_coord(
             length=s,
             dim=dims[idx],
@@ -926,7 +926,7 @@ def infer_coords(array: FIBSEMData):
             unit="nm",
         )
         for idx, s in enumerate(array.shape)
-    ]
+    )
     return coords
 
 
@@ -964,7 +964,7 @@ def to_xarray(
     use_dask: bool = True,
     attrs: Optional[Dict[str, Any]] = None,
     name: Optional[str] = None,
-):
+) -> DataArray:
     """
     Convert an instance of FIBSEMData or a FibsemDataset to an xarray data structure.
     `FIBSEMData` is converted to an `xarray.DataArray`; FibsemDataset will eventually
@@ -1008,9 +1008,8 @@ def to_xarray(
             name=name,
         )
     else:
-        raise ValueError(
-            f"""
-        This function only accepts instances of zarr.Group and zarr.Array. 
-        Got {type(element)} instead.
-        """
+        msg = (
+            "This function only accepts instances of FibsemDataset and FIBSEMData. "
+            f"Got {type(element)} instead."
         )
+        raise TypeError(msg)

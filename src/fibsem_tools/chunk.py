@@ -224,13 +224,13 @@ def normalize_chunks(
     else:
         all_ints = all((isinstance(c, int) for c in chunks))
         if all_ints:
-            result = (chunks,) * len(arrays)
+            result = (chunks,) * len(arrays_tuple)
         else:
             msg = f"All values in chunks must be ints. Got {chunks}"
             raise ValueError(msg)
 
-    assert len(result) == len(arrays)
+    assert len(result) == len(arrays_tuple)
     assert tuple(map(len, result)) == tuple(
-        x.ndim for x in arrays
+        x.ndim for x in arrays_tuple
     ), "Number of chunks per array does not equal rank of arrays"
     return result
