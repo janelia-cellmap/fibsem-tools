@@ -247,7 +247,7 @@ class CosemMultiscaleGroupV2(GroupSpec):
 def model_group(
     *,
     arrays: dict[str, DataArray],
-    chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
+    chunks: tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
     **kwargs,
 ) -> Group:
     """

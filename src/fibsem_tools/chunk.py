@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 if TYPE_CHECKING:
     from typing import Literal, Sequence
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 import numpy as np
 from dask.utils import parse_bytes
 from xarray import DataArray
-from zarr.util import normalize_chunks as normalize_chunksize
+from zarr.util import normalize_chunks as normalize_chunksize, guess_chunks
 
 
 def chunk_grid_shape(
@@ -179,37 +179,46 @@ def interval_remainder(
 
 
 def normalize_chunks(
-    arrays: Sequence[DataArray],
+    arrays: Iterable[DataArray],
     chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"],
 ) -> tuple[tuple[int, ...], ...]:
     """
-    Normalize a chunk specification, given a list of arrays.
+    Normalize a chunk specification, given an iterable of DataArrays.
 
     Parameters
     ----------
 
     arrays: Sequence[DataArray]
-        The list of arrays to define chunks for.
-    chunks: Union[Tuple[Tuple[int, ...], ...], Tuple[int, ...], Literal["auto"]]
+        The list of arrays to define chunks for. They should be sorted by shape,
+        in descending order. I.e., the first array should be the largest.
+    chunks: Literal["auto"] | tuple[int, ...] | tuple[tuple[int, ...], ...]
         The specification of chunks. This parameter is either a tuple of tuple of ints,
         in which case it is already normalized and it passes right through, or it is
         a tuple of ints, which will be "broadcast" to the length of `arrays`, or it is
         the string "auto", in which case the existing chunks on the arrays with be used
-        if they are chunked, and otherwise chunks will be set to the shape of each
-        array.
+        if they are chunked, and otherwise chunks will be set to a value based on the size and
+        data type of the largest array.
 
     Returns
     -------
-        Tuple[Tuple[int, ...], ...]
+        tuple[tuple[int, ...], ...]
     """
     result: tuple[tuple[int, ...]] = ()
+    arrays_tuple = tuple(arrays)
     if chunks == "auto":
-        for arr in arrays:
-            if arr.chunks is None:
-                result += (arr.shape,)
-            else:
-                # use the chunksize property of the underlying dask array
-                result += (arr.data.chunksize,)
+        # duck typing check for all dask arrays
+        if all(hasattr(a.data, "chunksize") for a in arrays_tuple):
+            # use the chunksize for each array
+            result = tuple(a.data.chunksize for a in arrays_tuple)
+        else:
+            # guess chunks for the largest array, and use that for all the others
+            largest = sorted(
+                arrays_tuple, key=lambda v: np.prod(v.shape), reverse=True
+            )[0]
+            result = (
+                guess_chunks(largest.shape, typesize=largest.dtype.itemsize),
+            ) * len(arrays_tuple)
+
     elif all(isinstance(c, tuple) for c in chunks):
         result = chunks
     else:

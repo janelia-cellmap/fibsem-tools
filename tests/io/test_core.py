@@ -1,12 +1,15 @@
+from __future__ import annotations
 import os
-from typing import Literal
+from typing import Any, Literal
 
+from datatree import DataTree
 import numpy as np
 import pytest
 import zarr
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.io.core import (
     access,
+    create_multiscale_group,
     model_multiscale_group,
     read_xarray,
     split_by_suffix,
@@ -107,5 +110,41 @@ def test_multiscale_storage(
     assert all(a.chunks == chunks for name, a in group.arrays())
 
 
-def test_read_xarray():
-    read_xarray("s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.n5/em/fibsem-uint16")
+@pytest.mark.parametrize(
+    "fmt, metadata", (["n5", "cosem"], ["n5", "neuroglancer"], ["zarr", "ome-ngff"])
+)
+@pytest.mark.parametrize("chunks", ("auto", (3, 3, 3)))
+@pytest.mark.parametrize("coords", ("auto", "override"))
+@pytest.mark.parametrize("use_dask", (True, False))
+@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
+@pytest.mark.parametrize("name", (None, "foo"))
+@pytest.mark.parametrize(
+    "pyramid",
+    (PyramidRequest(shape=(9, 9, 9), dims=("z", "y", "x")),),
+    indirect=["pyramid"],
+)
+def test_read_xarray(
+    tmpdir,
+    fmt: str,
+    metadata: str,
+    chunks,
+    coords,
+    use_dask: bool,
+    attrs: dict[str, Any] | None,
+    name: str | None,
+    pyramid: tuple[DataArray, ...],
+) -> None:
+    group_path = "bar"
+    store_path = f"{str(tmpdir)}/foo.{fmt}"
+    arrays = {f"s{idx}": pyr for idx, pyr in enumerate(pyramid)}
+    dest = access(store_path, mode="w")
+    _ = create_multiscale_group(
+        store=dest.store, path=group_path, arrays=arrays, metadata_type=metadata
+    )
+
+    read_xr_g = read_xarray(os.path.join(store_path, group_path))
+    assert isinstance(read_xr_g, DataTree)
+    for key, arr_expected in arrays.items():
+        read_xr_arr = read_xarray(os.path.join(store_path, group_path, key))
+        assert isinstance(read_xr_arr, DataArray)
+        assert read_xr_arr.shape == arr_expected.shape

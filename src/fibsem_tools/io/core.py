@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Hashable
 
 import zarr
 from zarr.storage import BaseStore
@@ -165,7 +165,7 @@ def read_dask(
 def read_xarray(
     path: PathLike,
     chunks: Union[Literal["auto"], tuple[int, ...]] = "auto",
-    coords: Any = "auto",
+    coords: Literal["auto"] | dict[Hashable, Any] = "auto",
     use_dask: bool = True,
     attrs: dict[str, Any] | None = None,
     name: str | None = None,
@@ -249,7 +249,7 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, s
 def model_multiscale_group(
     arrays: dict[str, DataArray],
     metadata_type: Literal["neuroglancer_n5", "ome-ngff", "cosem"],
-    chunks: Union[tuple[tuple[int, ...], ...], Literal["auto"]] = "auto",
+    chunks: tuple[int, ...] | tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
     **kwargs,
 ) -> GroupSpec:
     """
