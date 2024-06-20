@@ -47,7 +47,7 @@ def model_group(
 
     if nonzero_translate:
         msg = (
-            "Non-zero translation parameters ({base_transform.translate}) detected in the base "
+            f"Non-zero translation parameters ({base_transform.translate}) detected in the base "
             "coordinates. Be advised that this translation parameter will not be stored, due to limitations "
             "of the metadata format you are using."
         )
