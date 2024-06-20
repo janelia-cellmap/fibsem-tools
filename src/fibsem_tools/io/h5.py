@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple, Union
 
 import h5py
 
-from fibsem_tools.types import PathLike
+from fibsem_tools.type import PathLike
 
 H5_ACCESS_MODES = ("r", "r+", "w", "w-", "x", "a")
 

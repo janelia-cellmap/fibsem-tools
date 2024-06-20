@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from typing import Any, Literal, Sequence
 
 import fibsem_tools.coordinate as fsxr
-from fibsem_tools.types import ArrayLike
+from fibsem_tools.type import ArrayLike
 
 
 def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):

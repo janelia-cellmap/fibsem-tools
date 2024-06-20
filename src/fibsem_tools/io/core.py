@@ -31,7 +31,7 @@ from fibsem_tools.io.n5.hierarchy.neuroglancer import (
 from fibsem_tools.io.zarr.hierarchy.omengff import (
     multiscale_group as ome_ngff_v04_multiscale_group,
 )
-from fibsem_tools.types import AccessMode, PathLike
+from fibsem_tools.type import AccessMode, PathLike
 
 NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]

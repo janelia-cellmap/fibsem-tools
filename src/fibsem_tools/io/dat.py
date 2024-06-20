@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
 
-    from fibsem_tools.types import AccessMode, PathLike
+    from fibsem_tools.type import AccessMode, PathLike
 import os
 import warnings
 

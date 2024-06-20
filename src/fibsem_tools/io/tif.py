@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 
 import tifffile
 
-from fibsem_tools.types import ArrayLike, PathLike
+from fibsem_tools.type import ArrayLike, PathLike
 
 
 def access(

@@ -1,16 +1,17 @@
+import contextlib
 import random
 import socket
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer, test
 
-PORT = 5000
-HOST = "0.0.0.0"
-DIRECTORY = "."
+DEFAULT_PORT = 5000
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_DIRECTORY = "."
 
 
 class CORSRequestHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
         return super(CORSRequestHandler, self).end_headers()
@@ -20,15 +21,19 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
 
-def serve(port, bind, directory):
+def serve(*, port: int, bind: str, directory: str):
     """
-    Server code adapated from the source code of http.server in the stdlib
+    Start up a simple static file server.
+    Adapated from the source code of http.server in the stdlib.
     """
+
     attempts = 11
     attempt = 1
 
     handler_class = CORSRequestHandler
 
+    # it's ugly to define a class inside a function, but this appears necessary due
+    # to the need for the directory variable to be passed to DualStackServer.finish_request
     class DualStackServer(ThreadingHTTPServer):
         def server_bind(self):
             with contextlib.suppress(Exception):
@@ -52,34 +57,3 @@ def serve(port, bind, directory):
             attempts += 1
 
     raise RuntimeError(f"Failed to get a port after {attempt} attempts. Closing.")
-
-
-if __name__ == "__main__":
-    import argparse
-    import contextlib
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-b",
-        "--bind",
-        metavar="ADDRESS",
-        default=HOST,
-        help="bind to this address " "(default: 0.0.0.0)",
-    )
-    parser.add_argument(
-        "directory",
-        default=DIRECTORY,
-        help="serve this directory " "(default: current directory)",
-    )
-    parser.add_argument(
-        "-p",
-        "--port",
-        default=8000,
-        type=int,
-        nargs="?",
-        help="bind to this port " "(default: %(default)s)",
-    )
-
-    args = parser.parse_args()
-
-    serve(args.port, args.bind, args.directory)

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Sequence
 if TYPE_CHECKING:
     from typing import Any, Generator, Literal, Union
 
-    from fibsem_tools.types import PathLike
+    from fibsem_tools.type import PathLike
 
 import os
 from pathlib import Path

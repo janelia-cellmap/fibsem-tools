@@ -1,5 +1,5 @@
 import pytest
-from fibsem_tools.types import GroupLike
+from fibsem_tools.type import GroupLike
 from pydantic_zarr.v2 import GroupSpec
 from zarr import MemoryStore
 

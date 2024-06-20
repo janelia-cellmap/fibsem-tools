@@ -10,7 +10,7 @@ import zarr
 from xarray import DataArray, Dataset
 from zarr.errors import ReadOnlyError
 
-from fibsem_tools.types import PathLike
+from fibsem_tools.type import PathLike
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer
 from ..zarr import access as access_zarr, get_url
 import dask.array as da
