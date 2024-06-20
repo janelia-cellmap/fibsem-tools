@@ -12,17 +12,6 @@ if TYPE_CHECKING:
 from xarray_ome_ngff.array_wrap import DaskArrayWrapper, ZarrArrayWrapper
 from xarray_ome_ngff.v04.multiscale import model_group, read_array
 
-"""
-def model_group(
-    *,
-    arrays: dict[str, DataArray],
-    transform_precision: int | None = None,
-    chunks: tuple[int, ...] | tuple[tuple[int, ...]] | Literal["auto"] = "auto",
-    compressor: Codec | None = Zstd(3),
-    fill_value: Any = 0,
-) -> MultiscaleGroup:
-"""
-
 
 def multiscale_group(
     arrays: dict[str, DataArray],
@@ -39,8 +28,9 @@ def multiscale_group(
 
 def create_dataarray(
     array: zarr.Array,
-    use_dask: bool = True,
+    *,
     chunks: tuple[int, ...] | Literal["auto"] = "auto",
+    use_dask: bool = True,
     name: str | None = None,
 ) -> DataArray:
     wrapper = DaskArrayWrapper(chunks=chunks) if use_dask else ZarrArrayWrapper()

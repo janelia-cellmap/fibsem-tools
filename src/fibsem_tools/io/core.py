@@ -101,8 +101,8 @@ def access(
 
     if is_container:
         return accessor(path_outer, path_inner, mode=mode, **kwargs)
-    else:
-        return accessor(path_outer, mode=mode, **kwargs)
+
+    return accessor(path_outer, mode=mode, **kwargs)
 
 
 def read(path: PathLike, **kwargs) -> Any:
@@ -141,6 +141,7 @@ def read(path: PathLike, **kwargs) -> Any:
 
 def read_dask(
     path: PathLike,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     **kwargs: Any,
 ) -> da.Array:
@@ -160,11 +161,12 @@ def read_dask(
             "with dask support: .zarr, .n5, .mrc, .dat"
         )
         raise ValueError(msg)
-    return dasker(read(path, **kwargs), chunks)
+    return dasker(read(path, **kwargs), chunks=chunks)
 
 
 def read_xarray(
     path: PathLike,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Literal["auto"] | dict[Hashable, Any] = "auto",
     use_dask: bool = True,
@@ -203,12 +205,12 @@ def read_xarray(
             attrs=attrs,
             name=name,
         )
-    else:
-        msg = (
-            f"Xarray data structures are only supported for data saved as zarr, n5, and mrc. "
-            f"Got {type(element)}, which is not supported."
-        )
-        raise ValueError(msg)
+
+    msg = (
+        f"Xarray data structures are only supported for data saved as zarr, n5, and mrc. "
+        f"Got {type(element)}, which is not supported."
+    )
+    raise ValueError(msg)
 
 
 def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, str]:
@@ -247,6 +249,7 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, s
 
 def model_multiscale_group(
     arrays: dict[str, DataArray],
+    *,
     metadata_type: Literal["neuroglancer_n5", "ome-ngff", "cosem"],
     chunks: tuple[int, ...] | tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
     **kwargs,
@@ -287,26 +290,24 @@ def model_multiscale_group(
             return ome_ngff_v04_multiscale_group(
                 arrays=arrays, transform_precision=5, chunks=_chunks, **kwargs
             )
-        else:
-            msg = (
-                f"Metadata type {metadata_type} refers to an unsupported version of "
-                "ome-ngff ({ome_ngff_version})"
-            )
-            raise ValueError(msg)
-
-    else:
         msg = (
-            f"Multiscale metadata type {metadata_type} is unknown."
-            f"Try one of {multiscale_metadata_types}"
+            f"Metadata type {metadata_type} refers to an unsupported version of "
+            "ome-ngff ({ome_ngff_version})"
         )
         raise ValueError(msg)
 
+    msg = (
+        f"Multiscale metadata type {metadata_type} is unknown."
+        f"Try one of {multiscale_metadata_types}"
+    )
+    raise ValueError(msg)
+
 
 def create_multiscale_group(
-    *,
     store: BaseStore,
     path: str,
     arrays: dict[str, DataArray],
+    *,
     metadata_type: Literal["neuroglancer", "cosem", "ome-ngff", "ome-ngff@0.4"],
     chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
     compressor: Codec | Literal["auto"] = "auto",

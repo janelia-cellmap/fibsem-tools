@@ -87,6 +87,7 @@ def access(store: PathLike, path: PathLike, **kwargs: Any) -> zarr.Group | zarr.
 
 def create_dataarray(
     element: zarr.Array,
+    *,
     chunks: tuple[int, ...] | Literal["auto"] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
@@ -115,6 +116,7 @@ def create_dataarray(
 
 def create_datatree(
     element: zarr.Group,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
@@ -172,18 +174,12 @@ def to_xarray(
             use_dask=use_dask,
             name=name,
         )
-    elif isinstance(element, zarr.Array):
-        return create_dataarray(
-            element,
-            chunks=chunks,
-            coords=coords,
-            attrs=attrs,
-            use_dask=use_dask,
-            name=name,
-        )
-    else:
-        msg = "This function only accepts instances of zarr.Group and zarr.Array. "
-        raise ValueError(
-            msg,
-            f"Got {type(element)} instead.",
-        )
+
+    return create_dataarray(
+        element,
+        chunks=chunks,
+        coords=coords,
+        attrs=attrs,
+        use_dask=use_dask,
+        name=name,
+    )

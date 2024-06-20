@@ -12,8 +12,6 @@ if TYPE_CHECKING:
 
     from fibsem_tools.type import ArrayLike
 
-import fibsem_tools.coordinate as fsxr
-
 
 def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
     """
@@ -95,14 +93,16 @@ def stt_from_coords(
         units.append(c.attrs.get("units", "m"))
         translate.append(float(c[0]))
         scale.append(abs(float(c[1]) - float(c[0])))
-        assert scale[-1] > 0
+        if any(tuple(s <= 0 for s in scale)):
+            msg = f"Invalid scale: {scale}. Scale must be greater than 0."
+            raise ValueError(msg)
 
     return STTransform(
         axes=axes, units=units, translate=translate, scale=scale, order=order
     )
 
 
-def stt_from_array(array: DataArray, reverse_axes: bool = False) -> STTransform:
+def stt_from_array(array: DataArray, *, reverse_axes: bool = False) -> STTransform:
     """
     Generate a spatial transform from a DataArray.
 
@@ -157,7 +157,7 @@ def stt_to_coords(transform: STTransform, shape: tuple[int, ...]) -> tuple[DataA
     """
     axes = transform.axes if transform.order == "C" else reversed(transform.axes)
     return tuple(
-        fsxr.stt_coord(
+        stt_coord(
             shape[idx],
             dim=k,
             scale=transform.scale[idx],

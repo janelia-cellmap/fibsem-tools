@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Literal, Sequence
+    from collections.abc import Iterable, Sequence
+    from typing import Literal
 
     import numpy.typing as npt
+    from xarray import DataArray
 
 import numpy as np
 from dask.utils import parse_bytes
-from xarray import DataArray
-from zarr.util import normalize_chunks as normalize_chunksize, guess_chunks
+from zarr.util import guess_chunks
+from zarr.util import normalize_chunks as normalize_chunksize
 
 
 def chunk_grid_shape(
@@ -25,7 +27,9 @@ def chunk_grid_shape(
 def are_chunks_aligned(
     source_chunks: tuple[int, ...], dest_chunks: tuple[int, ...]
 ) -> bool:
-    assert len(source_chunks) == len(dest_chunks)
+    if len(source_chunks) != len(dest_chunks):
+        msg = "Length of source chunks does not match length of dest chunks."
+        raise ValueError(msg)
     return all(
         s_chunk % d_chunk == 0 for s_chunk, d_chunk in zip(source_chunks, dest_chunks)
     )
@@ -97,8 +101,8 @@ def autoscale_chunk_shape(
 
     if size_ratio < 1:
         return result
-    else:
-        target_nchunks = np.ceil(size_ratio).astype("int")
+
+    target_nchunks = np.ceil(size_ratio).astype("int")
 
     # operate in chunk grid coordinates
     # start with 1 chunk
@@ -120,9 +124,7 @@ def autoscale_chunk_shape(
             )
             break
 
-    result = tuple(np.multiply(scale_vector, normalized_chunk_shape).tolist())
-
-    return result
+    return tuple(np.multiply(scale_vector, normalized_chunk_shape).tolist())
 
 
 def resolve_slice(slce: slice, interval: tuple[int, int]) -> slice:
@@ -141,7 +143,7 @@ def resolve_slices(
     """
     Convenience function for applying `resolve_slice` to a collection of `slice` objects and a collection of half-open intervals.
     """
-    return tuple(map(lambda v: resolve_slice(*v), zip(slces, intervals)))
+    return tuple(resolve_slice(*v) for v in zip(slces, intervals))
 
 
 def interval_remainder(
@@ -220,15 +222,17 @@ def normalize_chunks(
     elif all(isinstance(c, tuple) for c in chunks):
         result = chunks
     else:
-        all_ints = all((isinstance(c, int) for c in chunks))
+        all_ints = all(isinstance(c, int) for c in chunks)
         if all_ints:
             result = (chunks,) * len(arrays_tuple)
         else:
             msg = f"All values in chunks must be ints. Got {chunks}"
             raise ValueError(msg)
 
-    assert len(result) == len(arrays_tuple)
-    assert tuple(map(len, result)) == tuple(
-        x.ndim for x in arrays_tuple
-    ), "Number of chunks per array does not equal rank of arrays"
+    if len(result) != len(arrays_tuple):
+        msg = "Length of arrays does not match the length of chunks."
+        raise ValueError(msg)
+    if tuple(map(len, result)) != tuple(x.ndim for x in arrays_tuple):
+        msg = "Number of chunks per array does not equal rank of arrays"
+        raise ValueError(msg)
     return result

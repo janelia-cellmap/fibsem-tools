@@ -258,7 +258,7 @@ def test_dask(tmp_zarr: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     assert observed.name == expected.name
     assert np.array_equal(observed, data)
 
-    assert np.array_equal(read_dask(get_url(zarray), chunks).compute(), data)
+    assert np.array_equal(read_dask(get_url(zarray), chunks=chunks).compute(), data)
 
 
 @pytest.mark.parametrize(

@@ -27,6 +27,8 @@ from zarr.storage import BaseStore, FSStore
 
 from fibsem_tools.io.zarr.hierarchy import omengff
 
+noneslice = slice(None)
+
 
 def parse_url(url: str) -> tuple[str, str]:
     """
@@ -127,8 +129,7 @@ def array_from_dask(arr: da.Array) -> zarr.Array:
     )
     if isinstance(maybe_array, zarr.Array):
         return maybe_array
-    else:
-        return maybe_array[1]
+    return maybe_array[1]
 
 
 def get_url(node: zarr.Group | zarr.Array) -> str:
@@ -185,7 +186,7 @@ def access(
 
 
 def chunk_keys(
-    array: zarr.Array, region: slice | tuple[slice, ...] = slice(None)
+    array: zarr.Array, region: slice | tuple[slice, ...] = noneslice
 ) -> Generator[str, None, None]:
     """
     Get the keys for all the chunks in a Zarr array as a generator of strings.
@@ -209,6 +210,7 @@ def chunk_keys(
 
 def to_dask(
     arr: zarr.Array,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     inline_array: bool = True,
     **kwargs: Any,
@@ -250,7 +252,9 @@ def access_parent(node: zarr.Array | zarr.Group) -> zarr.Group:
     return get_parent(node)
 
 
-def is_copyable(source_group: GroupSpec, dest_group: GroupSpec, strict: bool = False):
+def is_copyable(
+    source_group: GroupSpec, dest_group: GroupSpec, *, strict: bool = False
+):
     """
     Check whether a Zarr group modeled by a GroupSpec `source_group` can be copied into the Zarr group modeled by GroupSpec `dest_group`.
     This entails checking that every (key, value) pair in `source_group.members` has a copyable counterpart in `dest_group.members`.
@@ -286,6 +290,7 @@ def is_copyable(source_group: GroupSpec, dest_group: GroupSpec, strict: bool = F
 
 def create_dataarray(
     element: zarr.Array,
+    *,
     chunks: tuple[int, ...] | Literal["auto"] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
@@ -299,13 +304,14 @@ def create_dataarray(
         return omengff.create_dataarray(
             element, use_dask=use_dask, chunks=chunks, name=name
         )
-    else:
-        wrapped = to_dask(element, chunks=chunks) if use_dask else element
-        return DataArray(wrapped, coords=coords, attrs=attrs, name=name)
+
+    wrapped = to_dask(element, chunks=chunks) if use_dask else element
+    return DataArray(wrapped, coords=coords, attrs=attrs, name=name)
 
 
 def create_datatree(
     element: zarr.Group,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
@@ -341,7 +347,8 @@ def create_datatree(
 
 def to_xarray(
     element: Any,
-    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    *,
+    chunks: Literal["auto"] | tuple[int, ...] | tuple[tuple[int, ...], ...] = "auto",
     use_dask: bool = True,
     attrs: dict[str, Any] | None = None,
     coords: Any = "auto",
@@ -356,18 +363,12 @@ def to_xarray(
             use_dask=use_dask,
             name=name,
         )
-    elif isinstance(element, zarr.Array):
-        return create_dataarray(
-            element,
-            chunks=chunks,
-            coords=coords,
-            attrs=attrs,
-            use_dask=use_dask,
-            name=name,
-        )
-    else:
-        msg = "This function only accepts instances of zarr.Group and zarr.Array. "
-        raise ValueError(
-            msg,
-            f"Got {type(element)} instead.",
-        )
+
+    return create_dataarray(
+        element,
+        chunks=chunks,
+        coords=coords,
+        attrs=attrs,
+        use_dask=use_dask,
+        name=name,
+    )

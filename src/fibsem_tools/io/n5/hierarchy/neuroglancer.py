@@ -69,8 +69,9 @@ def model_group(
 def create_dataarray(
     array: zarr.Array,
     *,
-    use_dask: bool = True,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    use_dask: bool = True,
+    name: str | None = None,
 ) -> DataArray:
     """
     Create a DataArray from an N5 dataset that uses Neuroglancer-compatible N5 metadata.
@@ -85,6 +86,8 @@ def create_dataarray(
     chunks: Literal["auto"] | tuple[int, ...] = "auto"
         The chunks to use for the returned array. When `use_dask` is `False`, then `chunks` must be
         "auto".
+    name: str | None
+        The name for the resulting array.
     """
     group_model = Group.from_zarr(access_parent(array))
     array_model = group_model.members[array.basename]
@@ -119,7 +122,10 @@ def create_dataarray(
         stt_coord(array.shape[idx], ax, scales[ax], transes[ax], units[ax])
         for idx, ax in enumerate(dims_out)
     )
-
     return DataArray(
-        array_wrapped, dims=dims_out, coords=coords, attrs=array.attrs.asdict()
+        array_wrapped,
+        dims=dims_out,
+        coords=coords,
+        attrs=array.attrs.asdict(),
+        name=name,
     )

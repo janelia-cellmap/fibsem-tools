@@ -870,28 +870,27 @@ def to_dask(
 ) -> da.Array:
     if isinstance(data, FIBSEMData):
         return da.from_array(data, chunks=chunks)
-    elif isinstance(data, FibsemDataset):
-        num_channels = data.bounding_shape["c"]
-        if data.needs_padding:
-            if pad_values is None:
-                msg = "Data must be padded but no pad values were supplied!"
-                raise ValueError(msg)
-            elif len(pad_values) != num_channels:
-                raise ValueError
 
-        chunks = (
-            (1,) * data.bounding_shape["z"],
-            *[data.bounding_shape[k] for k in ("c", "y", "x")],
-        )
-        return da.map_blocks(
-            chunked_fibsem_loader,
-            data.filenames,
-            data.axes["c"],
-            pad_values,
-            chunks=chunks,
-            dtype=data.dtypes[0],
-        )
-    return None
+    num_channels = data.bounding_shape["c"]
+    if data.needs_padding:
+        if pad_values is None:
+            msg = "Data must be padded but no pad values were supplied!"
+            raise ValueError(msg)
+        elif len(pad_values) != num_channels:
+            raise ValueError
+
+    chunks = (
+        (1,) * data.bounding_shape["z"],
+        *[data.bounding_shape[k] for k in ("c", "y", "x")],
+    )
+    return da.map_blocks(
+        chunked_fibsem_loader,
+        data.filenames,
+        data.axes["c"],
+        pad_values,
+        chunks=chunks,
+        dtype=data.dtypes[0],
+    )
 
 
 def infer_coords(array: FIBSEMData) -> tuple[DataArray, ...]:
@@ -913,10 +912,10 @@ def infer_coords(array: FIBSEMData) -> tuple[DataArray, ...]:
 
 def create_dataarray(
     element: FIBSEMData,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ):
     if coords == "auto":
@@ -924,15 +923,15 @@ def create_dataarray(
     if use_dask:
         element = to_dask(element, chunks)
 
-    return DataArray(element, coords, attrs, name=name)
+    return DataArray(element, coords, name=name)
 
 
 def create_datatree(
     element: FibsemDataset,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ):
     msg = "This behavior has not been implemented yet."
@@ -941,10 +940,10 @@ def create_datatree(
 
 def to_xarray(
     element: FIBSEMData | FibsemDataset,
+    *,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ) -> DataArray:
     """
@@ -976,22 +975,12 @@ def to_xarray(
             chunks=chunks,
             coords=coords,
             use_dask=use_dask,
-            attrs=attrs,
             name=name,
         )
-
-    elif isinstance(element, FIBSEMData):
-        return create_dataarray(
-            element,
-            chunks=chunks,
-            coords=coords,
-            use_dask=use_dask,
-            attrs=attrs,
-            name=name,
-        )
-    else:
-        msg = (
-            "This function only accepts instances of FibsemDataset and FIBSEMData. "
-            f"Got {type(element)} instead."
-        )
-        raise TypeError(msg)
+    return create_dataarray(
+        element,
+        chunks=chunks,
+        coords=coords,
+        use_dask=use_dask,
+        name=name,
+    )

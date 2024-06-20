@@ -221,7 +221,9 @@ def write_blocks_delayed(
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]
     blocks_flat = source.blocks.ravel()
-    assert len(slices) == len(blocks_flat)
+    if len(slices) != len(blocks_flat):
+        msg = "Number of slices does not match the number of blocks"
+        raise ValueError(msg)
     return [
         delayed(store_value)(target, slce, block)
         for slce, block in zip(slices, blocks_flat)
@@ -261,6 +263,7 @@ def copy_from_slices(slices, source_array, dest_array):
 def copy_array(
     source: PathLike | (np.ndarray | zarr.Array),
     dest: PathLike | (np.ndarray | zarr.Array),
+    *,
     chunk_size: str | tuple[int, ...] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
@@ -338,9 +341,15 @@ def copy_array(
             dtype=dest_arr.dtype,
         )
 
-    assert source_arr.shape == dest_arr.shape
-    assert source_arr.dtype == dest_arr.dtype
-    assert are_chunks_aligned(chunk_size, dest_arr.chunks)
+    if source_arr.shape != dest_arr.shape:
+        msg = "Shapes are not equal"
+        raise ValueError(msg)
+    if source_arr.dtype != dest_arr.dtype:
+        msg = "Datatypes are not equal"
+        raise ValueError(msg)
+    if not are_chunks_aligned(chunk_size, dest_arr.chunks):
+        msg = "Chunks are not aligned"
+        raise ValueError(msg)
 
     chunks_normalized = normalize_chunks_dask(chunk_size, shape=dest_arr.shape)
     slices = slices_from_chunks(chunks_normalized)
@@ -354,7 +363,7 @@ def copy_array(
     return slice_bag.map_partitions(copy_from_slices, source_arr, dest_arr)
 
 
-def pad_arrays(arrays, constant_values, stack=True):
+def pad_arrays(arrays, constant_values):
     """
     Pad arrays with variable axis sizes. A bounding box is calculated across all the
     arrays and each sub-array is padded to fit within the bounding box. This is a light

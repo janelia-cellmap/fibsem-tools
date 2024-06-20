@@ -276,9 +276,23 @@ def create_dataarray(
     *,
     use_dask: bool = True,
     chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    name: str | None = None,
 ) -> DataArray:
     """
-    Create a DataArray from an N5 container with cosem / cellmap metadata
+    Create a DataArray from an N5 dataset that uses cosem-compatible N5 metadata.
+
+    Parameters
+    ----------
+
+    array: zarr.Array
+        A handle to the Zarr array
+    use_dask: bool = True
+        Whether to wrap the result in a dask array. Default is True.
+    chunks: Literal["auto"] | tuple[int, ...] = "auto"
+        The chunks to use for the returned array. When `use_dask` is `False`, then `chunks` must be
+        "auto".
+    name: str | None
+        The name for the resulting array.
     """
     if use_dask:
         array_wrapped = da.from_array(array, chunks=chunks)
@@ -295,4 +309,5 @@ def create_dataarray(
         coords=coords,
         dims=transform.axes,
         attrs=array.attrs.asdict(),
+        name=name,
     )
