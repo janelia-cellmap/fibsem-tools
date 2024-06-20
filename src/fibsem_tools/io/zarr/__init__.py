@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Sequence
 
 if TYPE_CHECKING:
-    from typing import Any, Generator, Literal, Union
+    from typing import Any, Generator, Literal
 
     from fibsem_tools.type import PathLike
 
@@ -119,7 +119,7 @@ def array_from_dask(arr: da.Array) -> zarr.Array:
     Return the zarr array that was used to create a dask array using
     `da.from_array(zarr_array)`
     """
-    maybe_array: Union[zarr.Array, tuple[Any, zarr.Array, tuple[slice, ...]]] = tuple(
+    maybe_array: zarr.Array | tuple[Any, zarr.Array, tuple[slice, ...]] = tuple(
         arr.dask.values()
     )[0]
     if isinstance(maybe_array, zarr.Array):
@@ -128,7 +128,7 @@ def array_from_dask(arr: da.Array) -> zarr.Array:
         return maybe_array[1]
 
 
-def get_url(node: Union[zarr.Group, zarr.Array]) -> str:
+def get_url(node: zarr.Group | zarr.Array) -> str:
     store = node.store
     if hasattr(store, "path"):
         if hasattr(store, "fs"):
@@ -161,7 +161,7 @@ def get_store(path: PathLike) -> BaseStore:
 
 
 def access(
-    store: Union[PathLike, BaseStore], path: PathLike, **kwargs: Any
+    store: PathLike | BaseStore, path: PathLike, **kwargs: Any
 ) -> zarr.Array | zarr.Group:
     if isinstance(store, (Path, str)):
         store = get_store(store)
@@ -184,7 +184,7 @@ def access(
 
 
 def chunk_keys(
-    array: zarr.core.Array, region: Union[slice, tuple[slice, ...]] = slice(None)
+    array: zarr.Array, region: slice | tuple[slice, ...] = slice(None)
 ) -> Generator[str, None, None]:
     """
     Get the keys for all the chunks in a Zarr array as a generator of strings.
@@ -193,7 +193,7 @@ def chunk_keys(
     ----------
     array: zarr.core.Array
         The zarr array to get the chunk keys from
-    region: Union[slice, Tuple[slice, ...]]
+    region: slice | tuple[slice, ...]
         The region in the zarr array get chunks keys from. Defaults to `slice(None)`, which
         will result in all the chunk keys being returned.
     Returns
@@ -209,7 +209,7 @@ def chunk_keys(
 
 def to_dask(
     arr: zarr.Array,
-    chunks: Literal["auto"] | Sequence[int] = "auto",
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     inline_array: bool = True,
     **kwargs: Any,
 ) -> da.Array:
@@ -244,7 +244,7 @@ def to_dask(
     return darr
 
 
-def access_parent(node: Union[zarr.Array, zarr.Group]) -> zarr.Group:
+def access_parent(node: zarr.Array | zarr.Group) -> zarr.Group:
     """
     Get the parent (zarr.Group) of a Zarr array or group.
     """

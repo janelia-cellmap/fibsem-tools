@@ -309,7 +309,7 @@ def create_multiscale_group(
     path: str,
     arrays: dict[str, DataArray],
     metadata_type: Literal["neuroglancer", "cosem", "ome-ngff", "ome-ngff@0.4"],
-    chunks: Union[tuple[tuple[int, ...], ...], Literal["auto"]] = "auto",
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
     compressor: Codec | Literal["auto"] = "auto",
     **kwargs,
 ) -> zarr.Group:
