@@ -1,8 +1,9 @@
 import warnings
-from typing import Any, Dict, Tuple, Union
-from fibsem_tools.io.util import PathLike
+from typing import Any, Union
 
 import h5py
+
+from fibsem_tools.type import PathLike
 
 H5_ACCESS_MODES = ("r", "r+", "w", "w-", "x", "a")
 
@@ -44,7 +45,7 @@ H5_FILE_KWDS = (
 )
 
 
-def partition_h5_kwargs(**kwargs: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def partition_h5_kwargs(**kwargs: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     partition kwargs into file-creation kwargs and dataset-creation kwargs
     """
@@ -57,16 +58,15 @@ def partition_h5_kwargs(**kwargs: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return file_kwargs, dataset_kwargs
 
 
-def access_h5(
+def access(
     store: PathLike, path: PathLike, mode: str, **kwargs: Any
 ) -> Union[h5py.Dataset, h5py.Group]:
     """
     Docstring
     """
     if mode not in H5_ACCESS_MODES:
-        raise ValueError(
-            f"Invalid access mode. Got {mode}, expected one of {H5_ACCESS_MODES}."
-        )
+        msg = f"Invalid access mode. Got {mode}, expected one of {H5_ACCESS_MODES}."
+        raise ValueError(msg)
 
     attrs = kwargs.pop("attrs", {})
     file_kwargs, dataset_kwargs = partition_h5_kwargs(**kwargs)
@@ -80,7 +80,7 @@ def access_h5(
             if "name" in dataset_kwargs:
                 warnings.warn(
                     """
-                    'Name' was provided to this function as a keyword argument. This 
+                    'Name' was provided to this function as a keyword argument. This
                     value will be replaced with the second argument to this function.
                     """
                 )

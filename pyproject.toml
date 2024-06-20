@@ -1,67 +1,98 @@
-[tool.poetry]
-name = "fibsem-tools"
-version = "6.3.2"
-description = "Tools for processing FIBSEM datasets"
-authors = ["Davis Vann Bennett <davis.v.bennett@gmail.com>"]
-license = "MIT"
-
-[tool.poetry.dependencies]
-python = "^3.9"
-distributed = ">=2021.10.0"
-h5py = "^3.1.0"
-fsspec = ">=2022.2.0"
-zarr = "^2.10.3"
-mrcfile = "^1.2.0"
-numpy = "^1.20.0"
-xarray = ">=2022.03.0"
-pydantic = "^1.8.2"
-backoff = "^1.10.0"
-s3fs = ">=2022.2.0"
-xarray-ome-ngff = "^1.2.1"
-pint = "^0.20.1"
-xarray-multiscale = "^2.0.0"
-tifffile = "^2023.2.28"
-pydantic-ome-ngff = "^0.3.0"
-click = "^8.1.3"
-dask = "^2023.3.2"
-textual = "^0.16.0"
-aiohttp = "^3.8.4"
-xarray-datatree = "^0.0.12"
-pydantic-zarr = "^0.5.0"
-cellmap-schemas = ">=0.2.0"
-pyairtable = "^2.1.0.post1"
-python-dotenv = "^1.0.0"
-
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-pytest-cov = "^3.0.0"
-pre-commit = "2.21.0"
-mypy = "^1.1.1"
-requests = "^2.28.2"
-
-
-[tool.poetry.group.docs.dependencies]
-mkdocs = "^1.4.3"
-mkdocs-material = "^9.1.18"
-mkdocstrings = {extras = ["python"], version = "^0.22.0"}
-pytest-examples = "^0.0.9"
-
-[tool.poetry.scripts]
-tiff2zarr = 'fibsem_tools.cli.tiff2zarr:run'
-zarr-scan = 'fibsem_tools.cli.zarr_scan:cli'
-zarr2json = 'fibsem_tools.cli.zarr2json:cli'
-
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fibsem-tools"
+dynamic = ["version"]
+description = 'Tools for processing FIBSEM datasets'
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+keywords = ["fibsem", "zarr", "n5"]
+authors = [
+  { name = "Davis Vann Bennett", email = "davis.v.bennett@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: Implementation :: CPython",
+]
+dependencies = [
+  "distributed >=2021.10.0",
+  "h5py >= 3.1.0, <4",
+  "fsspec[s3] >= 2022.2.0",
+  "zarr >= 2.18, <3",
+  "mrcfile >=1.2.0, <2",
+  "numpy >=1.20.0, <2",
+  "xarray >=2022.03.0",
+  "backoff >=1.10.0, <2",
+  "xarray-ome-ngff >=2.2.2",
+  "xarray-multiscale >= 2.1.0, <3",
+  "tifffile >=2023.2.28",
+  "click >= 8.1.3, <9",
+  "dask >=2023.3.2",
+  "xarray-datatree >= 0.0.12",
+  "cellmap-schemas == 0.7.1",
+  "imagecodecs >= 2024.1.1"]
+
+[project.urls]
+Documentation = "https://github.com/janelia-cellmap/fibsem-tools#readme"
+Issues = "https://github.com/janelia-cellmap/fibsem-tools/issues"
+Source = "https://github.com/janelia-cellmap/fibsem-tools"
+
+[tool.hatch]
+version.source = "vcs"
+build.hooks.vcs.version-file = "src/fibsem_tools/_version.py"
+
+[tool.hatch.envs.test]
+dependencies = [
+  "pytest",
+   "pytest-cov==5.0.0",
+]
+
+[tool.hatch.envs.test.scripts]
+run-coverage = "pytest --cov-config=pyproject.toml --cov=pkg --cov=tests"
+run = "run-coverage --no-cov"
+run-verbose = "run-coverage --verbose"
+
+[[tool.hatch.envs.test.matrix]]
+python = ["3.10", "3.11"]
+
+[tool.hatch.envs.types]
+dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/fibsem_tools tests}"
+
+[tool.coverage.run]
+source_pkgs = ["fibsem_tools", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/fibsem_tools/_version.py",
+]
+
+[tool.coverage.paths]
+fibsem_tools = ["src/fibsem_tools", "*/fibsem-tools/src/fibsem_tools"]
+tests = ["tests", "*/fibsem-tools/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
 
 [tool.mypy]
 plugins = [
   "pydantic.mypy"
 ]
 
-follow_imports = "normal"
+follow_imports = "silent"
 warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_any_generics = true

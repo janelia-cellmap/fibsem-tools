@@ -127,3 +127,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .vscode/settings.json
+
+# version file
+src/fibsem_tools/_version.py

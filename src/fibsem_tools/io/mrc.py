@@ -1,59 +1,71 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Literal, Sequence, Tuple, Union
-import numpy.typing as npt
+
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import urlparse
+
 import dask.array as da
 import mrcfile
 import numpy as np
-from dask.array.core import normalize_chunks
-from mrcfile.mrcfile import MrcFile
-from mrcfile.mrcmemmap import MrcMemmap
+import numpy.typing as npt
 import xarray
-from fibsem_tools.io.util import PathLike
-from pathlib import Path
+from dask.array.core import normalize_chunks
+from mrcfile.mrcmemmap import MrcMemmap
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from mrcfile.mrcfile import MrcFile
+
+    from fibsem_tools.type import PathLike
 
 
-def recarray_to_dict(recarray) -> Dict[str, Any]:
+def recarray_to_dict(recarray) -> dict[str, Any]:
     result = {}
     for k in recarray.dtype.names:
         if isinstance(recarray[k], np.recarray):
             result[k] = recarray_to_dict(recarray[k])
+        elif hasattr(recarray, "tolist"):
+            result[k] = recarray[k].tolist()
         else:
-            if hasattr(recarray, "tolist"):
-                result[k] = recarray[k].tolist()
-            else:
-                result[k] = recarray[k]
+            result[k] = recarray[k]
     return result
 
 
-def access(path: PathLike, mode: str, **kwargs):
-    # todo: make memory mapping optional via kwarg
-    return MrcMemmap(path, mode=mode, **kwargs)
+def access(path: PathLike, mode: str, **kwargs) -> MrcArrayWrapper:
+    # TODO: make memory mapping optional via kwarg
+    parsed = urlparse(path)
+    if parsed.scheme in ("", "file"):
+        return MrcArrayWrapper(MrcMemmap(parsed.path, mode=mode, **kwargs))
+    else:
+        msg = f"For reading .mrc files, a URL with scheme {parsed.scheme} is not valid. Scheme must be '' or 'file'."
+        raise ValueError(msg)
 
 
 def infer_dtype(mem: MrcFile) -> npt.DTypeLike:
     """
-    Infer the datatype of an MrcMemmap array. We cannot use the dtype
-    attribute because the MRC2014 specification does not officially support the uint8
-    datatype, but that doesn't stop people from storing uint8 data as int8. This can
+    Infer the datatype of an MrcMemmap array. We cannot rely on the `dtype`
+    attribute because, while the MRC2014 specification does not officially support the uint8
+    datatype, MRC users routinely store uint8 data as int8. This can
     only be inferred by checking if the header.dmax propert exceeds the upper limit of
     int8 (127).
     """
     dtype = mem.data.dtype
-    if dtype == "int8":
-        if mem.header.dmax > 127:
-            dtype = "uint8"
+    if (dtype == "int8") & (mem.header.dmax > 127):
+        dtype = "uint8"
+
     return dtype
 
 
-# todo: use the more convenient API already provided by mrcfile for this
-def infer_coords(mem: MrcFile) -> List[xarray.DataArray]:
-    header = mem.header
+# TODO: use the more convenient API already provided by mrcfile for this
+def infer_coords(mem: MrcArrayWrapper) -> list[xarray.DataArray]:
+    header = mem.mrc.header
     grid_size_angstroms = header.cella
     coords = []
     # round to this many decimal places when calculting the grid spacing, in nm
     grid_spacing_decimals = 2
 
-    if mem.data.flags["C_CONTIGUOUS"]:
+    if mem.flags["C_CONTIGUOUS"]:
         # we reverse the keys from (x,y,z) to (z,y,x) so the order matches
         # numpy indexing order
         keys = reversed(header.cella.dtype.fields.keys())
@@ -69,7 +81,9 @@ def infer_coords(mem: MrcFile) -> List[xarray.DataArray]:
     return coords
 
 
-def chunk_loader(fname, block_info=None):
+def chunk_loader(
+    fname: str, block_info=None
+) -> npt.NDArray[np.int8 | np.uint8 | np.int16 | np.uint16]:
     dtype = block_info[None]["dtype"]
     array_location = block_info[None]["array-location"]
     shape = block_info[None]["chunk-shape"]
@@ -80,16 +94,15 @@ def chunk_loader(fname, block_info=None):
     mrc = mrcfile.open(fname, header_only=True)
     offset = mrc.header.nbytes + mrc.header.nsymbt + offset_bytes
     mem = np.memmap(fname, dtype, "r", offset, shape)
-    result = np.array(mem).astype(dtype)
-    return result
+    return np.array(mem).astype(dtype)
 
 
 def to_xarray(
-    element: MrcFile,
-    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    element: MrcArrayWrapper,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     use_dask: bool = True,
     coords: Any = "auto",
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ):
     return create_dataarray(
@@ -98,23 +111,20 @@ def to_xarray(
 
 
 def create_dataarray(
-    element: MrcFile,
-    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    element: MrcArrayWrapper,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ) -> xarray.DataArray:
-    if coords == "auto":
-        inferred_coords = infer_coords(element)
-    else:
-        inferred_coords = coords
+    inferred_coords = infer_coords(element) if coords == "auto" else coords
 
     if name is None:
-        name = Path(element._iostream.name).parts[-1]
+        name = Path(element.mrc._iostream.name).parts[-1]
 
     if attrs is None:
-        attrs = recarray_to_dict(element.header)
+        attrs = recarray_to_dict(element.mrc.header)
 
     if use_dask:
         element = to_dask(element, chunks)
@@ -122,27 +132,50 @@ def create_dataarray(
     return xarray.DataArray(element, coords=inferred_coords, attrs=attrs, name=name)
 
 
-def to_dask(array: MrcFile, chunks: Union[Literal["auto"], Sequence[int]] = "auto"):
+def to_dask(array: MrcArrayWrapper, chunks: Literal["auto"] | Sequence[int] = "auto"):
     """
     Generate a dask array backed by a memory-mapped .mrc file.
     """
-    shape = array.data.shape
-    dtype = array.data.dtype
-    path = array._iostream.name
+    shape = array.shape
+    dtype = array.dtype
+    path = array.mrc._iostream.name
+
     if chunks == "auto":
         _chunks = normalize_chunks((1, *(-1,) * (len(shape) - 1)), shape, dtype=dtype)
     else:
         # ensure that the last axes are complete
         for idx, shpe in enumerate(shape):
-            if idx > 0:
-                if (chunks[idx] != shpe) and (chunks[idx] != -1):
-                    raise ValueError(
-                        f"""
-                        Chunk sizes of non-leading axes must match the shape of the 
-                        array. Got chunk_size={chunks[idx]}, expected {shpe}
-                        """
-                    )
+            if idx > 0 and (chunks[idx] != shpe) and (chunks[idx] != -1):
+                msg = (
+                    f"Chunk sizes of non-leading axes must match the shape of the "
+                    f"array. Got chunk_size={chunks[idx]}, expected {shpe}"
+                )
+                raise ValueError(msg)
         _chunks = normalize_chunks(chunks, shape, dtype=dtype)
 
-    arr = da.map_blocks(chunk_loader, path, chunks=_chunks, dtype=dtype)
-    return arr
+    return da.map_blocks(chunk_loader, path, chunks=_chunks, dtype=dtype)
+
+
+class MrcArrayWrapper:
+    """
+    Wrap an mrcmemmap so that it satisfies the `ArrayLike` interface, and a few numpy-isms.
+    """
+
+    mrc: MrcMemmap
+    dtype: np.dtype[Any]
+    shape: tuple[int, ...]
+    size: int
+    flags: np.core.multiarray.flagsobj
+
+    def __init__(self, memmap: MrcMemmap):
+        self.dtype = infer_dtype(memmap)
+        self.shape = memmap.data.shape
+        self.size = memmap.data.size
+        self.flags = memmap.data.flags
+        self.mrc = memmap
+
+    def __getitem__(self, *args) -> np.ndarray:
+        return self.mrc.data.__getitem__(*args).astype(self.dtype)
+
+    def __repr__(self) -> str:
+        return f"MrcArrayWrapper(shape={self.shape}, dtype={self.dtype})"

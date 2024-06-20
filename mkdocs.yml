@@ -5,8 +5,8 @@ site_description: >-
   Documentation for fibsem-tools
 
 # Repository
-repo_name: janelia-cellmap/pydantic-zarr
-repo_url: https://github.com/janelia-cellmap/pydantic-zarr
+repo_name: janelia-cellmap/fibsem-tools
+repo_url: https://github.com/janelia-cellmap/fibsem-tools
 
 # Copyright
 copyright: Copyright &copy; 2016 - 2023 HHMI / Janelia

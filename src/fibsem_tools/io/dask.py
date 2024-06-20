@@ -1,31 +1,40 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any, Callable, Literal
+
+    import distributed
+    import zarr
+
+import random
 from os import PathLike
-from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple, Union
 
 import backoff
 import dask
 import dask.array as da
-from dask.bag import from_sequence
-import distributed
 import numpy as np
-
 from aiohttp import ServerDisconnectedError
+from dask import delayed
 from dask.array.core import (
-    slices_from_chunks,
     normalize_chunks as normalize_chunks_dask,
 )
+from dask.array.core import (
+    slices_from_chunks,
+)
 from dask.array.optimization import fuse_slice
+from dask.bag import from_sequence
 from dask.base import tokenize
 from dask.core import flatten
 from dask.delayed import Delayed
 from dask.highlevelgraph import HighLevelGraph
 from dask.optimization import fuse
 from dask.utils import parse_bytes
-from zarr.util import normalize_chunks as normalize_chunksize
-from numpy.typing import NDArray, DTypeLike
-import random
+
+from fibsem_tools.chunk import are_chunks_aligned, autoscale_chunk_shape, resolve_slices
 from fibsem_tools.io.core import access, read
-from fibsem_tools.io.zarr import are_chunks_aligned
-from dask import delayed
 
 random.seed(0)
 
@@ -36,18 +45,17 @@ def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
     dask.delayed optimization doesn't do this step.
     """
     dsk_fused, deps = fuse(dask.utils.ensure_dict(tasks.dask))
-    fused = Delayed(tasks._key, dsk_fused)
-    return fused
+    return Delayed(tasks._key, dsk_fused)
 
 
 def sequential_rechunk(
     source: Any,
     target: Any,
-    slab_size: Tuple[int],
-    intermediate_chunks: Tuple[int],
+    slab_size: tuple[int],
+    intermediate_chunks: tuple[int],
     client: distributed.Client,
     num_workers: int,
-) -> List[None]:
+) -> list[None]:
     """
     Load slabs of an array into local memory, then create a dask array and rechunk that
     dask array, then store into chunked array storage.
@@ -67,7 +75,7 @@ def sequential_rechunk(
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_chunk(
-    target: NDArray[Any], key: Tuple[slice, ...], value: NDArray[Any]
+    target: zarr.Array, key: tuple[slice, ...], value: np.ndarray
 ) -> Literal[0]:
     """
     A function inserted in a Dask graph for storing a chunk.
@@ -76,7 +84,7 @@ def store_chunk(
     ----------
     target: NDArray
         Where to store the value.
-    key: Tuple[slice, ...]
+    key: tuple[slice, ...]
         The location in the array for the value.
     value: NDArray
         The value to be stored.
@@ -90,7 +98,7 @@ def store_chunk(
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def store_value(
-    target: NDArray[Any], key: Tuple[slice, ...], value: NDArray[Any]
+    target: zarr.Array, key: tuple[slice, ...], value: np.ndarray
 ) -> Literal[0]:
     """
     A function inserted in a Dask graph for storing a chunk.
@@ -99,7 +107,7 @@ def store_value(
     ----------
     target: NDArray
         Where to store the value.
-    key: Tuple[slice, ...]
+    key: tuple[slice, ...]
         The location in the array for the value.
     value: NDArray
         The value to be stored.
@@ -118,13 +126,13 @@ def ndwrapper(func: Callable[[Any], Any], ndim: int, *args: Any, **kwargs: Any):
     return np.array([func(*args, **kwargs)]).reshape((1,) * ndim)
 
 
-def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Array:
+def write_blocks(source, target, region: tuple[slice, ...] | None) -> da.Array:
     """
     Return a dask array with where each chunk contains the result of writing
     each chunk of `source` to `target`.
     """
 
-    # handle xarray
+    # handle xarray DataArrays
     if hasattr(source, "data") and isinstance(source.data, da.Array):
         source = source.data
 
@@ -160,7 +168,7 @@ def write_blocks(source, target, region: Optional[Tuple[slice, ...]]) -> da.Arra
     )
 
 
-def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.Array]:
+def store_blocks(sources, targets, regions: slice | None = None) -> list[da.Array]:
     """
     Write dask array(s) to sliceable storage. Like `da.store` but instead of
     returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,
@@ -185,12 +193,11 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.A
         regions *= len(sources)
 
     if len(sources) != len(regions):
-        raise ValueError(
-            f"""
-            Different number of sources [{len(sources)}] and targets [{len(targets)}] 
-            than regions [{len(regions)}]
-            """
+        msg = (
+            f"Number of sources ({len(sources)}) does not match the "
+            f"number of regions  ({len(regions)})"
         )
+        raise ValueError(msg)
 
     for source, target, region in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region))
@@ -199,7 +206,7 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> List[da.A
 
 
 def write_blocks_delayed(
-    source, target, region: Optional[Tuple[slice, ...]] = None
+    source, target, region: tuple[slice, ...] | None = None
 ) -> Sequence[Any]:
     """
     Return a collection fo task each task returns the result of writing
@@ -214,112 +221,38 @@ def write_blocks_delayed(
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]
     blocks_flat = source.blocks.ravel()
-    assert len(slices) == len(blocks_flat)
+    if len(slices) != len(blocks_flat):
+        msg = "Number of slices does not match the number of blocks"
+        raise ValueError(msg)
     return [
         delayed(store_value)(target, slce, block)
         for slce, block in zip(slices, blocks_flat)
     ]
 
 
-def ensure_minimum_chunksize(array, chunksize):
-    old_chunks = np.array(array.chunksize)
-    new_chunks = old_chunks.copy()
-    chunk_fitness = np.less(old_chunks, chunksize)
-    if np.any(chunk_fitness):
-        new_chunks[chunk_fitness] = np.array(chunksize)[chunk_fitness]
-    return array.rechunk(new_chunks.tolist())
-
-
-def autoscale_chunk_shape(
-    chunk_shape: Tuple[int, ...],
-    array_shape: Tuple[int, ...],
-    size_limit: Union[str, int],
-    dtype: DTypeLike,
+@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
+def setitem(
+    source,
+    dest: zarr.Array,
+    selection: tuple[slice, ...],
+    *,
+    chunk_safe: bool = True,
 ):
-    """
-    Scale a chunk size by an integer factor along each axis as much as possible without
-    producing a chunk greater than a given size limit. Scaling will be applied to axes
-    in decreasing order of length.
-
-    Parameters
-    ----------
-    chunk_shape : type
-        description
-    array_shape : type
-        description
-    size_limit : type
-        description
-    dtype : type
-        description
-
-
-    Returns
-    -------
-    tuple of ints
-        The original chunk size after each element has been multiplied by some integer.
-
-
-    Examples
-    --------
-
-    """
-
-    item_size = np.dtype(dtype).itemsize
-
-    if isinstance(size_limit, str):
-        size_limit_bytes = parse_bytes(size_limit)
-    elif isinstance(size_limit, int):
-        size_limit_bytes = size_limit
-    else:
-        raise TypeError(
-            f"""
-            Could parse {item_size}, it should be type int or str, got 
-            {type(item_size)}"""
+    if chunk_safe and hasattr(dest, "chunks"):
+        selection_resolved = resolve_slices(
+            selection, tuple((0, s) for s in dest.shape)
         )
 
-    if size_limit_bytes < 1:
-        raise ValueError(f"Chunk size limit {size_limit} is too small.")
-
-    normalized_chunk_shape = normalize_chunksize(chunk_shape, array_shape, item_size)
-    result = normalized_chunk_shape
-    chunk_size_bytes = np.prod(normalized_chunk_shape) * item_size
-
-    size_ratio = size_limit_bytes / chunk_size_bytes
-    chunk_grid_shape = np.ceil(np.divide(array_shape, chunk_shape)).astype("int")
-
-    if size_ratio < 1:
-        return result
-    else:
-        target_nchunks = np.ceil(size_ratio).astype("int")
-
-    # operate in chunk grid coordinates
-    # start with 1 chunk
-    scale_vector = [
-        1,
-    ] * len(chunk_shape)
-    sorted_idx = reversed(np.argsort(chunk_grid_shape))
-    # iterate over axes in order of length
-    for idx in sorted_idx:
-        # compute how many chunks are still needed
-        chunks_needed = target_nchunks - np.prod(scale_vector)
-        # compute number of chunks available along this axis
-        chunks_available = np.prod(scale_vector) * chunk_grid_shape[idx]
-        if chunks_needed > chunks_available:
-            scale_vector[idx] = chunk_grid_shape[idx]
-        else:
-            scale_vector[idx] = max(
-                1, np.floor_divide(chunks_needed, np.prod(scale_vector))
-            )
-            break
-
-    result = tuple(np.multiply(scale_vector, normalized_chunk_shape).tolist())
-
-    return result
-
-
-@backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
-def setitem(source, dest, sl):
-    dest[sl] = source[sl]
+        for sel, cnk, shape in zip(selection_resolved, dest.chunks, dest.shape):
+            if sel.start % cnk != 0 or ((sel.stop != shape) and sel.stop % cnk != 0):
+                msg = (
+                    f"Planned writes are not chunk-aligned. Destination array has chunks sized {dest.chunks} "
+                    f"but the requested selection {selection} partially crosses chunk boundaries. "
+                    "Either call this function with `chunk_safe=False`, or align your writes to the "
+                    "chunk boundaries of the destination."
+                )
+                raise ValueError(msg)
+    dest[selection] = source[selection]
 
 
 def copy_from_slices(slices, source_array, dest_array):
@@ -328,9 +261,10 @@ def copy_from_slices(slices, source_array, dest_array):
 
 
 def copy_array(
-    source: Union[PathLike, NDArray],
-    dest: Union[PathLike, NDArray],
-    chunk_size: Union[str, Tuple[int, ...]] = "100 MB",
+    source: PathLike | (np.ndarray | zarr.Array),
+    dest: PathLike | (np.ndarray | zarr.Array),
+    *,
+    chunk_size: str | tuple[int, ...] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
     randomize: bool = True,
@@ -384,15 +318,13 @@ def copy_array(
     A dask bag which, when computed, will copy data from source to dest.
 
     """
-    if isinstance(source, PathLike):
-        source_arr = read(source)
-    else:
-        source_arr = source
+    source_arr = read(source) if isinstance(source, PathLike) else source
 
-    if isinstance(dest, PathLike):
-        dest_arr = access(dest, mode="a", write_empty_chunks=write_empty_chunks)
-    else:
-        dest_arr = dest
+    dest_arr = (
+        access(dest, mode="a", write_empty_chunks=write_empty_chunks)
+        if isinstance(dest, PathLike)
+        else dest
+    )
 
     # this should probably also be lazy.
     if keep_attrs:
@@ -409,9 +341,15 @@ def copy_array(
             dtype=dest_arr.dtype,
         )
 
-    assert source_arr.shape == dest_arr.shape
-    assert source_arr.dtype == dest_arr.dtype
-    assert are_chunks_aligned(chunk_size, dest_arr.chunks)
+    if source_arr.shape != dest_arr.shape:
+        msg = "Shapes are not equal"
+        raise ValueError(msg)
+    if source_arr.dtype != dest_arr.dtype:
+        msg = "Datatypes are not equal"
+        raise ValueError(msg)
+    if not are_chunks_aligned(chunk_size, dest_arr.chunks):
+        msg = "Chunks are not aligned"
+        raise ValueError(msg)
 
     chunks_normalized = normalize_chunks_dask(chunk_size, shape=dest_arr.shape)
     slices = slices_from_chunks(chunks_normalized)
@@ -425,7 +363,7 @@ def copy_array(
     return slice_bag.map_partitions(copy_from_slices, source_arr, dest_arr)
 
 
-def pad_arrays(arrays, constant_values, stack=True):
+def pad_arrays(arrays, constant_values):
     """
     Pad arrays with variable axis sizes. A bounding box is calculated across all the
     arrays and each sub-array is padded to fit within the bounding box. This is a light

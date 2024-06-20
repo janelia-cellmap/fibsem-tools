@@ -1,37 +1,41 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Literal,
-    Sequence,
-    Tuple,
-    Union,
+from typing import TYPE_CHECKING
+
+from fibsem_tools.chunk import normalize_chunks
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable, Sequence
+    from typing import Any, Literal
+
+    import dask.array as da
+    import zarr
+    from datatree import DataTree
+    from numcodecs.abc import Codec
+    from pydantic_zarr.v2 import GroupSpec
+    from xarray import DataArray
+    from zarr.storage import BaseStore
+
+    from fibsem_tools.type import AccessMode, PathLike
+
+import fsspec
+
+from fibsem_tools.io import dat, h5, mrc, n5, tif
+from fibsem_tools.io import zarr as zarrio
+from fibsem_tools.io.n5.hierarchy.cosem import (
+    model_group as cosem_multiscale_group,
+)
+from fibsem_tools.io.n5.hierarchy.neuroglancer import (
+    model_group as neuroglancer_multiscale_group,
+)
+from fibsem_tools.io.zarr.hierarchy.omengff import (
+    multiscale_group as ome_ngff_v04_multiscale_group,
 )
 
-
-from xarray import DataArray
-from datatree import DataTree
-from numpy.typing import NDArray
-
-import dask.array as da
-from fibsem_tools.io.util import (
-    AccessMode,
-    ArrayLike,
-    Attrs,
-    GroupLike,
-    PathLike,
-    split_by_suffix,
-)
-
-import fibsem_tools.io.mrc
-import fibsem_tools.io.dat
-import fibsem_tools.io.xr
-import fibsem_tools.io.h5
-import fibsem_tools.io.zarr
-import fibsem_tools.io.tif
+NGFF_DEFAULT_VERSION = "0.4"
+multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]
 
 _formats = (".dat", ".mrc", ".tif", ".tiff")
 _container_extensions = (".zarr", ".n5", ".h5")
@@ -42,7 +46,7 @@ def access(
     path: PathLike,
     mode: AccessMode,
     **kwargs: Any,
-) -> ArrayLike | GroupLike:
+) -> Any:
     """
 
     Access a variety of hierarchical array storage formats.
@@ -80,32 +84,28 @@ def access(
     is_container = suffix in _container_extensions
 
     if suffix == ".zarr":
-        accessor = fibsem_tools.io.zarr.access_zarr
+        accessor = zarrio.access
     elif suffix == ".n5":
-        accessor = fibsem_tools.io.zarr.access_n5
+        accessor = n5.access
     elif suffix == ".h5":
-        accessor = fibsem_tools.io.h5.access_h5
+        accessor = h5.access
     elif suffix in (".tif", ".tiff"):
-        accessor = fibsem_tools.io.tif.access
+        accessor = tif.access
     elif suffix == ".mrc":
-        accessor = fibsem_tools.io.mrc.access
+        accessor = mrc.access
     elif suffix == ".dat":
-        accessor = fibsem_tools.io.dat.access
+        accessor = dat.access
     else:
-        raise ValueError(
-            f"""
-                Cannot access file with extension {suffix}. Try one of 
-                {_suffixes}
-                """
-        )
+        msg = f"Cannot access file with extension {suffix}. Try one of {_suffixes}"
+        raise ValueError(msg)
 
     if is_container:
         return accessor(path_outer, path_inner, mode=mode, **kwargs)
-    else:
-        return accessor(path_outer, mode=mode, **kwargs)
+
+    return accessor(path_outer, mode=mode, **kwargs)
 
 
-def read(path: PathLike, **kwargs) -> ArrayLike | GroupLike:
+def read(path: PathLike, **kwargs) -> Any:
     """
 
     Read-only access for data (arrays and groups) from a variety of hierarchical array
@@ -141,7 +141,8 @@ def read(path: PathLike, **kwargs) -> ArrayLike | GroupLike:
 
 def read_dask(
     path: PathLike,
-    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
+    *,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     **kwargs: Any,
 ) -> da.Array:
     """
@@ -149,34 +150,43 @@ def read_dask(
     """
     _, _, suffix = split_by_suffix(path, _suffixes)
     if suffix in (".zarr", ".n5"):
-        dasker = fibsem_tools.io.zarr.to_dask
+        dasker = zarrio.to_dask
     elif suffix == ".mrc":
-        dasker = fibsem_tools.io.mrc.to_dask
+        dasker = mrc.to_dask
     elif suffix == ".dat":
-        dasker = fibsem_tools.io.dat.to_dask
+        dasker = dat.to_dask
     else:
-        raise ValueError(
-            f"""
-                Cannot access file with extension {suffix} as a dask array. Extensions 
-                with dask support are (".zarr", ".n5", ".mrc", and ".dat")
-                """
+        msg = (
+            f"Cannot access file with extension {suffix} as a dask array. Extensions "
+            "with dask support: .zarr, .n5, .mrc, .dat"
         )
-    return dasker(read(path, **kwargs), chunks)
+        raise ValueError(msg)
+    return dasker(read(path, **kwargs), chunks=chunks)
 
 
 def read_xarray(
     path: PathLike,
-    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
-    coords: Any = "auto",
+    *,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
+    coords: Literal["auto"] | dict[Hashable, Any] = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
     **kwargs: Any,
 ) -> DataArray | DataTree:
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
-    if suffix in (".zarr", ".n5"):
-        return fibsem_tools.io.zarr.to_xarray(
+    if suffix == ".zarr":
+        return zarrio.to_xarray(
+            element,
+            chunks=chunks,
+            coords=coords,
+            use_dask=use_dask,
+            attrs=attrs,
+            name=name,
+        )
+    elif suffix == ".n5":
+        return n5.to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -185,9 +195,9 @@ def read_xarray(
             name=name,
         )
     elif suffix == ".mrc":
-        # todo: support datatree semantics for mrc files, maybe by considering a folder
+        # TODO: support datatree semantics for mrc files, maybe by considering a folder
         # group?
-        return fibsem_tools.io.mrc.to_xarray(
+        return mrc.to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -195,60 +205,116 @@ def read_xarray(
             attrs=attrs,
             name=name,
         )
+
+    msg = (
+        f"Xarray data structures are only supported for data saved as zarr, n5, and mrc. "
+        f"Got {type(element)}, which is not supported."
+    )
+    raise ValueError(msg)
+
+
+def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, str]:
+    """
+    Given a string and a collection of suffixes, return
+    the string split at the last instance of any element of the string
+    containing one of the suffixes, as well as the suffix.
+    If the last element of the string bears a suffix, return the string,
+    the empty string, and the suffix.
+    """
+    protocol: str | None
+    subpath: str
+    protocol, subpath = fsspec.core.split_protocol(str(uri))
+    separator = os.path.sep if protocol is None else "/"
+    parts = Path(subpath).parts
+    suffixed = [Path(part).suffix in suffixes for part in parts]
+
+    if not any(suffixed):
+        msg = f"No path elements found with the suffix(es) {suffixes} in {uri}"
+        raise ValueError(msg)
+
+    index = [idx for idx, val in enumerate(suffixed) if val][-1]
+    if index == (len(parts) - 1):
+        pre, post = subpath, ""
     else:
-        raise ValueError(
-            f"""
-        Xarray data structures are only supported for data saved as zarr, n5, and mrc. 
-        Got {type(element)}, which is not supported.
-        """
+        pre, post = (
+            separator.join([p.strip(separator) for p in parts[: index + 1]]),
+            separator.join([p.strip(separator) for p in parts[index + 1 :]]),
         )
 
+    suffix = Path(pre).suffix
+    if protocol:
+        pre = f"{protocol}://{pre}"
+    return pre, post, suffix
 
-def create_group(
-    group_url: PathLike,
-    arrays: Iterable[NDArray[Any]],
-    array_paths: Iterable[str],
-    chunks: Sequence[int],
-    group_attrs: Attrs = {},
-    array_attrs: Sequence[Attrs] | None = None,
-    group_mode: AccessMode = "w-",
-    array_mode: AccessMode = "w-",
-    **array_kwargs: Any,
-) -> GroupLike:
-    _arrays = tuple(a for a in arrays)
-    _array_paths = tuple(p for p in array_paths)
 
-    bad_paths = []
-    for path in _array_paths:
-        if len(Path(path).parts) > 1:
-            bad_paths.append(path)
+def model_multiscale_group(
+    arrays: dict[str, DataArray],
+    *,
+    metadata_type: Literal["neuroglancer_n5", "ome-ngff", "cosem"],
+    chunks: tuple[int, ...] | tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
+    **kwargs,
+) -> GroupSpec:
+    """
+    Generate a model of a multiscale group from a list of DataArrays
 
-    if len(bad_paths):
-        raise ValueError(
-            f"""
-            Array paths cannot be nested. The following paths violate this rule: 
-            {bad_paths}
-            """
+    Arguments
+    ---------
+
+    arrays : dict[str, DataArray]
+        The arrays to store.
+    metadata_type : Literal["neuroglancer_n5", "ome-ngff", "cosem"],
+        The metadata flavor to use.
+    chunks : Union[Tuple[Tuple[int, ...], ...], Literal["auto"]], default is "auto"
+        The chunks for the arrays instances. Either an explicit collection of
+        chunk sizes, one per array, or the string "auto". If `chunks` is "auto" and
+        the `data` attribute of the arrays is chunked, then each stored array
+        will inherit the chunks of the input arrays. If the `data` attribute
+        is not chunked, then each stored array will have chunks equal to the shape of
+        the input array.
+
+    Returns
+    -------
+
+    A GroupSpec instance representing the multiscale group
+
+    """
+    _chunks = normalize_chunks(arrays.values(), chunks=chunks)
+
+    if metadata_type == "neuroglancer":
+        return neuroglancer_multiscale_group(arrays=arrays, chunks=_chunks, **kwargs)
+    elif metadata_type == "cosem":
+        return cosem_multiscale_group(arrays=arrays, chunks=_chunks, **kwargs)
+    elif metadata_type.startswith("ome-ngff"):
+        _, _, ome_ngff_version = metadata_type.partition("@")
+        if ome_ngff_version in ("", "0.4"):
+            return ome_ngff_v04_multiscale_group(
+                arrays=arrays, transform_precision=5, chunks=_chunks, **kwargs
+            )
+        msg = (
+            f"Metadata type {metadata_type} refers to an unsupported version of "
+            "ome-ngff ({ome_ngff_version})"
         )
+        raise ValueError(msg)
 
-    group = access(group_url, mode=group_mode, attrs=group_attrs)
-    a_urls = [os.path.join(group_url, name) for name in _array_paths]
+    msg = (
+        f"Multiscale metadata type {metadata_type} is unknown."
+        f"Try one of {multiscale_metadata_types}"
+    )
+    raise ValueError(msg)
 
-    if array_attrs is None:
-        _array_attrs: Tuple[Attrs, ...] = ({},) * len(_arrays)
-    else:
-        _array_attrs = array_attrs
 
-    for idx, vals in enumerate(zip(_arrays, a_urls, _array_attrs)):
-        array, path, attrs = vals
-        access(
-            path=path,
-            mode=array_mode,
-            shape=array.shape,
-            dtype=array.dtype,
-            chunks=chunks[idx],
-            attrs=attrs,
-            **array_kwargs,
-        )
+def create_multiscale_group(
+    store: BaseStore,
+    path: str,
+    arrays: dict[str, DataArray],
+    *,
+    metadata_type: Literal["neuroglancer", "cosem", "ome-ngff", "ome-ngff@0.4"],
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
+    compressor: Codec | Literal["auto"] = "auto",
+    **kwargs,
+) -> zarr.Group:
+    group_model = model_multiscale_group(
+        arrays=arrays, metadata_type=metadata_type, chunks=chunks, compressor=compressor
+    )
 
-    return group
+    return group_model.to_zarr(store=store, path=path, **kwargs)
