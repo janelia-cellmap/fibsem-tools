@@ -42,7 +42,7 @@ def access(path: PathLike, mode: str, **kwargs) -> MrcArrayWrapper:
 def infer_dtype(mem: MrcFile) -> npt.DTypeLike:
     """
     Infer the datatype of an MrcMemmap array. We cannot rely on the `dtype`
-    attribute because, whyile the MRC2014 specification does not officially support the uint8
+    attribute because, while the MRC2014 specification does not officially support the uint8
     datatype, MRC users routinely store uint8 data as int8. This can
     only be inferred by checking if the header.dmax propert exceeds the upper limit of
     int8 (127).
