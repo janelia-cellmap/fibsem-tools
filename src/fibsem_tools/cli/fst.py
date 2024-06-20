@@ -1,5 +1,6 @@
 import click
-from fibsem_tools.server import DEFAULT_DIRECTORY, DEFAULT_PORT, serve, DEFAULT_HOST
+
+from fibsem_tools.server import DEFAULT_DIRECTORY, DEFAULT_HOST, DEFAULT_PORT, serve
 
 
 @click.group("fst")

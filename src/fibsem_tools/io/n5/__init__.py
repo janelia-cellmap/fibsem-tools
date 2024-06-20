@@ -3,18 +3,21 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any, Literal, Sequence
+    from collections.abc import Sequence
+    from typing import Any, Literal
 
-from datatree import DataTree
+    from fibsem_tools.type import PathLike
+
+import dask.array as da
 import zarr
+from dask.base import tokenize
+from datatree import DataTree
 from xarray import DataArray, Dataset
 from zarr.errors import ReadOnlyError
 
-from fibsem_tools.type import PathLike
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer
-from ..zarr import access as access_zarr, get_url
-import dask.array as da
-from dask.base import tokenize
+from fibsem_tools.io.zarr import access as access_zarr
+from fibsem_tools.io.zarr import get_url
 
 
 def to_dask(
@@ -50,8 +53,7 @@ def to_dask(
     """
     if kwargs.get("name") is None:
         kwargs["name"] = f"{get_url(arr)}-{tokenize(arr)}"
-    darr = da.from_array(arr, chunks=chunks, inline_array=inline_array, **kwargs)
-    return darr
+    return da.from_array(arr, chunks=chunks, inline_array=inline_array, **kwargs)
 
 
 class N5FSStorePatched(zarr.N5FSStore):
@@ -63,7 +65,7 @@ class N5FSStorePatched(zarr.N5FSStore):
 
     def delitems(self, keys: Sequence[str]) -> None:
         if self.mode == "r":
-            raise ReadOnlyError()
+            raise ReadOnlyError
         try:  # should be much faster
             nkeys = [self._normalize_key(key) for key in keys]
             # rm errors if you pass an empty collection
@@ -107,10 +109,7 @@ def create_dataarray(
                 array=element, use_dask=use_dask, chunks=chunks
             )
     else:
-        if use_dask:
-            wrapped = to_dask(element, chunks=chunks)
-        else:
-            wrapped = element
+        wrapped = to_dask(element, chunks=chunks) if use_dask else element
         return DataArray(wrapped, coords=coords, attrs=attrs, name=name)
 
 
@@ -143,14 +142,10 @@ def create_datatree(
         )
         for name, array in element.arrays()
     }
-    if attrs is None:
-        root_attrs = element.attrs.asdict()
-    else:
-        root_attrs = attrs
+    root_attrs = element.attrs.asdict() if attrs is None else attrs
     # insert root element
     nodes["/"] = Dataset(attrs=root_attrs)
-    dtree = DataTree.from_dict(nodes, name=name)
-    return dtree
+    return DataTree.from_dict(nodes, name=name)
 
 
 def is_n5(array: zarr.core.Array) -> bool:
@@ -187,7 +182,8 @@ def to_xarray(
             name=name,
         )
     else:
+        msg = "This function only accepts instances of zarr.Group and zarr.Array. "
         raise ValueError(
-            "This function only accepts instances of zarr.Group and zarr.Array. ",
+            msg,
             f"Got {type(element)} instead.",
         )

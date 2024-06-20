@@ -7,10 +7,12 @@ from cellmap_schemas.multiscale.cosem import STTransform
 from xarray import DataArray
 
 if TYPE_CHECKING:
-    from typing import Any, Literal, Sequence
+    from collections.abc import Sequence
+    from typing import Any, Literal
+
+    from fibsem_tools.type import ArrayLike
 
 import fibsem_tools.coordinate as fsxr
-from fibsem_tools.type import ArrayLike
 
 
 def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
@@ -83,10 +85,11 @@ def stt_from_coords(
 
     for c in coords:
         if len(c) < 2:
-            raise ValueError(
+            msg = (
                 f"The coordinate with dims = {c.dims} does not have enough elements to calculate "
                 "a scaling transformation. A minimum of 2 elements are needed."
             )
+            raise ValueError(msg)
         axes.append(str(c.dims[0]))
         # default unit is m
         units.append(c.attrs.get("units", "m"))
@@ -152,10 +155,7 @@ def stt_to_coords(transform: STTransform, shape: tuple[int, ...]) -> tuple[DataA
         A tuple of DataArrays, one per axis.
 
     """
-    if transform.order == "C":
-        axes = transform.axes
-    else:
-        axes = reversed(transform.axes)
+    axes = transform.axes if transform.order == "C" else reversed(transform.axes)
     return tuple(
         fsxr.stt_coord(
             shape[idx],

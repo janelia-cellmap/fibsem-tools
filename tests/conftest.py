@@ -8,13 +8,13 @@ import pytest
 from xarray import DataArray
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def tmp_zarr(tmpdir) -> str:
     path = tmpdir.mkdir("test.zarr")
     return str(path)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def tmp_n5(tmpdir):
     path = tmpdir.mkdir("test.n5")
     return str(path)
@@ -65,32 +65,20 @@ class PyramidRequest:
     translate: tuple[float, ...] | Literal["auto"] = "auto"
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def pyramid(request) -> tuple[DataArray, DataArray, DataArray]:
     """
     Create a collection of DataArrays that represent a multiscale pyramid
     """
     param: PyramidRequest = request.param
     shape = param.shape
-    if param.dims == "auto":
-        dims = tuple(map(str, range(len(shape))))
-    else:
-        dims = param.dims
+    dims = tuple(map(str, range(len(shape)))) if param.dims == "auto" else param.dims
 
-    if param.units == "auto":
-        units = ("meter",) * len(shape)
-    else:
-        units = param.units
+    units = ("meter",) * len(shape) if param.units == "auto" else param.units
 
-    if param.scale == "auto":
-        scale = (1,) * len(shape)
-    else:
-        scale = param.scale
+    scale = (1,) * len(shape) if param.scale == "auto" else param.scale
 
-    if param.translate == "auto":
-        translate = (0,) * len(shape)
-    else:
-        translate = param.translate
+    translate = (0,) * len(shape) if param.translate == "auto" else param.translate
 
     data = create_array(
         shape=shape, dims=dims, units=units, scale=scale, translate=translate

@@ -2,26 +2,28 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Hashable
-
-import zarr
-from zarr.storage import BaseStore
+from typing import TYPE_CHECKING
 
 from fibsem_tools.chunk import normalize_chunks
 
 if TYPE_CHECKING:
-    from typing import Any, Literal, Optional, Sequence, Union
+    from collections.abc import Hashable, Sequence
+    from typing import Any, Literal
 
-import dask.array as da
+    import dask.array as da
+    import zarr
+    from datatree import DataTree
+    from numcodecs.abc import Codec
+    from pydantic_zarr.v2 import GroupSpec
+    from xarray import DataArray
+    from zarr.storage import BaseStore
+
+    from fibsem_tools.type import AccessMode, PathLike
+
 import fsspec
-from datatree import DataTree
-from numcodecs.abc import Codec
-from pydantic_zarr.v2 import GroupSpec
-from xarray import DataArray
 
 from fibsem_tools.io import dat, h5, mrc, n5, tif
 from fibsem_tools.io import zarr as zarrio
-
 from fibsem_tools.io.n5.hierarchy.cosem import (
     model_group as cosem_multiscale_group,
 )
@@ -31,7 +33,6 @@ from fibsem_tools.io.n5.hierarchy.neuroglancer import (
 from fibsem_tools.io.zarr.hierarchy.omengff import (
     multiscale_group as ome_ngff_v04_multiscale_group,
 )
-from fibsem_tools.type import AccessMode, PathLike
 
 NGFF_DEFAULT_VERSION = "0.4"
 multiscale_metadata_types = ["neuroglancer", "cosem", "ome-ngff"]
@@ -95,9 +96,8 @@ def access(
     elif suffix == ".dat":
         accessor = dat.access
     else:
-        raise ValueError(
-            f"Cannot access file with extension {suffix}. Try one of {_suffixes}"
-        )
+        msg = f"Cannot access file with extension {suffix}. Try one of {_suffixes}"
+        raise ValueError(msg)
 
     if is_container:
         return accessor(path_outer, path_inner, mode=mode, **kwargs)
@@ -141,7 +141,7 @@ def read(path: PathLike, **kwargs) -> Any:
 
 def read_dask(
     path: PathLike,
-    chunks: Union[Literal["auto"], tuple[int, ...]] = "auto",
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     **kwargs: Any,
 ) -> da.Array:
     """
@@ -155,16 +155,17 @@ def read_dask(
     elif suffix == ".dat":
         dasker = dat.to_dask
     else:
-        raise ValueError(
+        msg = (
             f"Cannot access file with extension {suffix} as a dask array. Extensions "
             "with dask support: .zarr, .n5, .mrc, .dat"
         )
+        raise ValueError(msg)
     return dasker(read(path, **kwargs), chunks)
 
 
 def read_xarray(
     path: PathLike,
-    chunks: Union[Literal["auto"], tuple[int, ...]] = "auto",
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Literal["auto"] | dict[Hashable, Any] = "auto",
     use_dask: bool = True,
     attrs: dict[str, Any] | None = None,
@@ -192,7 +193,7 @@ def read_xarray(
             name=name,
         )
     elif suffix == ".mrc":
-        # todo: support datatree semantics for mrc files, maybe by considering a folder
+        # TODO: support datatree semantics for mrc files, maybe by considering a folder
         # group?
         return mrc.to_xarray(
             element,
@@ -203,10 +204,11 @@ def read_xarray(
             name=name,
         )
     else:
-        raise ValueError(
+        msg = (
             f"Xarray data structures are only supported for data saved as zarr, n5, and mrc. "
             f"Got {type(element)}, which is not supported."
         )
+        raise ValueError(msg)
 
 
 def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, str]:
@@ -217,13 +219,10 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, s
     If the last element of the string bears a suffix, return the string,
     the empty string, and the suffix.
     """
-    protocol: Optional[str]
+    protocol: str | None
     subpath: str
     protocol, subpath = fsspec.core.split_protocol(str(uri))
-    if protocol is None:
-        separator = os.path.sep
-    else:
-        separator = "/"
+    separator = os.path.sep if protocol is None else "/"
     parts = Path(subpath).parts
     suffixed = [Path(part).suffix in suffixes for part in parts]
 

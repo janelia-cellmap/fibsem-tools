@@ -6,11 +6,11 @@ from typing import Literal
 import numpy as np
 import pytest
 from cellmap_schemas.multiscale.cosem import Group, STTransform
-from fibsem_tools.coordinate import stt_from_array, stt_to_coords
-from fibsem_tools.io.n5 import create_dataarray
 from xarray import DataArray
 from zarr import N5FSStore
 
+from fibsem_tools.coordinate import stt_from_array, stt_to_coords
+from fibsem_tools.io.n5 import create_dataarray
 from tests.conftest import PyramidRequest
 
 
@@ -46,7 +46,7 @@ def test_sttransform() -> None:
 
 @pytest.mark.parametrize(
     "pyramid",
-    (
+    [
         PyramidRequest(
             dims=("z", "y", "x"),
             shape=(12, 13, 14),
@@ -59,11 +59,11 @@ def test_sttransform() -> None:
             scale=(4, 6, 3),
             translate=(0, 0, 0),
         ),
-    ),
+    ],
     indirect=["pyramid"],
 )
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("chunks", ("auto", (10, 10, 10)))
+@pytest.mark.parametrize("use_dask", [True, False])
+@pytest.mark.parametrize("chunks", ["auto", (10, 10, 10)])
 def test_read_array(
     pyramid: tuple[DataArray, DataArray, DataArray],
     use_dask: bool,

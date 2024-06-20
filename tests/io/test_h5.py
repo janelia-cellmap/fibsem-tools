@@ -2,6 +2,7 @@ import os
 
 import h5py
 import numpy as np
+
 from fibsem_tools.io.h5 import access
 
 

@@ -3,17 +3,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fibsem_tools.coordinate import stt_from_array
-from xarray import DataArray
-
 from tests.conftest import PyramidRequest
 
 if TYPE_CHECKING:
     from typing import Literal
 
+    from xarray import DataArray
+
 import dask.array as da
 import numpy as np
 import pytest
 import zarr
+
 from fibsem_tools.io.n5 import access, to_dask
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer
 
@@ -38,7 +39,7 @@ def test_access_group(tmp_zarr: str) -> None:
     assert zarr.open(zarr.N5FSStore(tmp_zarr), mode="a") == zg
 
 
-@pytest.mark.parametrize("chunks", ("auto", (10,)))
+@pytest.mark.parametrize("chunks", ["auto", (10,)])
 def test_dask(tmp_n5: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     path = "foo"
     data = np.arange(100)
@@ -54,10 +55,10 @@ def test_dask(tmp_n5: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     assert np.array_equal(observed, data)
 
 
-@pytest.mark.parametrize("metadata_type", ("neuroglancer", "cosem"))
+@pytest.mark.parametrize("metadata_type", ["neuroglancer", "cosem"])
 @pytest.mark.parametrize(
     "pyramid",
-    (
+    [
         PyramidRequest(
             dims=("z", "y", "x"),
             shape=(12, 13, 14),
@@ -70,15 +71,15 @@ def test_dask(tmp_n5: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
             scale=(4, 6, 3),
             translate=(3, 4, 6),
         ),
-    ),
+    ],
     indirect=["pyramid"],
 )
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("name", (None, "foo"))
-@pytest.mark.parametrize("chunks", ((5, 5, 5),))
+@pytest.mark.parametrize("use_dask", [True, False])
+@pytest.mark.parametrize("name", [None, "foo"])
+@pytest.mark.parametrize("chunks", [(5, 5, 5)])
 def test_read_dataarray(
     tmpdir,
-    metadata_type: Literal["ome_ngff"],
+    metadata_type: Literal["neuroglancer", "cosem"],
     pyramid: list[DataArray],
     use_dask: bool,
     name: str | None,
@@ -89,7 +90,7 @@ def test_read_dataarray(
     path = "test"
 
     base_tx = stt_from_array(pyramid[0])
-    nonzero_translate = any(map(lambda v: v != 0, base_tx.translate))
+    nonzero_translate = any(v != 0 for v in base_tx.translate)
     store = zarr.N5FSStore(str(tmpdir))
     if metadata_type == "cosem":
         group_model = cosem.model_group(arrays=pyramid_dict, chunks=chunks)
@@ -108,7 +109,8 @@ def test_read_dataarray(
             group_model = neuroglancer.model_group(arrays=pyramid_dict, chunks=chunks)
         dataarray_creator = neuroglancer.create_dataarray
     else:
-        assert False
+        msg = f"Metadata format {metadata_type} not recognized"
+        raise ValueError(msg)
 
     group = group_model.to_zarr(store, path=path)
 

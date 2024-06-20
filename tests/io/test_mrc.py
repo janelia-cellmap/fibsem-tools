@@ -3,6 +3,8 @@ import os
 import mrcfile
 import numpy as np
 import pytest
+from xarray.testing import assert_equal
+
 from fibsem_tools.coordinate import stt_array
 from fibsem_tools.io.core import read_xarray
 from fibsem_tools.io.mrc import (
@@ -12,7 +14,6 @@ from fibsem_tools.io.mrc import (
     to_dask,
     to_xarray,
 )
-from xarray.testing import assert_equal
 
 
 def test_access_mrc(tmpdir):
@@ -36,7 +37,7 @@ def test_access_mrc(tmpdir):
     del accessed
 
 
-@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
+@pytest.mark.parametrize("attrs", [None, {"foo": 10}])
 def test_read_xarray(tmpdir, attrs):
     name = "test.mrc"
     mrc_path = os.path.join(tmpdir, name)

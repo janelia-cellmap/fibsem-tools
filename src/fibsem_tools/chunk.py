@@ -81,14 +81,12 @@ def autoscale_chunk_shape(
     elif isinstance(size_limit, int):
         size_limit_bytes = size_limit
     else:
-        raise TypeError(
-            f"""
-            Could parse {item_size}, it should be type int or str, got 
-            {type(item_size)}"""
-        )
+        msg = f"Could not parse {item_size}. Expected type int or str, got {type(item_size)}"
+        raise TypeError(msg)
 
     if size_limit_bytes < 1:
-        raise ValueError(f"Chunk size limit {size_limit} is too small.")
+        msg = f"Chunk size limit {size_limit} is too small."
+        raise ValueError(msg)
 
     normalized_chunk_shape = normalize_chunksize(chunk_shape, array_shape, item_size)
     result = normalized_chunk_shape

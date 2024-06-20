@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Literal, Optional, Union
+    from typing import Any, Callable, Literal
+
+    import distributed
+    import zarr
 
 import random
 from os import PathLike
@@ -11,9 +15,7 @@ from os import PathLike
 import backoff
 import dask
 import dask.array as da
-import distributed
 import numpy as np
-import zarr
 from aiohttp import ServerDisconnectedError
 from dask import delayed
 from dask.array.core import (
@@ -43,8 +45,7 @@ def fuse_delayed(tasks: dask.delayed) -> dask.delayed:
     dask.delayed optimization doesn't do this step.
     """
     dsk_fused, deps = fuse(dask.utils.ensure_dict(tasks.dask))
-    fused = Delayed(tasks._key, dsk_fused)
-    return fused
+    return Delayed(tasks._key, dsk_fused)
 
 
 def sequential_rechunk(
@@ -167,7 +168,7 @@ def write_blocks(source, target, region: tuple[slice, ...] | None) -> da.Array:
     )
 
 
-def store_blocks(sources, targets, regions: Optional[slice] = None) -> list[da.Array]:
+def store_blocks(sources, targets, regions: slice | None = None) -> list[da.Array]:
     """
     Write dask array(s) to sliceable storage. Like `da.store` but instead of
     returning a list of `dask.Delayed`, this function returns a list of `dask.Array`,
@@ -192,12 +193,11 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> list[da.A
         regions *= len(sources)
 
     if len(sources) != len(regions):
-        raise ValueError(
-            f"""
-            Different number of sources [{len(sources)}] and targets [{len(targets)}] 
-            than regions [{len(regions)}]
-            """
+        msg = (
+            f"Number of sources ({len(sources)}) does not match the "
+            f"number of regions  ({len(regions)})"
         )
+        raise ValueError(msg)
 
     for source, target, region in zip(sources, targets, regions):
         result.append(write_blocks(source, target, region))
@@ -206,7 +206,7 @@ def store_blocks(sources, targets, regions: Optional[slice] = None) -> list[da.A
 
 
 def write_blocks_delayed(
-    source, target, region: Optional[tuple[slice, ...]] = None
+    source, target, region: tuple[slice, ...] | None = None
 ) -> Sequence[Any]:
     """
     Return a collection fo task each task returns the result of writing
@@ -259,9 +259,9 @@ def copy_from_slices(slices, source_array, dest_array):
 
 
 def copy_array(
-    source: Union[PathLike, np.ndarray | zarr.Array],
-    dest: Union[PathLike, np.ndarray | zarr.Array],
-    chunk_size: Union[str, tuple[int, ...]] = "100 MB",
+    source: PathLike | (np.ndarray | zarr.Array),
+    dest: PathLike | (np.ndarray | zarr.Array),
+    chunk_size: str | tuple[int, ...] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
     randomize: bool = True,
@@ -315,15 +315,13 @@ def copy_array(
     A dask bag which, when computed, will copy data from source to dest.
 
     """
-    if isinstance(source, PathLike):
-        source_arr = read(source)
-    else:
-        source_arr = source
+    source_arr = read(source) if isinstance(source, PathLike) else source
 
-    if isinstance(dest, PathLike):
-        dest_arr = access(dest, mode="a", write_empty_chunks=write_empty_chunks)
-    else:
-        dest_arr = dest
+    dest_arr = (
+        access(dest, mode="a", write_empty_chunks=write_empty_chunks)
+        if isinstance(dest, PathLike)
+        else dest
+    )
 
     # this should probably also be lazy.
     if keep_attrs:

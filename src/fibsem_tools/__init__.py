@@ -1,4 +1,4 @@
-from ._version import version
+from fibsem_tools._version import version
 
 __version__ = version
 

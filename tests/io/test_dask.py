@@ -1,33 +1,28 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from fibsem_tools.io.core import read
-
-if TYPE_CHECKING:
-    from typing import Tuple
-
 import dask
 import dask.array as da
 import numpy as np
 import pytest
 import zarr
 from dask.array.core import slices_from_chunks
+from numpy.testing import assert_array_equal
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
+
 from fibsem_tools.chunk import (
     resolve_slices,
 )
+from fibsem_tools.io.core import read
 from fibsem_tools.io.dask import (
     copy_array,
     setitem,
     store_blocks,
     write_blocks_delayed,
 )
-from numpy.testing import assert_array_equal
-from pydantic_zarr.v2 import ArraySpec, GroupSpec
 
 
-@pytest.mark.parametrize("keep_attrs", (True, False))
-@pytest.mark.parametrize("shape", ((10,), (10, 10)))
+@pytest.mark.parametrize("keep_attrs", [True, False])
+@pytest.mark.parametrize("shape", [(10,), (10, 10)])
 def test_array_copy_from_array(shape, keep_attrs):
     data_a = np.random.randint(0, 255, shape)
     data_b = np.zeros_like(data_a)
@@ -52,7 +47,7 @@ def test_array_copy_from_array(shape, keep_attrs):
     assert np.array_equal(arr_2, arr_1)
 
 
-@pytest.mark.parametrize("shape", ((1000,), (100, 100)))
+@pytest.mark.parametrize("shape", [(1000,), (100, 100)])
 def test_array_copy_from_path(tmp_zarr, shape):
     g = zarr.group(zarr.NestedDirectoryStore(tmp_zarr))
     arr_1 = g.create_dataset(name="a", data=np.random.randint(0, 255, shape))
@@ -82,10 +77,10 @@ def test_write_blocks_delayed():
         (10, 11, 12),
     ],
 )
-def test_chunksafe_writes(chunks: Tuple[int, ...]):
+def test_chunksafe_writes(chunks: tuple[int, ...]):
     store = zarr.MemoryStore()
     array = zarr.open(
-        store, path="foo", chunks=chunks, shape=map(lambda v: v * 2, chunks)
+        store, path="foo", chunks=chunks, shape=tuple(v * 2 for v in chunks)
     )
     selection = tuple(slice(0, c + 1) for c in chunks)
     valid_data = np.zeros(array.shape) + 1

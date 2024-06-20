@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Literal, Union
+    from typing import Literal
+
+    import zarr
 
 import warnings
 
 import dask.array as da
 import numpy as np
-import zarr
 from cellmap_schemas.multiscale.neuroglancer_n5 import Group
 from xarray import DataArray
 
@@ -23,7 +24,7 @@ N5_AXES_3D = ["x", "y", "z"]
 def model_group(
     *,
     arrays: dict[str, DataArray],
-    chunks: Union[tuple[tuple[int, ...]], Literal["auto"]] = "auto",
+    chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
     **kwargs,
 ) -> Group:
     """
@@ -43,7 +44,7 @@ def model_group(
 
     transforms = tuple(stt_from_array(array) for array in arrays.values())
     base_transform = transforms[0]
-    nonzero_translate = any(map(lambda v: v != 0, base_transform.translate))
+    nonzero_translate = any(v != 0 for v in base_transform.translate)
 
     if nonzero_translate:
         msg = (

@@ -1,11 +1,16 @@
 from __future__ import annotations
+
 import os
 from typing import Any, Literal
 
-from datatree import DataTree
 import numpy as np
 import pytest
 import zarr
+from datatree import DataTree
+from numcodecs import GZip
+from pydantic_zarr.v2 import ArraySpec, GroupSpec
+from xarray import DataArray
+
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.io.core import (
     access,
@@ -14,10 +19,6 @@ from fibsem_tools.io.core import (
     read_xarray,
     split_by_suffix,
 )
-from numcodecs import GZip
-from pydantic_zarr.v2 import ArraySpec, GroupSpec
-from xarray import DataArray
-
 from tests.conftest import PyramidRequest
 
 
@@ -35,8 +36,8 @@ def test_path_splitting():
     assert split == (os.path.join("0", "1", "2.n5"), "", ".n5")
 
 
-@pytest.mark.parametrize("fmt", ("zarr", "n5"))
-@pytest.mark.parametrize("mode", ("r", "a", "w"))
+@pytest.mark.parametrize("fmt", ["zarr", "n5"])
+@pytest.mark.parametrize("mode", ["r", "a", "w"])
 def test_access_zarr_n5(
     tmpdir, fmt: Literal["zarr", "n5"], mode: Literal["r", "a", "w"]
 ):
@@ -76,7 +77,7 @@ def test_access_zarr_n5(
 
 @pytest.mark.parametrize(
     "pyramid",
-    (PyramidRequest(shape=(12, 13, 14), scale=(1, 2, 3), translate=(0, 0, 0)),),
+    [PyramidRequest(shape=(12, 13, 14), scale=(1, 2, 3), translate=(0, 0, 0))],
     indirect=["pyramid"],
 )
 @pytest.mark.parametrize(
@@ -88,10 +89,11 @@ def test_multiscale_storage(
     tmp_zarr: str,
     metadata_type: str,
 ) -> None:
-    if metadata_type == "neuroglancer":
-        store = zarr.N5FSStore(tmp_zarr)
-    else:
-        store = zarr.NestedDirectoryStore(tmp_zarr)
+    store = (
+        zarr.N5FSStore(tmp_zarr)
+        if metadata_type == "neuroglancer"
+        else zarr.NestedDirectoryStore(tmp_zarr)
+    )
 
     array_paths = ["s0", "s1", "s2"]
     pyr = dict(zip(array_paths, pyramid))
@@ -111,16 +113,16 @@ def test_multiscale_storage(
 
 
 @pytest.mark.parametrize(
-    "fmt, metadata", (["n5", "cosem"], ["n5", "neuroglancer"], ["zarr", "ome-ngff"])
+    ("fmt", "metadata"), [("n5", "cosem"), ("n5", "neuroglancer"), ("zarr", "ome-ngff")]
 )
-@pytest.mark.parametrize("chunks", ("auto", (3, 3, 3)))
-@pytest.mark.parametrize("coords", ("auto", "override"))
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
-@pytest.mark.parametrize("name", (None, "foo"))
+@pytest.mark.parametrize("chunks", ["auto", (3, 3, 3)])
+@pytest.mark.parametrize("coords", ["auto", "override"])
+@pytest.mark.parametrize("use_dask", [True, False])
+@pytest.mark.parametrize("attrs", [None, {"foo": 10}])
+@pytest.mark.parametrize("name", [None, "foo"])
 @pytest.mark.parametrize(
     "pyramid",
-    (PyramidRequest(shape=(9, 9, 9), dims=("z", "y", "x")),),
+    [PyramidRequest(shape=(9, 9, 9), dims=("z", "y", "x"))],
     indirect=["pyramid"],
 )
 def test_read_xarray(
@@ -135,7 +137,7 @@ def test_read_xarray(
     pyramid: tuple[DataArray, ...],
 ) -> None:
     group_path = "bar"
-    store_path = f"{str(tmpdir)}/foo.{fmt}"
+    store_path = f"{tmpdir!s}/foo.{fmt}"
     arrays = {f"s{idx}": pyr for idx, pyr in enumerate(pyramid)}
     dest = access(store_path, mode="w")
     _ = create_multiscale_group(

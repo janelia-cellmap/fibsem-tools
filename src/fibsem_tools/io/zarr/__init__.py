@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any, Generator, Literal
+    from collections.abc import Generator
+    from typing import Any, Literal
+
+    from numcodecs.abc import Codec
 
     from fibsem_tools.type import PathLike
 
@@ -14,7 +18,6 @@ import dask.array as da
 import zarr
 from dask.base import tokenize
 from datatree import DataTree
-from numcodecs.abc import Codec
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from xarray import DataArray, Dataset
 from xarray_ome_ngff.core import get_parent
@@ -58,7 +61,7 @@ class FSStorePatched(FSStore):
 
     def delitems(self, keys: Sequence[str]) -> None:
         if self.mode == "r":
-            raise ReadOnlyError()
+            raise ReadOnlyError
         try:  # should be much faster
             nkeys = [self._normalize_key(key) for key in keys]
             # rm errors if you pass an empty collection
@@ -119,9 +122,9 @@ def array_from_dask(arr: da.Array) -> zarr.Array:
     Return the zarr array that was used to create a dask array using
     `da.from_array(zarr_array)`
     """
-    maybe_array: zarr.Array | tuple[Any, zarr.Array, tuple[slice, ...]] = tuple(
-        arr.dask.values()
-    )[0]
+    maybe_array: zarr.Array | tuple[Any, zarr.Array, tuple[slice, ...]] = next(
+        iter(arr.dask.values())
+    )
     if isinstance(maybe_array, zarr.Array):
         return maybe_array
     else:
@@ -132,18 +135,16 @@ def get_url(node: zarr.Group | zarr.Array) -> str:
     store = node.store
     if hasattr(store, "path"):
         if hasattr(store, "fs"):
-            if isinstance(store.fs.protocol, Sequence):
-                protocol = store.fs.protocol[0]
-            else:
-                protocol = store.fs.protocol
+            protocol = (
+                store.fs.protocol[0]
+                if isinstance(store.fs.protocol, Sequence)
+                else store.fs.protocol
+            )
         else:
             protocol = "file"
 
         # fsstore keeps the protocol in the path, but not s3store
-        if "://" in store.path:
-            store_path = store.path.split("://")[-1]
-        else:
-            store_path = store.path
+        store_path = store.path.split("://")[-1] if "://" in store.path else store.path
         return f"{protocol}://{os.path.join(store_path, node.path)}"
     else:
         msg = (
@@ -203,8 +204,7 @@ def chunk_keys(
     """
     indexer = BasicIndexer(region, array)
     chunk_coords = (idx.chunk_coords for idx in indexer)
-    keys = (array._chunk_key(cc) for cc in chunk_coords)
-    return keys
+    return (array._chunk_key(cc) for cc in chunk_coords)
 
 
 def to_dask(
@@ -240,8 +240,7 @@ def to_dask(
     """
     if kwargs.get("name") is None:
         kwargs["name"] = f"{get_url(arr)}-{tokenize(arr)}"
-    darr = da.from_array(arr, chunks=chunks, inline_array=inline_array, **kwargs)
-    return darr
+    return da.from_array(arr, chunks=chunks, inline_array=inline_array, **kwargs)
 
 
 def access_parent(node: zarr.Array | zarr.Group) -> zarr.Group:
@@ -264,12 +263,8 @@ def is_copyable(source_group: GroupSpec, dest_group: GroupSpec, strict: bool = F
     if strict:
         if set(source_group.members.keys) != set(dest_group.members.keys):
             return False
-    else:
-        # extra members are allowed in the destination group
-        if not set(source_group.members.keys()).issubset(
-            set(dest_group.members.keys())
-        ):
-            return False
+    elif not set(source_group.members.keys()).issubset(set(dest_group.members.keys())):
+        return False
 
     for key_source, key_dest in zip(
         source_group.members.keys(), dest_group.members.keys()
@@ -305,10 +300,7 @@ def create_dataarray(
             element, use_dask=use_dask, chunks=chunks, name=name
         )
     else:
-        if use_dask:
-            wrapped = to_dask(element, chunks=chunks)
-        else:
-            wrapped = element
+        wrapped = to_dask(element, chunks=chunks) if use_dask else element
         return DataArray(wrapped, coords=coords, attrs=attrs, name=name)
 
 
@@ -341,14 +333,10 @@ def create_datatree(
         )
         for name, array in element.arrays()
     }
-    if attrs is None:
-        root_attrs = element.attrs.asdict()
-    else:
-        root_attrs = attrs
+    root_attrs = element.attrs.asdict() if attrs is None else attrs
     # insert root element
     nodes["/"] = Dataset(attrs=root_attrs)
-    dtree = DataTree.from_dict(nodes, name=name)
-    return dtree
+    return DataTree.from_dict(nodes, name=name)
 
 
 def to_xarray(
@@ -378,7 +366,8 @@ def to_xarray(
             name=name,
         )
     else:
+        msg = "This function only accepts instances of zarr.Group and zarr.Array. "
         raise ValueError(
-            "This function only accepts instances of zarr.Group and zarr.Array. ",
+            msg,
             f"Got {type(element)} instead.",
         )

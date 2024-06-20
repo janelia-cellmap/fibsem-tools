@@ -3,17 +3,21 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from typing import Any, Literal
 
 import itertools
 import os
-from pathlib import Path
 
 import dask.array as da
 import numpy as np
 import pytest
 import zarr
 from datatree import DataTree
+from xarray import DataArray
+from xarray.testing import assert_equal
+from zarr.storage import FSStore, NestedDirectoryStore
+
 from fibsem_tools.coordinate import stt_array, stt_from_array
 from fibsem_tools.io.core import (
     model_multiscale_group,
@@ -32,10 +36,6 @@ from fibsem_tools.io.zarr import (
     to_xarray,
 )
 from fibsem_tools.io.zarr.hierarchy import omengff
-from xarray import DataArray
-from xarray.testing import assert_equal
-from zarr.storage import FSStore, NestedDirectoryStore
-
 from tests.conftest import PyramidRequest
 
 
@@ -81,11 +81,11 @@ def test_read_xarray(tmp_zarr: str) -> None:
     assert tree_expected.equals(read_xarray(url))
 
 
-@pytest.mark.parametrize("attrs", (None, {"foo": 10}))
-@pytest.mark.parametrize("coords", ("auto",))
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("name", (None, "foo"))
-@pytest.mark.parametrize("path", ("a", "a/b"))
+@pytest.mark.parametrize("attrs", [None, {"foo": 10}])
+@pytest.mark.parametrize("coords", ["auto"])
+@pytest.mark.parametrize("use_dask", [True, False])
+@pytest.mark.parametrize("name", [None, "foo"])
+@pytest.mark.parametrize("path", ["a", "a/b"])
 def test_read_datatree(
     tmp_zarr: str,
     attrs: dict[str, Any] | None,
@@ -96,15 +96,9 @@ def test_read_datatree(
 ) -> None:
     base_data = np.zeros((10, 10, 10))
     store = zarr.NestedDirectoryStore(tmp_zarr)
-    if attrs is None:
-        _attrs = {}
-    else:
-        _attrs = attrs
+    _attrs = {} if attrs is None else attrs
 
-    if name is None:
-        name_expected = path.split("/")[-1]
-    else:
-        name_expected = name
+    name_expected = path.split("/")[-1] if name is None else name
 
     data = {
         "s0": stt_array(
@@ -156,7 +150,7 @@ def test_read_datatree(
             coords=data[k].coords,
             name="data",
         )
-        for k in data.keys()
+        for k in data
     }
 
     tree_expected = DataTree.from_dict(tree_dict, name=name_expected)
@@ -170,10 +164,10 @@ def test_read_datatree(
 
 
 # leave this parameter here in case new zarr-based formats emerge
-@pytest.mark.parametrize("metadata_type", ("ome_ngff",))
+@pytest.mark.parametrize("metadata_type", ["ome_ngff"])
 @pytest.mark.parametrize(
     "pyramid",
-    (
+    [
         PyramidRequest(
             dims=("z", "y", "x"),
             shape=(12, 13, 14),
@@ -186,12 +180,12 @@ def test_read_datatree(
             scale=(4, 6, 3),
             translate=(1, 3, 5),
         ),
-    ),
+    ],
     indirect=["pyramid"],
 )
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("name", (None, "foo"))
-@pytest.mark.parametrize("chunks", ((5, 5, 5),))
+@pytest.mark.parametrize("use_dask", [True, False])
+@pytest.mark.parametrize("name", [None, "foo"])
+@pytest.mark.parametrize("chunks", [(5, 5, 5)])
 def test_read_dataarray(
     tmpdir,
     metadata_type: Literal["ome_ngff"],
@@ -211,7 +205,8 @@ def test_read_dataarray(
         )
         dataarray_creator = omengff.create_dataarray
     else:
-        assert False
+        msg = f"Unrecognized metadata type: {metadata_type}"
+        raise ValueError(msg)
 
     group = group_model.to_zarr(store, path=path)
 
@@ -248,7 +243,7 @@ def test_access_group(tmp_zarr: str) -> None:
     assert zarr.open(default_store(tmp_zarr), mode="a") == zg
 
 
-@pytest.mark.parametrize("chunks", ("auto", (10,)))
+@pytest.mark.parametrize("chunks", ["auto", (10,)])
 def test_dask(tmp_zarr: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     path = "foo"
     data = np.arange(100)
@@ -267,9 +262,9 @@ def test_dask(tmp_zarr: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
 
 
 @pytest.mark.parametrize(
-    "store_class", (zarr.DirectoryStore, zarr.NestedDirectoryStore)
+    "store_class", [zarr.DirectoryStore, zarr.NestedDirectoryStore]
 )
-@pytest.mark.parametrize("shape", ((10,), (10, 11, 12)))
+@pytest.mark.parametrize("shape", [(10,), (10, 11, 12)])
 def test_chunk_keys(
     tmp_path: Path,
     store_class: zarr.DirectoryStore | zarr.NestedDirectoryStore,
@@ -290,7 +285,7 @@ def test_chunk_keys(
     assert observed == expected
 
 
-@pytest.mark.parametrize("inline_array", (True, False))
+@pytest.mark.parametrize("inline_array", [True, False])
 def test_zarr_array_from_dask(inline_array: bool) -> None:
     store = zarr.MemoryStore()
     zarray = zarr.open(store, shape=(10, 10))
@@ -299,7 +294,7 @@ def test_zarr_array_from_dask(inline_array: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    "url, expected",
+    ("url", "expected"),
     [
         ("foo.zarr", ("foo.zarr", "")),
         ("/foo/foo.zarr", ("/foo/foo.zarr", "")),

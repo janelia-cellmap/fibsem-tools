@@ -14,7 +14,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-        return super(CORSRequestHandler, self).end_headers()
+        return super().end_headers()
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -56,4 +56,5 @@ def serve(*, port: int, bind: str, directory: str):
             port = random.randint(8000, 65535)
             attempts += 1
 
-    raise RuntimeError(f"Failed to get a port after {attempt} attempts. Closing.")
+    msg = f"Failed to get a port after {attempt} attempts. Closing."
+    raise RuntimeError(msg)

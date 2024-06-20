@@ -1,5 +1,5 @@
 import json
-from typing import Literal, Optional, Tuple
+from typing import Literal, Optional
 
 import numcodecs
 from numcodecs.abc import Codec
@@ -18,11 +18,10 @@ def parse_compressor(
     if compressor_opts is None:
         compressor_opts = "{}"
     compressor_opts_dict = json.loads(compressor_opts)
-    compressor_instance = compressor_class(**compressor_opts_dict)
-    return compressor_instance
+    return compressor_class(**compressor_opts_dict)
 
 
-def parse_chunks(chunks: Optional[str]) -> Optional[Tuple[int, ...]]:
+def parse_chunks(chunks: Optional[str]) -> Optional[tuple[int, ...]]:
     if isinstance(chunks, str):
         parts = chunks.split(",")
         return tuple(map(int, parts))
@@ -30,7 +29,7 @@ def parse_chunks(chunks: Optional[str]) -> Optional[Tuple[int, ...]]:
         return chunks
 
 
-def parse_region(shape: Tuple[int, ...], region_spec: str) -> Tuple[slice, ...]:
+def parse_region(shape: tuple[int, ...], region_spec: str) -> tuple[slice, ...]:
     """
     convert a string into a tuple of slices
     """
@@ -70,15 +69,13 @@ def parse_region(shape: Tuple[int, ...], region_spec: str) -> Tuple[slice, ...]:
             else:
                 results[-1][-1] += element
 
-    results_int = tuple(map(lambda v: tuple(map(int, v)), results))
+    results_int = tuple(tuple(map(int, v)) for v in results)
     all_2 = all(tuple(len(x) == 2 for x in results_int))
     if not all_2:
-        raise ValueError(
-            f"All of the elements of region must have length 2. Got {results_int}"
-        )
+        msg = f"All of the elements of region must have length 2. Got {results_int}"
+        raise ValueError(msg)
 
-    results_slice = tuple(map(lambda v: slice(*v), results_int))
-    return results_slice
+    return tuple(slice(*v) for v in results_int)
 
 
 def parse_content_type(data: str) -> Literal["scalar", "label"]:

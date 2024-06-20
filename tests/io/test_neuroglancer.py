@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Literal
+
+    from xarray import DataArray
 
 import pytest
 from cellmap_schemas.multiscale.neuroglancer_n5 import Group
-from fibsem_tools.coordinate import stt_from_array
-from fibsem_tools.io.n5.hierarchy.neuroglancer import create_dataarray
-from xarray import DataArray
 from zarr import N5FSStore
 
+from fibsem_tools.coordinate import stt_from_array
+from fibsem_tools.io.n5.hierarchy.neuroglancer import create_dataarray
 from tests.conftest import PyramidRequest
 
 
 @pytest.mark.parametrize(
     "pyramid",
-    (
+    [
         PyramidRequest(
             dims=("z", "y", "x"),
             shape=(12, 13, 14),
@@ -28,11 +32,11 @@ from tests.conftest import PyramidRequest
             scale=(4, 6, 3),
             translate=(0, 0, 0),
         ),
-    ),
+    ],
     indirect=["pyramid"],
 )
-@pytest.mark.parametrize("use_dask", (True, False))
-@pytest.mark.parametrize("chunks", ("auto", (10, 10, 10)))
+@pytest.mark.parametrize("use_dask", [True, False])
+@pytest.mark.parametrize("chunks", ["auto", (10, 10, 10)])
 def test_read_array(
     pyramid: tuple[DataArray, DataArray, DataArray],
     use_dask: bool,

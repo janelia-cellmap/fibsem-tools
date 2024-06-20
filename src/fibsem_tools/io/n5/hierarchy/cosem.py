@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Literal
 
+    import zarr
+
 import dask.array as da
-import zarr
-from cellmap_schemas.multiscale.cosem import STTransform
+from cellmap_schemas.multiscale.cosem import Group, STTransform
 from pydantic import BaseModel
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
 from typing_extensions import deprecated
 from xarray import DataArray
 
-from cellmap_schemas.multiscale.cosem import Group
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.coordinate import stt_from_array, stt_to_coords
 
@@ -24,12 +24,12 @@ class ScaleMetaV1(BaseModel):
 
 
 class MultiscaleMetaV1(BaseModel):
-    name: Optional[str]
+    name: str | None
     datasets: list[ScaleMetaV1]
 
 
 class MultiscaleMetaV2(BaseModel):
-    name: Optional[str]
+    name: str | None
     datasets: list[str]
 
 
@@ -47,7 +47,7 @@ class CosemGroupMetadataV1(BaseModel):
     def from_xarrays(
         cls,
         arrays: dict[str, DataArray],
-        name: Optional[str] = None,
+        name: str | None = None,
     ):
         """
         Generate multiscale metadata from a sequence of DataArrays.
@@ -91,7 +91,7 @@ class CosemGroupMetadataV2(BaseModel):
     def from_xarrays(
         cls,
         arrays: dict[str, DataArray],
-        name: Optional[str] = None,
+        name: str | None = None,
     ):
         """
         Generate multiscale metadata from a sequence of DataArrays.
@@ -156,7 +156,7 @@ class CosemMultiscaleGroupV1(GroupSpec):
         cls,
         arrays: dict[str, DataArray],
         chunks: tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
-        name: Optional[str] = None,
+        name: str | None = None,
         **kwargs,
     ):
         """
@@ -207,7 +207,7 @@ class CosemMultiscaleGroupV2(GroupSpec):
         cls,
         arrays: dict[str, DataArray],
         chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
-        name: Optional[str] = None,
+        name: str | None = None,
         **kwargs,
     ):
         """

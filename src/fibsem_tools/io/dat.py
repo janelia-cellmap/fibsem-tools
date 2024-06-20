@@ -8,7 +8,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any, Dict, Literal, Optional, Sequence, Tuple, Union
+    from collections.abc import Sequence
+    from typing import Any, Literal
 
     from fibsem_tools.type import AccessMode, PathLike
 import os
@@ -112,7 +113,8 @@ class _DTypeDict:
                 self.formats.extend(formats)
                 self.offsets.extend(offsets)
             else:
-                raise RuntimeError("Lengths are not equal")
+                msg = "Lengths are not equal"
+                raise RuntimeError(msg)
         else:
             self.names.append(names)
             self.formats.append(formats)
@@ -121,7 +123,7 @@ class _DTypeDict:
     @property
     def dict(self):
         """Return the dict representation"""
-        return dict(names=self.names, formats=self.formats, offsets=self.offsets)
+        return {"names": self.names, "formats": self.formats, "offsets": self.offsets}
 
     @property
     def dtype(self):
@@ -164,12 +166,8 @@ def parse_header(header_bytes: bytes) -> FIBSEMHeader:
 
     fibsem_header = FIBSEMHeader(**dict(zip(base_header.dtype.names, base_header[0])))
     if fibsem_header.FileMagicNum != MAGIC_NUMBER:
-        raise RuntimeError(
-            f"""
-            FileMagicNum should be {MAGIC_NUMBER} but is 
-            {fibsem_header.FileMagicNum}
-            """
-        )
+        msg = f"FileMagicNum should be {MAGIC_NUMBER}. Got {fibsem_header.FileMagicNum} instead."
+        raise ValueError(msg)
 
     _scaling_offset = 36
     if fibsem_header.FileVersion == 1:
@@ -657,11 +655,10 @@ def access(path: PathLike, mode: AccessMode) -> FIBSEMData:
 
     """
     if mode != "r":
-        raise ValueError(
-            f"""
-        .dat files can only be opened with read-only mode (r). Got {mode} instead.
-        """
+        msg = (
+            f"dat files can only be opened with read-only mode (r). Got {mode} instead."
         )
+        raise ValueError(msg)
 
     # Load raw_data data file 's' or 'ieee-be.l64' Big-ian ordering, 64-bit long data
     # type
@@ -673,10 +670,7 @@ def access(path: PathLike, mode: AccessMode) -> FIBSEMData:
         fibsem_header.ChanNum,
     )
 
-    if fibsem_header.EightBit == 1:
-        dtype = ">u1"
-    else:
-        dtype = ">i2"
+    dtype = ">u1" if fibsem_header.EightBit == 1 else ">i2"
 
     file_size = os.path.getsize(path)
     expected_nbytes = OFFSET + np.prod(shape) * np.dtype(dtype).itemsize
@@ -749,27 +743,25 @@ def _convert_data(fibsem):
                 + fibsem.header.Scaling[0, 1]
             )
 
-    else:
-        if fibsem.header.FileVersion in {1, 2, 3, 4, 5, 6}:
-            # scaled =
+    elif fibsem.header.FileVersion in {1, 2, 3, 4, 5, 6}:
+        # scaled =
 
-            if fibsem.header.AI1:
-                detector_a = (
-                    fibsem.header.Scaling[0, 0]
-                    + fibsem[0] * fibsem.header.Scaling[0, 1]
+        if fibsem.header.AI1:
+            detector_a = (
+                fibsem.header.Scaling[0, 0] + fibsem[0] * fibsem.header.Scaling[0, 1]
+            )
+            if fibsem.header.AI2:
+                detector_b = (
+                    fibsem.header.Scaling[1, 0]
+                    + fibsem[1] * fibsem.header.Scaling[1, 1]
                 )
-                if fibsem.header.AI2:
-                    detector_b = (
-                        fibsem.header.Scaling[1, 0]
+                if fibsem.header.AI3:
+                    (
+                        fibsem.header.Scaling[2, 0]
                         + fibsem[1] * fibsem.header.Scaling[1, 1]
                     )
-                    if fibsem.header.AI3:
-                        (
-                            fibsem.header.Scaling[2, 0]
-                            + fibsem[1] * fibsem.header.Scaling[1, 1]
-                        )
-        else:
-            pass
+    else:
+        pass
     return detector_a, detector_b, scaled
 
 
@@ -787,7 +779,8 @@ def chunked_fibsem_loader(
     pad_width = np.subtract(output_shape, filedata.shape)
     if np.any(pad_width):
         if not pad_values:
-            raise ValueError("Data must be padded but no pad values were supplied!")
+            msg = "Data must be padded but no pad values were supplied!"
+            raise ValueError(msg)
         padded = []
         pw = np.take(pad_width, [x for x in range(len(pad_width)) if x != channel_axis])
         for ind, channel in enumerate(np.swapaxes(filedata, 0, channel_axis)):
@@ -817,17 +810,14 @@ def aggregate_fibsem_metadata(fnames):
     meta, shapes, dtypes = [], [], []
     # build lists of metadata for each image
     for d in headers:
-        if d.EightBit == 1:
-            dtype = ">u1"
-        else:
-            dtype = ">i2"
+        dtype = ">u1" if d.EightBit == 1 else ">i2"
         meta.append(d.__dict__)
         shapes.append((d.ChanNum, d.YResolution, d.XResolution))
         dtypes.append(dtype)
     return meta, shapes, dtypes
 
 
-# todo: make this a dataarray
+# TODO: make this a dataarray
 class FibsemDataset:
     def __init__(self, filenames: Sequence[str]):
         """
@@ -838,12 +828,9 @@ class FibsemDataset:
             self.filenames
         )
         self.dims = ("c", "z", "y", "x")
-        self.shape = {
-            k: v
-            for k, v in zip(
-                self.axes, (len(self.filenames), *np.array(self.shapes).max(0))
-            )
-        }
+        self.shape = dict(
+            zip(self.axes, (len(self.filenames), *np.array(self.shapes).max(0)))
+        )
         self.extrema = self.get_extrema()
         self.needs_padding = len(set(self.shapes)) > 1
         self.grid_spacing, self.coords = self.infer_coords()
@@ -869,12 +856,11 @@ class FibsemDataset:
             dtype=self.dtypes[0],
         )
         result_data = da.stack([all_extrema.min(0)[:, 0], all_extrema.max(0)[:, 1]])
-        result = DataArray(
+        return DataArray(
             result_data,
             dims=("statistic", "channel"),
             coords={"statistic": ["min", "max"], "channel": [0, 1]},
         )
-        return result
 
 
 def to_dask(
@@ -888,20 +874,16 @@ def to_dask(
         num_channels = data.bounding_shape["c"]
         if data.needs_padding:
             if pad_values is None:
-                raise ValueError("Data must be padded but no pad values were supplied!")
+                msg = "Data must be padded but no pad values were supplied!"
+                raise ValueError(msg)
             elif len(pad_values) != num_channels:
-                raise ValueError(
-                    f"""
-                    Length of pad values {pad_values} does not match the length of the
-                    channel axis ({num_channels})
-                    """
-                )
+                raise ValueError
 
         chunks = (
             (1,) * data.bounding_shape["z"],
             *[data.bounding_shape[k] for k in ("c", "y", "x")],
         )
-        darr = da.map_blocks(
+        return da.map_blocks(
             chunked_fibsem_loader,
             data.filenames,
             data.axes["c"],
@@ -909,7 +891,7 @@ def to_dask(
             chunks=chunks,
             dtype=data.dtypes[0],
         )
-        return darr
+    return None
 
 
 def infer_coords(array: FIBSEMData) -> tuple[DataArray, ...]:
@@ -917,7 +899,7 @@ def infer_coords(array: FIBSEMData) -> tuple[DataArray, ...]:
     dims = ("x", "y", "c")
     scales = (grid_spacing_xy, grid_spacing_xy, 1)
     translates = (0, 0, 0)
-    coords = tuple(
+    return tuple(
         stt_coord(
             length=s,
             dim=dims[idx],
@@ -927,15 +909,14 @@ def infer_coords(array: FIBSEMData) -> tuple[DataArray, ...]:
         )
         for idx, s in enumerate(array.shape)
     )
-    return coords
 
 
 def create_dataarray(
     element: FIBSEMData,
-    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ):
     if coords == "auto":
@@ -948,22 +929,23 @@ def create_dataarray(
 
 def create_datatree(
     element: FibsemDataset,
-    chunks: Literal["auto"] | Tuple[int, ...] = "auto",
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Dict[str, Any] | None = None,
+    attrs: dict[str, Any] | None = None,
     name: str | None = None,
 ):
-    raise NotImplementedError("This behavior has not been implemented yet.")
+    msg = "This behavior has not been implemented yet."
+    raise NotImplementedError(msg)
 
 
 def to_xarray(
-    element: Union[FIBSEMData, FibsemDataset],
-    chunks: Union[Literal["auto"], Tuple[int, ...]] = "auto",
+    element: FIBSEMData | FibsemDataset,
+    chunks: Literal["auto"] | tuple[int, ...] = "auto",
     coords: Any = "auto",
     use_dask: bool = True,
-    attrs: Optional[Dict[str, Any]] = None,
-    name: Optional[str] = None,
+    attrs: dict[str, Any] | None = None,
+    name: str | None = None,
 ) -> DataArray:
     """
     Convert an instance of FIBSEMData or a FibsemDataset to an xarray data structure.

@@ -1,8 +1,10 @@
 from __future__ import annotations
-import pytest
+
 from typing import Literal
-from xarray import DataArray
+
 import dask.array as da
+import pytest
+from xarray import DataArray
 
 from fibsem_tools.chunk import (
     autoscale_chunk_shape,
@@ -13,7 +15,7 @@ from fibsem_tools.chunk import (
 )
 
 
-@pytest.mark.parametrize("chunks", ("auto", (3, 3, 3), ((3, 3, 3), (3, 3, 3))))
+@pytest.mark.parametrize("chunks", ["auto", (3, 3, 3), ((3, 3, 3), (3, 3, 3))])
 def test_normalize_chunks(
     chunks: Literal["auto"] | tuple[int, ...] | tuple[tuple[int, ...], ...],
 ) -> None:
@@ -80,7 +82,7 @@ def test_autoscale_chunk_shape():
 
 
 @pytest.mark.parametrize(
-    "data, expected",
+    ("data", "expected"),
     [
         (((0, 1), (0, 1)), (0, 0)),
         (((0, 2), (0, 1)), (0, 0)),
@@ -93,7 +95,7 @@ def test_interval_remainder(data, expected):
 
 
 @pytest.mark.parametrize(
-    "data, expected",
+    ("data", "expected"),
     [
         (
             (slice(None), (0, 10)),

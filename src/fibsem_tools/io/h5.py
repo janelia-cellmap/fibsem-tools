@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Union
 
 import h5py
 
@@ -45,7 +45,7 @@ H5_FILE_KWDS = (
 )
 
 
-def partition_h5_kwargs(**kwargs: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def partition_h5_kwargs(**kwargs: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     partition kwargs into file-creation kwargs and dataset-creation kwargs
     """
@@ -65,9 +65,8 @@ def access(
     Docstring
     """
     if mode not in H5_ACCESS_MODES:
-        raise ValueError(
-            f"Invalid access mode. Got {mode}, expected one of {H5_ACCESS_MODES}."
-        )
+        msg = f"Invalid access mode. Got {mode}, expected one of {H5_ACCESS_MODES}."
+        raise ValueError(msg)
 
     attrs = kwargs.pop("attrs", {})
     file_kwargs, dataset_kwargs = partition_h5_kwargs(**kwargs)
@@ -81,7 +80,7 @@ def access(
             if "name" in dataset_kwargs:
                 warnings.warn(
                     """
-                    'Name' was provided to this function as a keyword argument. This 
+                    'Name' was provided to this function as a keyword argument. This
                     value will be replaced with the second argument to this function.
                     """
                 )
