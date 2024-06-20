@@ -38,10 +38,13 @@ nav:
         - hdf5: api/io/h5.md
         - mrc: api/io/mrc.md
         - tif: api/io/tif.md
-        - util: api/io/util.md
-        - n5: api/io/n5.md
+        - n5: 
+          - core: api/io/n5/core.md
+          - hierarchy:
+            - cosem: api/io/n5/hierarchy/cosem.md
+            - neuroglancer: api/io/n5/hierarchy/neuroglancer.md
         - zarr: 
-          - zarr : api/io/zarr.md
+          - core : api/io/zarr/core.md
           - hierarchy:
             - ome-ngff: api/io/zarr/hierarchy/omengff.md
       - server: api/server.md

@@ -8,15 +8,13 @@ import dask.array as da
 import mrcfile
 import numpy as np
 import numpy.typing as npt
-import xarray
 from dask.array.core import normalize_chunks
 from mrcfile.mrcmemmap import MrcMemmap
+from xarray import DataArray
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
     from mrcfile.mrcfile import MrcFile
-
     from fibsem_tools.type import PathLike
 
 
@@ -32,7 +30,7 @@ def recarray_to_dict(recarray) -> dict[str, Any]:
     return result
 
 
-def access(path: PathLike, mode: str, **kwargs) -> MrcArrayWrapper:
+def access(path: PathLike, mode: str, **kwargs: Any) -> MrcArrayWrapper:
     # TODO: make memory mapping optional via kwarg
     parsed = urlparse(path)
     if parsed.scheme in ("", "file"):
@@ -42,23 +40,23 @@ def access(path: PathLike, mode: str, **kwargs) -> MrcArrayWrapper:
         raise ValueError(msg)
 
 
-def infer_dtype(mem: MrcFile) -> npt.DTypeLike:
+def infer_dtype(mem: MrcFile) -> np.dtype:
     """
     Infer the datatype of an MrcMemmap array. We cannot rely on the `dtype`
     attribute because, while the MRC2014 specification does not officially support the uint8
     datatype, MRC users routinely store uint8 data as int8. This can
-    only be inferred by checking if the header.dmax propert exceeds the upper limit of
+    only be inferred by checking if the `dmax` property of the MRC header exceeds the upper limit of
     int8 (127).
     """
     dtype = mem.data.dtype
     if (dtype == "int8") & (mem.header.dmax > 127):
-        dtype = "uint8"
+        dtype = np.dtype("uint8")
 
     return dtype
 
 
 # TODO: use the more convenient API already provided by mrcfile for this
-def infer_coords(mem: MrcArrayWrapper) -> list[xarray.DataArray]:
+def infer_coords(mem: MrcArrayWrapper) -> list[DataArray]:
     header = mem.mrc.header
     grid_size_angstroms = header.cella
     coords = []
@@ -76,13 +74,13 @@ def infer_coords(mem: MrcArrayWrapper) -> list[xarray.DataArray]:
             (grid_size_angstroms[key] / 10) / header[f"n{key}"], grid_spacing_decimals
         )
         axis = np.arange(header[f"n{key}start"], header[f"n{key}"]) * grid_spacing
-        coords.append(xarray.DataArray(data=axis, dims=(key,), attrs={"units": "nm"}))
+        coords.append(DataArray(data=axis, dims=(key,), attrs={"units": "nm"}))
 
     return coords
 
 
 def chunk_loader(
-    fname: str, block_info=None
+    fname: str, block_info: dict[Any, Any] | None = None
 ) -> npt.NDArray[np.int8 | np.uint8 | np.int16 | np.uint16]:
     dtype = block_info[None]["dtype"]
     array_location = block_info[None]["array-location"]
@@ -104,7 +102,7 @@ def to_xarray(
     coords: Any = "auto",
     attrs: dict[str, Any] | None = None,
     name: str | None = None,
-):
+) -> DataArray:
     return create_dataarray(
         element, chunks=chunks, use_dask=use_dask, coords=coords, attrs=attrs, name=name
     )
@@ -117,7 +115,7 @@ def create_dataarray(
     use_dask: bool = True,
     attrs: dict[str, Any] | None = None,
     name: str | None = None,
-) -> xarray.DataArray:
+) -> DataArray:
     inferred_coords = infer_coords(element) if coords == "auto" else coords
 
     if name is None:
@@ -129,10 +127,12 @@ def create_dataarray(
     if use_dask:
         element = to_dask(element, chunks)
 
-    return xarray.DataArray(element, coords=inferred_coords, attrs=attrs, name=name)
+    return DataArray(element, coords=inferred_coords, attrs=attrs, name=name)
 
 
-def to_dask(array: MrcArrayWrapper, chunks: Literal["auto"] | Sequence[int] = "auto"):
+def to_dask(
+    array: MrcArrayWrapper, chunks: Literal["auto"] | Sequence[int] = "auto"
+) -> da.Array:
     """
     Generate a dask array backed by a memory-mapped .mrc file.
     """
@@ -174,7 +174,7 @@ class MrcArrayWrapper:
         self.flags = memmap.data.flags
         self.mrc = memmap
 
-    def __getitem__(self, *args) -> np.ndarray:
+    def __getitem__(self, *args: Any) -> np.ndarray:
         return self.mrc.data.__getitem__(*args).astype(self.dtype)
 
     def __repr__(self) -> str:
