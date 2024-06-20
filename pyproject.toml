@@ -43,6 +43,9 @@ Documentation = "https://github.com/janelia-cellmap/fibsem-tools#readme"
 Issues = "https://github.com/janelia-cellmap/fibsem-tools/issues"
 Source = "https://github.com/janelia-cellmap/fibsem-tools"
 
+[project.scripts]
+fst = "fibsem_tools.cli.fst:fst"
+
 [tool.hatch]
 version.source = "vcs"
 build.hooks.vcs.version-file = "src/fibsem_tools/_version.py"
