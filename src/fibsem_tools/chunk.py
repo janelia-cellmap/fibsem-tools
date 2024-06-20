@@ -57,24 +57,22 @@ def autoscale_chunk_shape(
 
     Parameters
     ----------
-    chunk_shape : type
-        description
-    array_shape : type
-        description
-    size_limit : type
-        description
-    dtype : type
-        description
+    chunk_shape : tuple[int, ...]
+        The base chunk shape to scale. The resulting chunk shape will be factorizable by this
+        value.
+    array_shape : tuple[int, ...]
+        The shape of the array to create chunks for.
+    size_limit : str | int
+        The maximum size, in bytes, for a single chunk.
+    dtype : np.DtypeLike
+        The datatype of the elements in the array. Used for calculating how large chunks are
+        in memory.
 
 
     Returns
     -------
-    tuple of ints
+    tuple[int, ...]
         The original chunk size after each element has been multiplied by some integer.
-
-
-    Examples
-    --------
 
     """
 
@@ -150,10 +148,9 @@ def interval_remainder(
     interval_a: tuple[int, int], interval_b: tuple[int, int]
 ) -> tuple[int, int]:
     """
-    Repeat interval_b until it forms an interval that is larger than or equal to interval_a.
-    Return the number of elements that must be added to the start and end of interval_a to match this length.
-
-    If interval_b is an integer multiple of interval_a, return (0,0)
+    Repeat `interval_b` until it forms an interval that is larger than or equal to `interval_a`.
+    Return the number of elements that must be added to the start and end of `interval_a` to match
+    this length. If `interval_b` is an integer multiple of `interval_a`, return (0,0)
     """
     start_a, stop_a = interval_a
 

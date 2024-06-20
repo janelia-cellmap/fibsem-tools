@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from fibsem_tools.coordinate import stt_from_array
+from fibsem_tools.io.n5.core import to_dask
 from tests.conftest import PyramidRequest
 
 if TYPE_CHECKING:
@@ -15,7 +16,7 @@ import numpy as np
 import pytest
 import zarr
 
-from fibsem_tools.io.n5 import access, to_dask
+from fibsem_tools.io.n5.core import access
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer
 
 

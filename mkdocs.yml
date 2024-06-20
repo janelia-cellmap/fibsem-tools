@@ -37,21 +37,19 @@ nav:
         - dat: api/io/dat.md
         - hdf5: api/io/h5.md
         - mrc: api/io/mrc.md
-        - multiscale: api/io/multiscale.md
-        - neuroglancer: api/io/neuroglancer.md
         - tif: api/io/tif.md
         - util: api/io/util.md
-        - xarray: api/io/xr.md
-        - zarr: api/io/zarr.md
-        - server: api/io/server.md
-      - metadata:
-        - groundtruth: api/metadata/groundtruth.md
-        - transform: api/metadata/transform.md
-        - neuroglancer: api/metadata/neuroglancer.md
+        - n5: api/io/n5.md
+        - zarr: 
+          - zarr : api/io/zarr.md
+          - hierarchy:
+            - ome-ngff: api/io/zarr/hierarchy/omengff.md
+      - server: api/server.md
+      - chunk: api/chunk.md
+      - coordinate: api/coordinate.md
+      - type: api/type.md
       - cli:
-        - tiff2zarr: api/cli/tiff2zarr.md
-        - zarr_scan: api/cli/zarr_scan.md
-        - zarr2json: api/cli/zarr2json.md
+        - serve: api/cli/serve.md
 
 plugins:
 - mkdocstrings:

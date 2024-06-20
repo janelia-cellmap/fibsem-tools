@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fibsem_tools.chunk import normalize_chunks
+import fibsem_tools.io.n5.core
+import fibsem_tools.io.zarr.core
 
 if TYPE_CHECKING:
     from collections.abc import Hashable, Sequence
@@ -22,8 +24,7 @@ if TYPE_CHECKING:
 
 import fsspec
 
-from fibsem_tools.io import dat, h5, mrc, n5, tif
-from fibsem_tools.io import zarr as zarrio
+from fibsem_tools.io import dat, h5, mrc, tif
 from fibsem_tools.io.n5.hierarchy.cosem import (
     model_group as cosem_multiscale_group,
 )
@@ -84,9 +85,9 @@ def access(
     is_container = suffix in _container_extensions
 
     if suffix == ".zarr":
-        accessor = zarrio.access
+        accessor = fibsem_tools.io.zarr.access
     elif suffix == ".n5":
-        accessor = n5.access
+        accessor = fibsem_tools.io.n5.access
     elif suffix == ".h5":
         accessor = h5.access
     elif suffix in (".tif", ".tiff"):
@@ -105,9 +106,8 @@ def access(
     return accessor(path_outer, mode=mode, **kwargs)
 
 
-def read(path: PathLike, **kwargs) -> Any:
+def read(path: PathLike, **kwargs: Any) -> Any:
     """
-
     Read-only access for data (arrays and groups) from a variety of hierarchical array
     storage formats.
 
@@ -128,7 +128,8 @@ def read(path: PathLike, **kwargs) -> Any:
         collection represents a path, and this function will return the result of
         calling itself on each element of the collection.
 
-    Additional kwargs are passed to the format-specific access function.
+    **kwargs: Any
+        Additional kwargs passed to the format-specific access function.
 
     Returns
     -------
@@ -146,11 +147,21 @@ def read_dask(
     **kwargs: Any,
 ) -> da.Array:
     """
-    Create a dask array from a uri
+    Read an array from storage as a dask array.
+    This function is a lightweight wrapper around `fibsem_tools.io.core.read`
+
+    Parameters
+    ----------
+    path: str | Path
+        The path to the array to load.
+    chunks: Literal["auto"] | tuple[int, ...] = "auto"
+        The chunk size to use for the dask array.
+    **kwargs: Any
+        Additional keyword arguments passed to `read`
     """
     _, _, suffix = split_by_suffix(path, _suffixes)
     if suffix in (".zarr", ".n5"):
-        dasker = zarrio.to_dask
+        dasker = fibsem_tools.io.zarr.core.to_dask
     elif suffix == ".mrc":
         dasker = mrc.to_dask
     elif suffix == ".dat":
@@ -174,10 +185,33 @@ def read_xarray(
     name: str | None = None,
     **kwargs: Any,
 ) -> DataArray | DataTree:
+    """
+    Read the data at `path`. If that data is an array, it will be returned
+    as an `xarray.DataArray`. If it is a collection of arrays, it will be returned as
+     a `Datatree`.
+
+    Parameters
+    ----------
+    chunks: tuple[int, ...] | Literal["auto"]
+        The chunks to use for the returned array, if `use_dask` is set to `True`.
+    coords: Literal["auto"] | dict[Hashable, Any] = "auto"
+        The coordinates to use for the returned array. The default value of "auto"
+        results in coordinates being inferred from metadata.
+    use_dask: bool = True
+        Whether to wrap arrays with da.Array. Default is `True`.
+    attrs: dict[str, Any] | None:
+        Attributes for the returned value. The default of `None` uses the source attributes.
+    name: str | None
+        The name for the returned value. The default of `None` uses the source name.
+
+    Returns
+    -------
+        DataArray | DataTree
+    """
     _, _, suffix = split_by_suffix(path, _suffixes)
     element = read(path, **kwargs)
     if suffix == ".zarr":
-        return zarrio.to_xarray(
+        return fibsem_tools.io.zarr.core.to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -186,7 +220,7 @@ def read_xarray(
             name=name,
         )
     elif suffix == ".n5":
-        return n5.to_xarray(
+        return fibsem_tools.io.n5.core.to_xarray(
             element,
             chunks=chunks,
             coords=coords,
@@ -252,7 +286,7 @@ def model_multiscale_group(
     *,
     metadata_type: Literal["neuroglancer_n5", "ome-ngff", "cosem"],
     chunks: tuple[int, ...] | tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
-    **kwargs,
+    **kwargs: Any,
 ) -> GroupSpec:
     """
     Generate a model of a multiscale group from a list of DataArrays
@@ -271,7 +305,9 @@ def model_multiscale_group(
         will inherit the chunks of the input arrays. If the `data` attribute
         is not chunked, then each stored array will have chunks equal to the shape of
         the input array.
-
+    **kwargs: Any
+        Additional keyword arguments are passed to the groupspec constructor wrapped by this
+        function.
     Returns
     -------
 
@@ -311,8 +347,29 @@ def create_multiscale_group(
     metadata_type: Literal["neuroglancer", "cosem", "ome-ngff", "ome-ngff@0.4"],
     chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
     compressor: Codec | Literal["auto"] = "auto",
-    **kwargs,
+    **kwargs: Any,
 ) -> zarr.Group:
+    """
+    Create a multiscale group. This function is a light wrapper around `model_group`.
+
+    Parameters
+    ----------
+    store: BaseStore
+        The Zarr storage backend to use.
+    path: str
+        The path to the group relative to the `store`.
+    arrays: dict[str, DataArray]
+        The arrays to use as a template for the multiscale group
+    metadata_type: Literal["neuroglancer", "cosem", "ome-ngff", "ome-ngff@0.4"]
+        The flavor of metadata to use in the multiscale group.
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto"
+        The chunks used in the arrays in the multiscale group. The default value of "auto"
+        will pick chunks based on the size and datatype of the largest array in `arrays`.
+    compressor: Codec | Literal["auto"] = "auto"
+        The compressor to use for the arrays. The default value of "auto" will use the default
+        compressor, which is Zstd.
+    **kwargs: Additional keyword arguments are passed to the `to_zarr` method of GroupSpec.
+    """
     group_model = model_multiscale_group(
         arrays=arrays, metadata_type=metadata_type, chunks=chunks, compressor=compressor
     )

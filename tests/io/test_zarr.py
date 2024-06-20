@@ -2,6 +2,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from fibsem_tools.io.zarr.core import (
+    DEFAULT_ZARR_STORE,
+    access,
+    array_from_dask,
+    chunk_keys,
+    create_datatree,
+    get_url,
+    parse_url,
+    to_dask,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any, Literal
@@ -24,15 +35,7 @@ from fibsem_tools.io.core import (
     read_dask,
     read_xarray,
 )
-from fibsem_tools.io.zarr import (
-    DEFAULT_ZARR_STORE,
-    access,
-    array_from_dask,
-    chunk_keys,
-    create_datatree,
-    get_url,
-    parse_url,
-    to_dask,
+from fibsem_tools.io.zarr.core import (
     to_xarray,
 )
 from fibsem_tools.io.zarr.hierarchy import omengff

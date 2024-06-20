@@ -71,6 +71,16 @@ dependencies = [
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/fibsem_tools tests}"
 
+[tool.hatch.envs.docs]
+dependencies = [
+"mkdocs-material == 9.1.18",
+ "mkdocstrings[python] == 0.22.0",
+ "pytest-examples == 0.0.9"
+  ]
+
+[tool.hatch.envs.docs.scripts]
+serve = "mkdocs serve --watch=src"
+
 [tool.coverage.run]
 source_pkgs = ["fibsem_tools", "tests"]
 branch = true
