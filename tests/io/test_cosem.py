@@ -10,7 +10,7 @@ from xarray import DataArray
 from zarr import N5FSStore
 
 from fibsem_tools.coordinate import stt_from_array, stt_to_coords
-from fibsem_tools.io.n5 import create_dataarray
+from fibsem_tools.io.n5.core import create_dataarray
 from tests.conftest import PyramidRequest
 
 

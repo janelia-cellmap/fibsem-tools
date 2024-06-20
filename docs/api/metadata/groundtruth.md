@@ -1,1 +1,0 @@
-::: fibsem_tools.metadata.groundtruth
