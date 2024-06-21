@@ -12,7 +12,7 @@
         <meta name="author" content="Davis Bennett">
       
       
-        <link rel="canonical" href="https://janelia-cellmap.github.io/fibsem-tools/api/io/zarr/hierarchy/omengff/">
+        <link rel="canonical" href="https://janelia-cellmap.github.io/fibsem-tools/api/io/zarr/hierarchy/ome_ngff/">
       
       
         <link rel="prev" href="../../core/">
@@ -79,7 +79,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#fibsem_tools.io.zarr.hierarchy.omengff" class="md-skip">
+        <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff" class="md-skip">
           Skip to content
         </a>
       
@@ -590,21 +590,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#fibsem_tools.io.zarr.hierarchy.omengff" class="md-nav__link">
-    omengff
+  <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff" class="md-nav__link">
+    ome_ngff
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#fibsem_tools.io.zarr.hierarchy.omengff.multiscale_group" class="md-nav__link">
-    multiscale_group
+  <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff.model_group" class="md-nav__link">
+    model_group
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#fibsem_tools.io.zarr.hierarchy.omengff.create_dataarray" class="md-nav__link">
+  <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff.create_dataarray" class="md-nav__link">
     create_dataarray
   </a>
   
@@ -777,21 +777,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#fibsem_tools.io.zarr.hierarchy.omengff" class="md-nav__link">
-    omengff
+  <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff" class="md-nav__link">
+    ome_ngff
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#fibsem_tools.io.zarr.hierarchy.omengff.multiscale_group" class="md-nav__link">
-    multiscale_group
+  <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff.model_group" class="md-nav__link">
+    model_group
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#fibsem_tools.io.zarr.hierarchy.omengff.create_dataarray" class="md-nav__link">
+  <a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff.create_dataarray" class="md-nav__link">
     create_dataarray
   </a>
   
@@ -821,7 +821,7 @@
 
 
 
-<a id="fibsem_tools.io.zarr.hierarchy.omengff"></a>
+<a id="fibsem_tools.io.zarr.hierarchy.ome_ngff"></a>
   <div class="doc doc-contents first">
 
   
@@ -841,12 +841,12 @@
 
 
 
-<h2 id="fibsem_tools.io.zarr.hierarchy.omengff.multiscale_group" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">multiscale_group</span>
+<h2 id="fibsem_tools.io.zarr.hierarchy.ome_ngff.model_group" class="doc doc-heading">
+          <span class="doc doc-object-name doc-function-name">model_group</span>
 
 
-<a href="#fibsem_tools.io.zarr.hierarchy.omengff.multiscale_group" class="headerlink" title="Permanent link">#</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">multiscale_group</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+<a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff.model_group" class="headerlink" title="Permanent link">#</a></h2>
+<div class="doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">model_group</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></code></pre></div>
 
   <div class="doc doc-contents ">
@@ -884,7 +884,7 @@ This is a very thin wrapper around <code>xarray_ome_ngff.v04.multiscale.model_gr
         <tr>
           <td><code>chunks</code></td>
           <td>
-                <code>tuple[tuple[int, ...]] | <span title="typing.Literal">Literal</span>[&#39;auto&#39;]</code>
+                <code>tuple[tuple[int, ...]] | tuple[int, ...] | <span title="typing.Literal">Literal</span>[&#39;auto&#39;]</code>
           </td>
           <td>
             <div class="doc-md-description">
@@ -939,7 +939,7 @@ a Zarr group in storage.</p>
   </table>
 
           <details class="quote">
-            <summary>Source code in <code>src/fibsem_tools/io/zarr/hierarchy/omengff.py</code></summary>
+            <summary>Source code in <code>src/fibsem_tools/io/zarr/hierarchy/ome_ngff.py</code></summary>
             <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-16">16</a></span>
 <span class="normal"><a href="#__codelineno-0-17">17</a></span>
 <span class="normal"><a href="#__codelineno-0-18">18</a></span>
@@ -966,10 +966,10 @@ a Zarr group in storage.</p>
 <span class="normal"><a href="#__codelineno-0-39">39</a></span>
 <span class="normal"><a href="#__codelineno-0-40">40</a></span>
 <span class="normal"><a href="#__codelineno-0-41">41</a></span>
-<span class="normal"><a href="#__codelineno-0-42">42</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16"></a><span class="k">def</span> <span class="nf">multiscale_group</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-42">42</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16"></a><span class="k">def</span> <span class="nf">model_group</span><span class="p">(</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17"></a>    <span class="n">arrays</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DataArray</span><span class="p">],</span>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a>    <span class="o">*</span><span class="p">,</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19"></a>    <span class="n">chunks</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19"></a>    <span class="n">chunks</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
 </span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 </span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Group</span><span class="p">:</span>
 </span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -992,7 +992,7 @@ a Zarr group in storage.</p>
 </span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39"></a><span class="sd">        A `GroupSpec` instance that models a multiscale group, and can be used to create</span>
 </span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40"></a><span class="sd">        a Zarr group in storage.</span>
 </span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42"></a>    <span class="k">return</span> <span class="n">model_group</span><span class="p">(</span><span class="n">arrays</span><span class="o">=</span><span class="n">arrays</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="n">chunks</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42"></a>    <span class="k">return</span> <span class="n">multiscale</span><span class="o">.</span><span class="n">model_group</span><span class="p">(</span><span class="n">arrays</span><span class="o">=</span><span class="n">arrays</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="n">chunks</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
           </details>
   </div>
@@ -1004,11 +1004,11 @@ a Zarr group in storage.</p>
 
 
 
-<h2 id="fibsem_tools.io.zarr.hierarchy.omengff.create_dataarray" class="doc doc-heading">
+<h2 id="fibsem_tools.io.zarr.hierarchy.ome_ngff.create_dataarray" class="doc doc-heading">
           <span class="doc doc-object-name doc-function-name">create_dataarray</span>
 
 
-<a href="#fibsem_tools.io.zarr.hierarchy.omengff.create_dataarray" class="headerlink" title="Permanent link">#</a></h2>
+<a href="#fibsem_tools.io.zarr.hierarchy.ome_ngff.create_dataarray" class="headerlink" title="Permanent link">#</a></h2>
 <div class="doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">create_dataarray</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">array</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="n">use_dask</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
@@ -1092,7 +1092,7 @@ a Zarr group in storage.</p>
   </table>
 
           <details class="quote">
-            <summary>Source code in <code>src/fibsem_tools/io/zarr/hierarchy/omengff.py</code></summary>
+            <summary>Source code in <code>src/fibsem_tools/io/zarr/hierarchy/ome_ngff.py</code></summary>
             <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-45">45</a></span>
 <span class="normal"><a href="#__codelineno-0-46">46</a></span>
 <span class="normal"><a href="#__codelineno-0-47">47</a></span>
@@ -1147,7 +1147,7 @@ a Zarr group in storage.</p>
 </span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68"></a>    <span class="n">wrapper</span> <span class="o">=</span> <span class="n">DaskArrayWrapper</span><span class="p">(</span><span class="n">chunks</span><span class="o">=</span><span class="n">chunks</span><span class="p">)</span> <span class="k">if</span> <span class="n">use_dask</span> <span class="k">else</span> <span class="n">ZarrArrayWrapper</span><span class="p">()</span>
 </span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69"></a>
-</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">read_array</span><span class="p">(</span><span class="n">array</span><span class="o">=</span><span class="n">array</span><span class="p">,</span> <span class="n">array_wrapper</span><span class="o">=</span><span class="n">wrapper</span><span class="p">)</span>
+</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">multiscale</span><span class="o">.</span><span class="n">read_array</span><span class="p">(</span><span class="n">array</span><span class="o">=</span><span class="n">array</span><span class="p">,</span> <span class="n">array_wrapper</span><span class="o">=</span><span class="n">wrapper</span><span class="p">)</span>
 </span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71"></a>    <span class="c1"># read_array doesn&#39;t take the name kwarg at the moment</span>
 </span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72"></a>    <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a>        <span class="n">result</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
