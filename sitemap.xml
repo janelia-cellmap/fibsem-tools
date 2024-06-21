@@ -56,11 +56,6 @@
          <changefreq>daily</changefreq>
     </url>
     <url>
-         <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/n5/</loc>
-         <lastmod>2024-06-21</lastmod>
-         <changefreq>daily</changefreq>
-    </url>
-    <url>
          <loc>https://janelia-cellmap.github.io/fibsem-tools/api/io/tif/</loc>
          <lastmod>2024-06-21</lastmod>
          <changefreq>daily</changefreq>
