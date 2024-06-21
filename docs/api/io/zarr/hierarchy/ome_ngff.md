@@ -1,1 +1,1 @@
-::: fibsem_tools.io.zarr.hierarchy.omengff
+::: fibsem_tools.io.zarr.hierarchy.ome_ngff

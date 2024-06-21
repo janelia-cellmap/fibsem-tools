@@ -25,7 +25,7 @@ from zarr.errors import ReadOnlyError
 from zarr.indexing import BasicIndexer
 from zarr.storage import BaseStore, FSStore
 
-from fibsem_tools.io.zarr.hierarchy import omengff
+from fibsem_tools.io.zarr.hierarchy import ome_ngff
 
 noneslice = slice(None)
 
@@ -304,7 +304,7 @@ def create_dataarray(
     Create an xarray.DataArray from a Zarr array in an OME-NGFF hierarchy.
     """
     if coords == "auto":
-        return omengff.create_dataarray(
+        return ome_ngff.create_dataarray(
             element, use_dask=use_dask, chunks=chunks, name=name
         )
 

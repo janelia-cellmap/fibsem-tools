@@ -31,7 +31,7 @@ from fibsem_tools.io.n5.hierarchy.cosem import (
 from fibsem_tools.io.n5.hierarchy.neuroglancer import (
     model_group as neuroglancer_multiscale_group,
 )
-from fibsem_tools.io.zarr.hierarchy.omengff import (
+from fibsem_tools.io.zarr.hierarchy.ome_ngff import (
     model_group as ome_ngff_v04_multiscale_group,
 )
 
