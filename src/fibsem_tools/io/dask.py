@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
     import zarr
 
 import random
-from os import PathLike
+from fibsem_tools.type import PathLike
 
 import backoff
 import dask
@@ -18,6 +19,7 @@ import dask.array as da
 import numpy as np
 from aiohttp import ServerDisconnectedError
 from dask import delayed
+from dask.bag import Bag
 from dask.array.core import (
     normalize_chunks as normalize_chunks_dask,
 )
@@ -232,7 +234,7 @@ def write_blocks_delayed(
 
 @backoff.on_exception(backoff.expo, (ServerDisconnectedError, OSError))
 def setitem(
-    source,
+    source: da.Array,
     dest: zarr.Array,
     selection: tuple[slice, ...],
     *,
@@ -261,15 +263,15 @@ def copy_from_slices(slices, source_array, dest_array):
 
 
 def copy_array(
-    source: PathLike | (np.ndarray | zarr.Array),
-    dest: PathLike | (np.ndarray | zarr.Array),
+    source: PathLike | (np.ndarray[Any, Any] | zarr.Array),
+    dest: PathLike | (np.ndarray[Any, Any] | zarr.Array),
     *,
     chunk_size: str | tuple[int, ...] = "100 MB",
     write_empty_chunks: bool = False,
     npartitions: int = 10000,
     randomize: bool = True,
     keep_attrs: bool = True,
-):
+) -> Bag:
     """
     Use Dask to copy data from one chunked array to another.
 
@@ -322,7 +324,7 @@ def copy_array(
 
     dest_arr = (
         access(dest, mode="a", write_empty_chunks=write_empty_chunks)
-        if isinstance(dest, PathLike)
+        if isinstance(dest, (str, Path))
         else dest
     )
 
@@ -394,7 +396,11 @@ def pad_arrays(arrays, constant_values):
     ]
 
     # pad elements of the first axis differently
-    def padfun(array, pad_width, constant_values):
+    def padfun(
+        array: np.ndarray[Any, Any],
+        pad_width: tuple[tuple[int, int], ...],
+        constant_values: tuple[Any, ...],
+    ) -> np.ndarray[Any.Any]:
         return np.stack(
             [
                 np.pad(a, pad_width, constant_values=cv)

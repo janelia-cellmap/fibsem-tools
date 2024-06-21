@@ -245,9 +245,9 @@ class CosemMultiscaleGroupV2(GroupSpec):
 
 
 def model_group(
-    *,
     arrays: dict[str, DataArray],
-    chunks: tuple[tuple[int, ...], ...] | Literal["auto"] = "auto",
+    *,
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
     **kwargs,
 ) -> Group:
     """
@@ -259,7 +259,11 @@ def model_group(
 
     arrays: dict[str, DataArray]
         The data to model.
-    chunks: The chunks for each Zarr array in the group.
+    chunks: chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
+        The chunks for each array in the group.
+    **kwargs:
+        Additional keyword arguments passed to `Group.from_arrays`
+
 
     """
     return Group.from_arrays(

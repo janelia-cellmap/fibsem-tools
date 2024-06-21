@@ -32,7 +32,7 @@ from fibsem_tools.io.n5.hierarchy.neuroglancer import (
     model_group as neuroglancer_multiscale_group,
 )
 from fibsem_tools.io.zarr.hierarchy.omengff import (
-    multiscale_group as ome_ngff_v04_multiscale_group,
+    model_group as ome_ngff_v04_multiscale_group,
 )
 
 NGFF_DEFAULT_VERSION = "0.4"
