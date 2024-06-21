@@ -22,9 +22,9 @@ N5_AXES_3D = ["x", "y", "z"]
 
 
 def model_group(
-    *,
     arrays: dict[str, DataArray],
-    chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
+    *,
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
     **kwargs,
 ) -> Group:
     """
@@ -36,9 +36,10 @@ def model_group(
 
     arrays: dict[str, DataArray]
         The data to model.
-    chunks: The chunks for each Zarr array in the group.
-
-
+    chunks: tuple[tuple[int, ...], ...] | tuple[int, ...] | Literal["auto"] = "auto",
+        The chunks for each Zarr array in the group.
+    **kwargs:
+        Additional keyword arguments passed to `Group.from_arrays`
     """
     _chunks = normalize_chunks(arrays.values(), chunks)
 

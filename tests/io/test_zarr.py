@@ -38,7 +38,7 @@ from fibsem_tools.io.core import (
 from fibsem_tools.io.zarr.core import (
     to_xarray,
 )
-from fibsem_tools.io.zarr.hierarchy import omengff
+from fibsem_tools.io.zarr.hierarchy import ome_ngff
 from tests.conftest import PyramidRequest
 
 
@@ -203,10 +203,10 @@ def test_read_dataarray(
 
     if metadata_type == "ome_ngff":
         store = NestedDirectoryStore(str(tmpdir))
-        group_model = omengff.model_group(
+        group_model = ome_ngff.model_group(
             arrays=pyramid_dict, transform_precision=4, chunks=chunks
         )
-        dataarray_creator = omengff.create_dataarray
+        dataarray_creator = ome_ngff.create_dataarray
     else:
         msg = f"Unrecognized metadata type: {metadata_type}"
         raise ValueError(msg)

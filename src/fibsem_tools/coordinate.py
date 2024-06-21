@@ -13,7 +13,9 @@ if TYPE_CHECKING:
     from fibsem_tools.type import ArrayLike
 
 
-def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
+def stt_coord(
+    length: int, dim: str, scale: float, translate: float, unit: str
+) -> DataArray:
     """
     Create a coordinate variable parametrized by a shape, a scale, a translation, and
     a unit. The translation is applied after the scaling.
@@ -25,10 +27,10 @@ def stt_coord(length: int, dim: str, scale: float, translate: float, unit: str):
 
 def stt_array(
     data: ArrayLike,
-    dims: tuple[str, ...],
-    scales: tuple[float, ...],
-    translates: tuple[float, ...],
-    units: tuple[str, ...],
+    dims: Sequence[str],
+    scales: Sequence[float],
+    translates: Sequence[float],
+    units: Sequence[str],
     **kwargs: Any,
 ) -> DataArray:
     """
@@ -47,7 +49,7 @@ def flip(data: DataArray, dims: Sequence[str] = []) -> DataArray:
     """
     Reverse the data backing a DataArray along the specified dimension(s).
     """
-    flip_selector = ()
+    flip_selector: tuple[slice, ...] = ()
     for dim in data.dims:
         if dim in dims:
             flip_selector += (slice(None, None, -1),)
@@ -98,7 +100,11 @@ def stt_from_coords(
             raise ValueError(msg)
 
     return STTransform(
-        axes=axes, units=units, translate=translate, scale=scale, order=order
+        axes=tuple(axes),
+        units=tuple(units),
+        translate=tuple(translate),
+        scale=tuple(scale),
+        order=order,
     )
 
 
@@ -127,7 +133,7 @@ def stt_from_array(array: DataArray, *, reverse_axes: bool = False) -> STTransfo
     """
 
     orderer = slice(None)
-    output_order = "C"
+    output_order: Literal["C", "F"] = "C"
     if reverse_axes:
         orderer = slice(-1, None, -1)
         output_order = "F"
@@ -135,7 +141,9 @@ def stt_from_array(array: DataArray, *, reverse_axes: bool = False) -> STTransfo
     return stt_from_coords(tuple(array.coords.values())[orderer], output_order)
 
 
-def stt_to_coords(transform: STTransform, shape: tuple[int, ...]) -> tuple[DataArray]:
+def stt_to_coords(
+    transform: STTransform, shape: tuple[int, ...]
+) -> tuple[DataArray, ...]:
     """
     Given an array shape, return a list of DataArrays representing a
     bounded coordinate grid derived from this transform. This list can be used as

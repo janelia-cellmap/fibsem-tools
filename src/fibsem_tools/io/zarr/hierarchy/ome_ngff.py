@@ -10,13 +10,13 @@ if TYPE_CHECKING:
     from xarray import DataArray
 
 from xarray_ome_ngff.array_wrap import DaskArrayWrapper, ZarrArrayWrapper
-from xarray_ome_ngff.v04.multiscale import model_group, read_array
+import xarray_ome_ngff.v04.multiscale as multiscale
 
 
-def multiscale_group(
+def model_group(
     arrays: dict[str, DataArray],
     *,
-    chunks: tuple[tuple[int, ...]] | Literal["auto"] = "auto",
+    chunks: tuple[tuple[int, ...]] | tuple[int, ...] | Literal["auto"] = "auto",
     **kwargs: Any,
 ) -> Group:
     """
@@ -39,7 +39,7 @@ def multiscale_group(
         A `GroupSpec` instance that models a multiscale group, and can be used to create
         a Zarr group in storage.
     """
-    return model_group(arrays=arrays, chunks=chunks, **kwargs)
+    return multiscale.model_group(arrays=arrays, chunks=chunks, **kwargs)
 
 
 def create_dataarray(
@@ -67,7 +67,7 @@ def create_dataarray(
     """
     wrapper = DaskArrayWrapper(chunks=chunks) if use_dask else ZarrArrayWrapper()
 
-    result = read_array(array=array, array_wrapper=wrapper)
+    result = multiscale.read_array(array=array, array_wrapper=wrapper)
     # read_array doesn't take the name kwarg at the moment
     if name is not None:
         result.name = name

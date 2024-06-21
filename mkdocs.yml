@@ -46,7 +46,7 @@ nav:
         - zarr: 
           - core : api/io/zarr/core.md
           - hierarchy:
-            - ome-ngff: api/io/zarr/hierarchy/omengff.md
+            - ome-ngff: api/io/zarr/hierarchy/ome_ngff.md
       - server: api/server.md
       - chunk: api/chunk.md
       - coordinate: api/coordinate.md

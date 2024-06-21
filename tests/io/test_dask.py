@@ -23,7 +23,7 @@ from fibsem_tools.io.dask import (
 
 @pytest.mark.parametrize("keep_attrs", [True, False])
 @pytest.mark.parametrize("shape", [(10,), (10, 10)])
-def test_array_copy_from_array(shape, keep_attrs):
+def test_array_copy_from_array(shape, keep_attrs) -> None:
     data_a = np.random.randint(0, 255, shape)
     data_b = np.zeros_like(data_a)
     chunks = (3,) * data_a.ndim
@@ -48,7 +48,7 @@ def test_array_copy_from_array(shape, keep_attrs):
 
 
 @pytest.mark.parametrize("shape", [(1000,), (100, 100)])
-def test_array_copy_from_path(tmp_zarr, shape):
+def test_array_copy_from_path(tmp_zarr, shape) -> None:
     g = zarr.group(zarr.NestedDirectoryStore(tmp_zarr))
     arr_1 = g.create_dataset(name="a", data=np.random.randint(0, 255, shape))
     arr_2 = g.create_dataset(name="b", data=np.zeros(arr_1.shape, dtype=arr_1.dtype))
@@ -58,7 +58,7 @@ def test_array_copy_from_path(tmp_zarr, shape):
     assert np.array_equal(arr_2, arr_1)
 
 
-def test_write_blocks_delayed():
+def test_write_blocks_delayed() -> None:
     arr = da.random.randint(0, 255, (10, 10, 10), dtype="uint8")
     store = zarr.MemoryStore()
     arr_spec = ArraySpec.from_array(arr, chunks=(2, 2, 2))
@@ -77,7 +77,7 @@ def test_write_blocks_delayed():
         (10, 11, 12),
     ],
 )
-def test_chunksafe_writes(chunks: tuple[int, ...]):
+def test_chunksafe_writes(chunks: tuple[int, ...]) -> None:
     store = zarr.MemoryStore()
     array = zarr.open(
         store, path="foo", chunks=chunks, shape=tuple(v * 2 for v in chunks)
@@ -94,7 +94,7 @@ def test_chunksafe_writes(chunks: tuple[int, ...]):
         setitem(invalid_data, array, selection, chunk_safe=True)
 
 
-def test_store_blocks(tmp_zarr):
+def test_store_blocks(tmp_zarr) -> None:
     data = da.arange(256).reshape(16, 16).rechunk((4, 4))
     z = zarr.open(tmp_zarr, mode="w", shape=data.shape, chunks=data.chunksize)
     dask.delayed(store_blocks(data, z)).compute()

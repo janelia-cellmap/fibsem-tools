@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from typing import Literal
-
+    from dask.array.core import Array as DArray
     import numpy.typing as npt
     from xarray import DataArray
 
@@ -35,7 +35,7 @@ def are_chunks_aligned(
     )
 
 
-def ensure_minimum_chunksize(array, chunksize):
+def ensure_minimum_chunksize(array: DArray, chunksize: tuple[int, ...]) -> DArray:
     old_chunks = np.array(array.chunksize)
     new_chunks = old_chunks.copy()
     chunk_fitness = np.less(old_chunks, chunksize)
@@ -49,7 +49,7 @@ def autoscale_chunk_shape(
     array_shape: tuple[int, ...],
     size_limit: str | int,
     dtype: npt.DTypeLike,
-):
+) -> tuple[int, ...]:
     """
     Scale a chunk size by an integer factor along each axis as much as possible without
     producing a chunk greater than a given size limit. Scaling will be applied to axes
@@ -200,7 +200,7 @@ def normalize_chunks(
     -------
         tuple[tuple[int, ...], ...]
     """
-    result: tuple[tuple[int, ...]] = ()
+    result: tuple[tuple[int, ...], ...] = ()
     arrays_tuple = tuple(arrays)
     if chunks == "auto":
         # duck typing check for all dask arrays
@@ -217,11 +217,16 @@ def normalize_chunks(
             ) * len(arrays_tuple)
 
     elif all(isinstance(c, tuple) for c in chunks):
-        result = chunks
+        chunks = cast(tuple[tuple[int, ...], ...], chunks)
+        if all(all(isinstance(sub, int) for sub in c) for c in chunks):
+            result = chunks
+        else:
+            msg = f"Not all inner elements of chunks were integers: {chunks}"
+            raise ValueError(msg)
     else:
         all_ints = all(isinstance(c, int) for c in chunks)
         if all_ints:
-            result = (chunks,) * len(arrays_tuple)
+            result = cast(tuple[tuple[int, ...], ...], (chunks,) * len(arrays_tuple))
         else:
             msg = f"All values in chunks must be ints. Got {chunks}"
             raise ValueError(msg)
