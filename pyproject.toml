@@ -7,7 +7,7 @@ name = "fibsem-tools"
 dynamic = ["version"]
 description = 'Tools for processing FIBSEM datasets'
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 keywords = ["fibsem", "zarr", "n5"]
 authors = [
@@ -26,7 +26,6 @@ dependencies = [
   "fsspec[s3] >= 2022.2.0",
   "zarr >= 2.18, <3",
   "mrcfile >=1.2.0, <2",
-  "numpy >=1.20.0, <2",
   "xarray >=2022.03.0",
   "backoff >=1.10.0, <2",
   "xarray-ome-ngff >= 3.1.1, <4",
