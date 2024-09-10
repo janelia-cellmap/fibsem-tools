@@ -50,9 +50,6 @@ fst = "fibsem_tools.cli.fst:fst"
 version.source = "vcs"
 build.hooks.vcs.version-file = "src/fibsem_tools/_version.py"
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.hatch.envs.test]
 dependencies = [
   "pytest",
