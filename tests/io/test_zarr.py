@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 from fibsem_tools.io.zarr.core import (
     DEFAULT_ZARR_STORE,
-    access,
     array_from_dask,
     chunk_keys,
     create_datatree,
@@ -31,6 +30,7 @@ from zarr.storage import FSStore, NestedDirectoryStore
 
 from fibsem_tools.coordinate import stt_array, stt_from_array
 from fibsem_tools.io.core import (
+    access,
     model_multiscale_group,
     read_dask,
     read_xarray,
@@ -129,7 +129,7 @@ def test_read_datatree(
         # group[key].attrs["transform"] = STTransform.from_xarray(value).model_dump()
 
     data_store = create_datatree(
-        access(tmp_zarr, path, mode="r"),
+        access(os.path.join(tmp_zarr, path), mode="r"),
         use_dask=use_dask,
         name=name,
         coords=coords,
@@ -149,7 +149,7 @@ def test_read_datatree(
     # create a datatree directly
     tree_dict = {
         k: DataArray(
-            access(tmp_zarr, os.path.join(path, k), mode="r"),
+            access(os.path.join(tmp_zarr, path, k), mode="r"),
             coords=data[k].coords,
             name="data",
         )
@@ -229,7 +229,7 @@ def test_access_array(tmp_zarr: str) -> None:
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
     z = zarr.open(tmp_zarr, mode="w", shape=data.shape, chunks=10)
     z[:] = data
-    assert np.array_equal(access(tmp_zarr, "", mode="r")[:], data)
+    assert np.array_equal(access(tmp_zarr, mode="r")[:], data)
 
 
 def test_access_group(tmp_zarr: str) -> None:
@@ -239,9 +239,9 @@ def test_access_group(tmp_zarr: str) -> None:
     zg = zarr.open(default_store(tmp_zarr), mode="a")
     zg[path] = data
     zg.attrs["bar"] = 10
-    assert access(tmp_zarr, "", mode="a") == zg
+    assert access(tmp_zarr, mode="a") == zg
 
-    zg = access(tmp_zarr, "", mode="w", attrs={"bar": 10})
+    zg = access(tmp_zarr, mode="w", attrs={"bar": 10})
     zg["foo"] = data
     assert zarr.open(default_store(tmp_zarr), mode="a") == zg
 
@@ -250,7 +250,9 @@ def test_access_group(tmp_zarr: str) -> None:
 def test_dask(tmp_zarr: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     path = "foo"
     data = np.arange(100)
-    zarray = access(tmp_zarr, path, mode="w", shape=data.shape, dtype=data.dtype)
+    zarray = access(
+        os.path.join(tmp_zarr, path), mode="w", shape=data.shape, dtype=data.dtype
+    )
     zarray[:] = data
     name_expected = "foo"
 

@@ -13,10 +13,11 @@ if TYPE_CHECKING:
 
 import dask.array as da
 import numpy as np
+import os
 import pytest
 import zarr
 
-from fibsem_tools.io.n5.core import access
+from fibsem_tools.io.core import access
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer
 
 
@@ -24,27 +25,28 @@ def test_access_array(tmp_n5: str) -> None:
     data = np.random.randint(0, 255, size=(100,), dtype="uint8")
     z = zarr.open(tmp_n5, mode="w", shape=data.shape, chunks=10)
     z[:] = data
-    assert np.array_equal(access(tmp_n5, "", mode="r")[:], data)
+    assert np.array_equal(access(tmp_n5, mode="r")[:], data)
 
 
-def test_access_group(tmp_zarr: str) -> None:
+def test_access_group(tmp_n5: str) -> None:
     data = np.zeros(100, dtype="uint8") + 42
     path = "foo"
-    zg = zarr.open(zarr.N5FSStore(tmp_zarr), mode="a")
-    zg[path] = data
-    zg.attrs["bar"] = 10
-    assert access(tmp_zarr, "", mode="a") == zg
-
-    zg = access(tmp_zarr, "", mode="w", attrs={"bar": 10})
-    zg["foo"] = data
-    assert zarr.open(zarr.N5FSStore(tmp_zarr), mode="a") == zg
+    zg = zarr.open(zarr.N5FSStore(tmp_n5), mode="a")
+    zgg = zg.create_group("bar")
+    zgg[path] = data
+    zgg.attrs["bar"] = 10
+    assert access(tmp_n5, mode="a") == zarr.open(zarr.N5FSStore(tmp_n5), mode="a")
+    assert access(os.path.join(tmp_n5, "bar"), "a") == zg["bar"]
+    assert np.array_equal(access(os.path.join(tmp_n5, "bar", "foo"), "a")[:], data)
 
 
 @pytest.mark.parametrize("chunks", ["auto", (10,)])
 def test_dask(tmp_n5: str, chunks: Literal["auto"] | tuple[int, ...]) -> None:
     path = "foo"
     data = np.arange(100)
-    zarray = access(tmp_n5, path, mode="w", shape=data.shape, dtype=data.dtype)
+    zarray = access(
+        os.path.join(tmp_n5, path), mode="w", shape=data.shape, dtype=data.dtype
+    )
     zarray[:] = data
     name_expected = "foo"
 

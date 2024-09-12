@@ -6,10 +6,9 @@ import pytest
 from xarray.testing import assert_equal
 
 from fibsem_tools.coordinate import stt_array
-from fibsem_tools.io.core import read_xarray
+from fibsem_tools.io.core import read_xarray, access
 from fibsem_tools.io.mrc import (
     MrcArrayWrapper,
-    access,
     recarray_to_dict,
     to_dask,
     to_xarray,
