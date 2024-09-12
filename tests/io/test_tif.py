@@ -7,7 +7,7 @@ import pytest
 import tifffile
 
 from fibsem_tools import read
-from fibsem_tools.core import access
+from fibsem_tools.io.core import access
 
 
 @pytest.mark.parametrize("file_name", ["test.tif", "test.tiff"])
