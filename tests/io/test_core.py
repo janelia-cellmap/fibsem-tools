@@ -33,7 +33,7 @@ def test_path_splitting():
 
     path = os.path.join("0", "1", "2.n5")
     split = split_by_suffix(path, (".n5",))
-    assert split == (os.path.join("0", "1", "2.n5"), "", ".n5")
+    assert split == (os.path.join("0", "1", "2.n5"), "/", ".n5")
 
 
 @pytest.mark.parametrize("fmt", ["zarr", "n5"])
