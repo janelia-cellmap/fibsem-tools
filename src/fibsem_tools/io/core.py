@@ -267,8 +267,9 @@ def split_by_suffix(uri: PathLike, suffixes: Sequence[str]) -> tuple[str, str, s
         raise ValueError(msg)
 
     index = [idx for idx, val in enumerate(suffixed) if val][-1]
+
     if index == (len(parts) - 1):
-        pre, post = subpath, ""
+        pre, post = subpath.rstrip(separator), ""
     else:
         pre, post = (
             separator.join([p.strip(separator) for p in parts[: index + 1]]),

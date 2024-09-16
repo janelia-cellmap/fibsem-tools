@@ -22,18 +22,26 @@ from fibsem_tools.io.core import (
 from tests.conftest import PyramidRequest
 
 
-def test_path_splitting():
+def test_path_splitting() -> None:
     path = "s3://0/1/2.n5/3/4"
-    split = split_by_suffix(path, (".n5",))
-    assert split == ("s3://0/1/2.n5", "3/4", ".n5")
+    expected = ("s3://0/1/2.n5", "3/4", ".n5")
+    observed = split_by_suffix(path, (".n5",))
+    assert observed == expected
 
     path = os.path.join("0", "1", "2.n5", "3", "4")
-    split = split_by_suffix(path, (".n5",))
-    assert split == (os.path.join("0", "1", "2.n5"), os.path.join("3", "4"), ".n5")
+    observed = split_by_suffix(path, (".n5",))
+    expected = (os.path.join("0", "1", "2.n5"), os.path.join("3", "4"), ".n5")
+    assert observed == expected
 
     path = os.path.join("0", "1", "2.n5")
-    split = split_by_suffix(path, (".n5",))
-    assert split == (os.path.join("0", "1", "2.n5"), "", ".n5")
+    observed = split_by_suffix(path, (".n5",))
+    expected = (os.path.join("0", "1", "2.n5"), "", ".n5")
+    assert observed == expected
+
+    path = "foo.n5/"
+    observed = split_by_suffix(path, (".n5",))
+    expected = "foo.n5", "", ".n5"
+    assert observed == expected
 
 
 @pytest.mark.parametrize("fmt", ["zarr", "n5"])
