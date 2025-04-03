@@ -24,8 +24,7 @@ import dask.array as da
 import numpy as np
 import pytest
 import zarr
-from datatree import DataTree
-from xarray import DataArray
+from xarray import DataArray, DataTree
 from xarray.testing import assert_equal
 from zarr.storage import FSStore, NestedDirectoryStore
 

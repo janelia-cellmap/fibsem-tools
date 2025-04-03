@@ -12,8 +12,7 @@ if TYPE_CHECKING:
 import dask.array as da
 import zarr
 from dask.base import tokenize
-from datatree import DataTree
-from xarray import DataArray, Dataset
+from xarray import DataArray, Dataset, DataTree
 from zarr.errors import ReadOnlyError
 
 from fibsem_tools.io.n5.hierarchy import cosem, neuroglancer

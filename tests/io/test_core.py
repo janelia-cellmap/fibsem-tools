@@ -6,10 +6,9 @@ from typing import Any, Literal
 import numpy as np
 import pytest
 import zarr
-from datatree import DataTree
 from numcodecs import GZip
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
-from xarray import DataArray
+from xarray import DataArray, DataTree
 
 from fibsem_tools.chunk import normalize_chunks
 from fibsem_tools.io.core import (
