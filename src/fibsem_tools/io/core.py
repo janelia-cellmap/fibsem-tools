@@ -14,10 +14,9 @@ if TYPE_CHECKING:
 
     import dask.array as da
     import zarr
-    from datatree import DataTree
     from numcodecs.abc import Codec
     from pydantic_zarr.v2 import GroupSpec
-    from xarray import DataArray
+    from xarray import DataArray, DataTree
     from zarr.storage import BaseStore
 
     from fibsem_tools.type import AccessMode, PathLike

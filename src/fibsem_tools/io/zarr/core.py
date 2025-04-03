@@ -17,9 +17,8 @@ from pathlib import Path
 import dask.array as da
 import zarr
 from dask.base import tokenize
-from datatree import DataTree
 from pydantic_zarr.v2 import ArraySpec, GroupSpec
-from xarray import DataArray, Dataset
+from xarray import DataArray, Dataset, DataTree
 from xarray_ome_ngff.core import get_parent
 from zarr.errors import ReadOnlyError
 from zarr.indexing import BasicIndexer
