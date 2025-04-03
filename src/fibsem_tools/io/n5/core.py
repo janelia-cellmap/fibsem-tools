@@ -174,17 +174,18 @@ def create_datatree(
         name = element.basename
 
     nodes: dict[str, Dataset | DataArray | DataTree | None] = {
-        name: create_dataarray(
-            array,
+        name: to_xarray(
+            child,
             chunks=chunks,
             coords=coords,
             use_dask=use_dask,
             attrs=None,
             name="data",
         )
-        for name, array in element.arrays()
+        for name, child in element.items()
     }
     root_attrs = element.attrs.asdict() if attrs is None else attrs
+
     # insert root element
     nodes["/"] = Dataset(attrs=root_attrs)
     return DataTree.from_dict(nodes, name=name)
