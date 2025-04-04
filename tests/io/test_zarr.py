@@ -76,7 +76,8 @@ def test_read_xarray(tmp_zarr: str) -> None:
         zgroup[key] = value.data
         zgroup[key].attrs["transform"] = stt_from_array(value).model_dump()
 
-    tree_expected = DataTree.from_dict(data, name=path)
+    nodes = {k : v.to_dataset() for k, v in data.items()}    
+    tree_expected = DataTree.from_dict(nodes, name=path)
     assert_equal(to_xarray(zgroup["s0"]), data["s0"])
     assert_equal(to_xarray(zgroup["s1"]), data["s1"])
     assert tree_expected.equals(to_xarray(zgroup))
@@ -151,7 +152,7 @@ def test_read_datatree(
             access(tmp_zarr, os.path.join(path, k), mode="r"),
             coords=data[k].coords,
             name="data",
-        )
+        ).to_dataset()
         for k in data
     }
 
