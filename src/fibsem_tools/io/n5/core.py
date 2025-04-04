@@ -181,7 +181,7 @@ def create_datatree(
             use_dask=use_dask,
             attrs=None,
             name="data",
-        )
+        ).to_dataset()
         for name, array in element.arrays()
     }
     root_attrs = element.attrs.asdict() if attrs is None else attrs
